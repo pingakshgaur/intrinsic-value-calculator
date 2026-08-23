@@ -1,0 +1,97 @@
+﻿model,feature,importance_share
+xgboost,log_market_cap,0.0906
+xgboost,ebitda_growth_1y,0.0735
+xgboost,roce,0.0667
+xgboost,earnings_yield,0.0546
+xgboost,beta,0.052
+xgboost,sector_Defence and Aerospace,0.0518
+xgboost,capex_to_revenue,0.0507
+xgboost,ebitda_margin,0.0487
+xgboost,book_to_price,0.0469
+xgboost,cap_tier_ord,0.0442
+xgboost,fcf_yield,0.0419
+xgboost,ev_ebitda,0.0401
+xgboost,asset_turnover,0.0366
+xgboost,revenue_growth_1y,0.031
+xgboost,accruals_ratio,0.0308
+xgboost,ocf_to_ebitda,0.0299
+xgboost,roe,0.0293
+xgboost,eps_growth_1y,0.0289
+xgboost,net_margin,0.0286
+xgboost,sector_Banking Financial Services and Insurance,0.0264
+xgboost,sector_Automobile and Auto Components,0.021
+xgboost,net_debt_to_ebitda,0.0186
+xgboost,interest_free_proxy,0.0168
+xgboost,sector_Oil Gas and Energy,0.0166
+xgboost,debt_to_equity,0.0147
+xgboost,sector_Cement and Building Materials,0.0076
+xgboost,sector_Pharmaceuticals and Healthcare,0.0014
+xgboost,sector_IT and Software,0.0
+xgboost,sector_Infrastructure and Construction,0.0
+xgboost,sector_Jewellery and Retail,0.0
+xgboost,sector_Metals Mining and Materials,0.0
+xgboost,sector_Trading and Diversified,0.0
+random_forest,log_market_cap,0.0892
+random_forest,earnings_yield,0.0659
+random_forest,fcf_yield,0.0647
+random_forest,ebitda_growth_1y,0.0639
+random_forest,capex_to_revenue,0.0628
+random_forest,ev_ebitda,0.0614
+random_forest,beta,0.0606
+random_forest,book_to_price,0.0576
+random_forest,roce,0.0536
+random_forest,ebitda_margin,0.0488
+random_forest,eps_growth_1y,0.0481
+random_forest,revenue_growth_1y,0.0477
+random_forest,net_margin,0.0429
+random_forest,roe,0.0416
+random_forest,ocf_to_ebitda,0.0376
+random_forest,asset_turnover,0.0374
+random_forest,accruals_ratio,0.0314
+random_forest,cap_tier_ord,0.0251
+random_forest,net_debt_to_ebitda,0.0182
+random_forest,sector_Defence and Aerospace,0.0159
+random_forest,debt_to_equity,0.0126
+random_forest,interest_free_proxy,0.0058
+random_forest,sector_Automobile and Auto Components,0.0026
+random_forest,sector_Banking Financial Services and Insurance,0.0023
+random_forest,sector_Cement and Building Materials,0.0012
+random_forest,sector_Oil Gas and Energy,0.0006
+random_forest,sector_Pharmaceuticals and Healthcare,0.0004
+random_forest,sector_Metals Mining and Materials,0.0001
+random_forest,sector_IT and Software,0.0001
+random_forest,sector_Infrastructure and Construction,0.0
+random_forest,sector_Jewellery and Retail,0.0
+random_forest,sector_Trading and Diversified,0.0
+lightgbm,log_market_cap,0.129
+lightgbm,book_to_price,0.0756
+lightgbm,fcf_yield,0.063
+lightgbm,ev_ebitda,0.0608
+lightgbm,earnings_yield,0.0552
+lightgbm,capex_to_revenue,0.0529
+lightgbm,net_margin,0.0524
+lightgbm,revenue_growth_1y,0.0503
+lightgbm,roce,0.0472
+lightgbm,ebitda_margin,0.0463
+lightgbm,beta,0.043
+lightgbm,ebitda_growth_1y,0.0427
+lightgbm,ocf_to_ebitda,0.0423
+lightgbm,accruals_ratio,0.042
+lightgbm,asset_turnover,0.042
+lightgbm,roe,0.0406
+lightgbm,eps_growth_1y,0.0305
+lightgbm,debt_to_equity,0.0304
+lightgbm,net_debt_to_ebitda,0.0195
+lightgbm,cap_tier_ord,0.0192
+lightgbm,sector_Defence and Aerospace,0.0057
+lightgbm,interest_free_proxy,0.0046
+lightgbm,sector_Banking Financial Services and Insurance,0.0034
+lightgbm,sector_Automobile and Auto Components,0.0009
+lightgbm,sector_Oil Gas and Energy,0.0002
+lightgbm,sector_Pharmaceuticals and Healthcare,0.0002
+lightgbm,sector_Cement and Building Materials,0.0
+lightgbm,sector_IT and Software,0.0
+lightgbm,sector_Infrastructure and Construction,0.0
+lightgbm,sector_Jewellery and Retail,0.0
+lightgbm,sector_Metals Mining and Materials,0.0
+lightgbm,sector_Trading and Diversified,0.0
