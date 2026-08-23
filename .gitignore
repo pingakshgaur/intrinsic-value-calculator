@@ -1,0 +1,86 @@
+# ============================================================
+#  Intrinsic Value Calculator
+# ============================================================
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# ---------- Virtual environments ----------
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# ---------- Project caches ----------
+.cache/
+*.pkl
+*.joblib
+
+# ---------- Generated output ----------
+# Every run overwrites these. Regenerate with:  python run.py
+output/
+
+# Keep the folder itself in the repo so the code has somewhere to write.
+!output/.gitkeep
+
+# ---------- Manual research data: TRACKED ON PURPOSE ----------
+# fundamentals_override.csv holds hours of hand-entered figures from annual
+# reports. Losing it means redoing that work, and it is part of your
+# methodology's audit trail. It stays in version control.
+!data/fundamentals_override.csv
+!data/companies.csv
+
+# ---------- Secrets ----------
+.env
+.env.*
+*.key
+secrets.json
+credentials.json
+
+# ---------- Editors / IDE ----------
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# ---------- Jupyter ----------
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ---------- OS ----------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# ---------- Office lock files ----------
+# Excel creates these while a workbook is open; they are never wanted.
+~$*.xlsx
+~$*.docx
+~$*.pptx
+.~lock.*#
+
+# ---------- Stray copies ----------
+*copy.xlsx
+*copy.csv
+* - Copy.*
+*.bak
+*.tmp

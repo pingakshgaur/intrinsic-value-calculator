@@ -1,0 +1,15 @@
+# --- Data acquisition ---
+yfinance>=0.2.40          # primary source: statements + price history
+requests>=2.31            # NSE portal fallback, Yahoo ticker search
+
+# --- Core computation ---
+pandas>=2.0               # statement DataFrames, feature matrix, export
+numpy>=1.24               # fold metrics, array maths in ml_common
+
+# --- Output ---
+openpyxl>=3.1             # .xlsx writer (report + diagnostics sheets)
+
+# --- Machine learning ---
+scikit-learn>=1.4         # Random Forest, preprocessing utilities
+xgboost>=2.0              # XGBoost regressor
+lightgbm>=4.3             # LightGBM regressor
