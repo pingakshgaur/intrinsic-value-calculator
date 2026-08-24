@@ -47,6 +47,16 @@ def main():
     ap = argparse.ArgumentParser(description="Intrinsic value engine (FY2021-FY2025)")
     ap.add_argument("--input", help="path to companies CSV")
     ap.add_argument("--mean-basis", choices=["trading", "calendar"])
+    ap.add_argument(
+        "--benchmark-basis",
+        choices=["high_52w", "mean", "close"],
+        help="how the assessment-year market price is drawn (default: high_52w)",
+    )
+    ap.add_argument(
+        "--fy-labels",
+        choices=["range", "int"],
+        help="Financial Year column as '2023-24' (range) or '2024' (int)",
+    )
     ap.add_argument("--exchange", choices=[".NS", ".BO"])
     ap.add_argument(
         "--reasons",
@@ -59,6 +69,10 @@ def main():
     )
     ap.add_argument("--ml-split", choices=["expanding", "loyo"])
     ap.add_argument("--no-ml", action="store_true")
+    ap.add_argument(
+        "--no-analyze", action="store_true", help="skip the chart/statistics stage"
+    )
+    ap.add_argument("--dpi", type=int, help="chart resolution (default 200)")
     ap.add_argument(
         "--no-overrides",
         action="store_true",
@@ -73,6 +87,14 @@ def main():
 
     if args.mean_basis:
         config.FY_MEAN_BASIS = args.mean_basis
+    if args.benchmark_basis:
+        config.BENCHMARK_BASIS = args.benchmark_basis
+    if args.fy_labels:
+        config.FY_LABEL_STYLE = args.fy_labels
+    if args.no_analyze:
+        config.ANALYSIS_ENABLED = False
+    if args.dpi:
+        config.CHART_DPI = args.dpi
     if args.exchange:
         config.EXCHANGE_SUFFIX = args.exchange
     if args.ml_split:

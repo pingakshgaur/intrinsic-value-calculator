@@ -15,7 +15,11 @@ FY_LIST = [2021, 2022, 2023, 2024, 2025]
 FY_START_MONTH, FY_START_DAY = 4, 1
 FY_END_MONTH, FY_END_DAY = 3, 31
 
-# ---------------- Market price ----------------
+# ---------------- Market price (VALUATION ANCHOR) ----------------
+# This is the price the models CONSUME: it sets the equity weight in WACC, the
+# observed P/E and EV/EBITDA multiples, and five of the ML features. It must
+# stay inside FY_t. Do not point it at the assessment year - that would feed
+# next year's price into this year's valuation, which is look-ahead bias.
 PRICE_MODE = "average"
 FY_MEAN_BASIS = "trading"  # or "calendar"
 MIN_TRADING_DAYS_FOR_FY = 60
@@ -71,7 +75,13 @@ WRITE_DIAGNOSTICS = True
 LOG_FILE = "run_log.txt"
 
 # ---------------- Output ----------------
+# Numeric twin of the report: same headers, plain floats, no blank separator
+# rows, no currency glyphs. This is what the analyzer consumes.
+# "range" -> Financial Year column reads 2023-24
+# "int"   -> Financial Year column reads 2024   (the internal FY number)
 OUTPUT_BASENAME = "Intrinsic_Value_Report"
+DATA_BASENAME = "Intrinsic_Value_Data"
+FY_LABEL_STYLE = "range"
 DIAGNOSTICS_BASENAME = "Intrinsic_Value_Diagnostics"
 METHODS_BASENAME = "Intrinsic_Value_Methods"
 
@@ -87,3 +97,8 @@ ML_RANDOM_STATE = 42
 ML_RATIO_BOUNDS = (0.25, 4.0)
 ML_IMPUTE_FROM_SECTOR = True
 ML_MIN_FEATURES = 4
+
+# ---------------- Analysis ----------------
+ANALYSIS_ENABLED = True
+CHART_DIR_NAME = "charts"
+CHART_DPI = 200

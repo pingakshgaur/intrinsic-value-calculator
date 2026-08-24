@@ -17,7 +17,14 @@ import config
 import nse_source
 import overrides
 from result import R
-from fy_utils import fy_window, fy_for_period_end, num, clamp
+from fy_utils import (
+    fy_window,
+    fy_for_period_end,
+    assessment_fy,
+    assessment_window,
+    num,
+    clamp,
+)
 
 log = logging.getLogger(__name__)
 
@@ -74,6 +81,7 @@ FIELDS = [
     "shares",
     "tax_rate",
     "price",
+    "price_bench",
     "revenue",
     "assets",
     "cur_liab",
@@ -275,7 +283,7 @@ def fetch_company(ticker: str, fy_list=None) -> dict:
     p_start = fy_window(min(fy_list))[0] - dt.timedelta(days=10)
     # +1 year: the ML label needs the mean price of the FY AFTER the last one
     p_end = fy_window(max(fy_list) + 1)[1] + dt.timedelta(days=5)
-    closes, closes_err = None, None
+    closes, highs, closes_err = None, None, None
     try:
         hist = t.history(
             start=p_start.isoformat(), end=p_end.isoformat(), auto_adjust=False
@@ -285,6 +293,10 @@ def fetch_company(ticker: str, fy_list=None) -> dict:
         else:
             closes = hist["Close"]
             closes.index = pd.to_datetime(closes.index).tz_localize(None)
+            # the 52-week high needs intraday highs, not closes
+            if "High" in hist.columns:
+                highs = hist["High"]
+                highs.index = pd.to_datetime(highs.index).tz_localize(None)
     except Exception as e:
         log.exception("price history failed for %s", ticker)
         closes_err = f"yfinance price download raised {type(e).__name__}: {e}"
@@ -292,6 +304,7 @@ def fetch_company(ticker: str, fy_list=None) -> dict:
     if closes is None or closes.dropna().empty:
         try:
             closes = nse_source.fetch_close_series(ticker, p_start, p_end)
+            highs = None  # NSE fallback returns closes only
             if closes is None or closes.empty:
                 closes_err = (
                     (closes_err or "") + "; NSE portal fallback also returned nothing "
@@ -455,6 +468,11 @@ def fetch_company(ticker: str, fy_list=None) -> dict:
             "Current Liabilities",
         )
         d["price"] = _price_for_fy(closes, closes_err, fy, diag, notes)
+        # assessment-year benchmark -> the "Market Price" column and every
+        # difference column. Never an input to any model.
+        d["price_bench"] = _benchmark_price_for_fy(
+            highs, closes, closes_err, fy, diag, notes
+        )
         # forward-year mean price -> the ML label
         _fwd_diag, _fwd_notes = {}, []
         d["price_fwd"] = _price_for_fy(
@@ -608,3 +626,101 @@ def fetch_company(ticker: str, fy_list=None) -> dict:
         out["years"][fy] = d
 
     return out
+
+
+def _benchmark_price_for_fy(highs, closes, closes_err, fy, diag, notes):
+    """
+    Benchmark price for FY_t = the 52-week high of the ASSESSMENT YEAR, which
+    is the financial year after the one being valued.
+
+        FY2024 intrinsic value   (fundamentals Apr-2023 .. Mar-2024)
+        is scored against        (traded prices Apr-2024 .. Mar-2025)
+
+    The assessment window opens strictly after the fundamentals window closes,
+    so this price is an out-of-sample OUTCOME. It is never fed back into any
+    model - d["price"] remains the valuation anchor for WACC, the observed
+    multiples and the ML features. Conflating the two would put next year's
+    peak price inside this year's P/E, which is the exact look-ahead the
+    specification forbids.
+
+    Yahoo back-adjusts OHLC for splits and bonus issues regardless of
+    auto_adjust (that flag governs dividend adjustment only), so the High
+    series is already expressed in current share terms and a split inside the
+    window will not produce a phantom high.
+    """
+    a_fy = assessment_fy(fy)
+    start, end = assessment_window(fy)
+    basis = getattr(config, "BENCHMARK_BASIS", "high_52w")
+
+    series, src_label = highs, "intraday highs"
+    if series is None or len(series) == 0:
+        series, src_label = closes, "daily closes (High unavailable from source)"
+
+    if series is None or len(series) == 0:
+        diag["price_bench"] = (
+            R.PRICE_MISSING,
+            closes_err or "no price history from yfinance or NSE portal",
+        )
+        return None
+
+    window = series[
+        (series.index >= pd.Timestamp(start)) & (series.index <= pd.Timestamp(end))
+    ].dropna()
+
+    if window.empty:
+        have = f"{series.index.min().date()} to {series.index.max().date()}"
+        diag["price_bench"] = (
+            R.PRICE_MISSING,
+            f"no traded prices in the FY{a_fy} assessment window "
+            f"({start} to {end}); history available only for {have}. "
+            f"If {end} is still in the future this year cannot be scored yet.",
+        )
+        return None
+
+    n = len(window)
+    floor = getattr(config, "MIN_SESSIONS_FOR_BENCHMARK", 60)
+    if n < floor:
+        diag["price_bench"] = (
+            R.PRICE_MISSING,
+            f"only {n} session(s) in the FY{a_fy} assessment window "
+            f"({window.index.min().date()} to {window.index.max().date()}); "
+            f"a 52-week high over fewer than {floor} sessions is not a "
+            f"52-week high. Either the assessment year is still running or "
+            f"the scrip was suspended.",
+        )
+        return None
+
+    if basis == "high_52w":
+        value = float(window.max())
+        when = window.idxmax()
+        notes.append(
+            f"FY{fy} benchmark = 52-week high of assessment year FY{a_fy} "
+            f"({start} to {end}), {config.CURRENCY_SYMBOL}{value:,.2f} set on "
+            f"{pd.Timestamp(when).date()} across {n} sessions of {src_label}"
+        )
+    elif basis == "mean":
+        value = float(window.mean())
+        notes.append(
+            f"FY{fy} benchmark = mean of {n} sessions in assessment year "
+            f"FY{a_fy} ({start} to {end})"
+        )
+    elif basis == "close":
+        value = float(window.iloc[-1])
+        notes.append(
+            f"FY{fy} benchmark = final close of assessment year FY{a_fy} "
+            f"on {pd.Timestamp(window.index[-1]).date()}"
+        )
+    else:
+        diag["price_bench"] = (R.CALC_ERROR, f"unknown BENCHMARK_BASIS {basis!r}")
+        return None
+
+    full = getattr(config, "BENCHMARK_FULL_YEAR_SESSIONS", 200)
+    if n < full:
+        notes.append(
+            f"FY{fy} benchmark drawn from a PARTIAL assessment year "
+            f"({n} sessions, first {window.index.min().date()}). A truncated "
+            f"window cannot contain the true annual maximum, so this benchmark "
+            f"is biased low and every model will look better than it is."
+        )
+
+    return num(value)

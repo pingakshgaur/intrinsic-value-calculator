@@ -1,9 +1,25 @@
 # FILE: src/io_layer/exporter.py
 """
-Three outputs:
-  Intrinsic_Value_Report.*        clean grid - values (* = estimated) or a code
-  Intrinsic_Value_Diagnostics.*   full explanation for every empty cell
-  Intrinsic_Value_Methods.*       provenance for every filled cell
+Four outputs:
+    Intrinsic_Value_Report.*        clean grid - values (* = estimated) or a code
+    Intrinsic_Value_Data.csv        numeric twin of the grid, for the analyzer
+    Intrinsic_Value_Diagnostics.*   full explanation for every empty cell
+    Intrinsic_Value_Methods.*       provenance for every filled cell
+
+The grid is now 16 columns: the original 10 plus one difference column
+immediately after each model's intrinsic value.
+
+    difference = Market Price - Intrinsic Value
+
+    positive -> market trades ABOVE the model's estimate (model says overvalued)
+    negative -> market trades BELOW the model's estimate (model says undervalued)
+
+State that convention in the thesis. The opposite one flips the sign of every
+bias statistic downstream.
+
+"Market Price" is the ASSESSMENT-YEAR benchmark (d["price_bench"]), not the
+in-FY valuation anchor. The anchor is still carried, in the numeric twin only,
+as "Valuation Anchor Price" so the two can be compared during review.
 """
 
 import logging
@@ -12,30 +28,37 @@ import pandas as pd
 
 import config
 from result import Result, R
+from fy_utils import fy_label, assessment_fy
 
 log = logging.getLogger(__name__)
 
-COLUMNS = [
-    "Company name",
-    "Sector Name",
-    "Financial Year",
-    "Market Price",
-    "(DCF) Intrinsic Value",
-    "(P/E Relative Valuation) Intrinsic Value",
-    "(EV/EBITDA Valuation) Intrinsic Value",
-    "(XGBoost) Intrinsic Value",
-    "(Random Forest) Intrinsic Value",
-    "(LightGBM) Intrinsic Value",
+# (row key, intrinsic-value column, difference column)
+MODEL_COLUMNS = [
+    ("dcf", "(DCF) Intrinsic Value", "Difference (Market - DCF)"),
+    (
+        "pe",
+        "(P/E Relative Valuation) Intrinsic Value",
+        "Difference (Market - P/E Rel. Val.)",
+    ),
+    ("ev", "(EV/EBITDA Valuation) Intrinsic Value", "Difference (Market - EV/EBITDA)"),
+    ("xgboost", "(XGBoost) Intrinsic Value", "Difference (Market - XGBoost)"),
+    (
+        "random_forest",
+        "(Random Forest) Intrinsic Value",
+        "Difference (Market - Random Forest)",
+    ),
+    ("lightgbm", "(LightGBM) Intrinsic Value", "Difference (Market - LightGBM)"),
 ]
 
-VALUE_KEYS = [
-    ("price", COLUMNS[3]),
-    ("dcf", COLUMNS[4]),
-    ("pe", COLUMNS[5]),
-    ("ev", COLUMNS[6]),
-    ("xgboost", COLUMNS[7]),
-    ("random_forest", COLUMNS[8]),
-    ("lightgbm", COLUMNS[9]),
+BASE_COLUMNS = ["Company name", "Sector Name", "Financial Year", "Market Price"]
+
+COLUMNS = BASE_COLUMNS + [
+    c for _, iv_col, diff_col in MODEL_COLUMNS for c in (iv_col, diff_col)
+]
+
+# kept for the diagnostics / methods sheets, which iterate every value cell
+VALUE_KEYS = [("price", COLUMNS[3])] + [
+    (key, iv_col) for key, iv_col, _ in MODEL_COLUMNS
 ]
 
 DIAG_COLUMNS = [
@@ -56,6 +79,8 @@ METHOD_COLUMNS = [
     "Method",
 ]
 
+DATA_COLUMNS = COLUMNS + ["FY (internal)", "Assessment FY", "Valuation Anchor Price"]
+
 
 def _res(r, key):
     v = r.get(key)
@@ -66,17 +91,76 @@ def _res(r, key):
     )
 
 
+def difference(price_res: Result, model_res: Result) -> Result:
+    """
+    Market Price - Intrinsic Value, as a Result.
+
+    Left blank whenever either side is unavailable. A missing valuation must
+    never become a zero difference: zero reads as a perfect prediction and
+    would silently corrupt every statistic the analyzer computes. The adjacent
+    columns already carry the reason, so repeating the code here would only
+    double the noise in the sheet.
+    """
+    if not price_res.ok or not model_res.ok:
+        return Result.bad(R.NOT_COMPUTABLE, "")
+    method = None
+    if price_res.estimated or model_res.estimated:
+        method = "derived from at least one estimated input"
+    return Result.good(price_res.value - model_res.value, method=method)
+
+
+def _diff_text(res: Result) -> str:
+    """Blank rather than a reason code, per the note in difference()."""
+    return res.text() if res.ok else ""
+
+
 def build_dataframe(rows):
     out, prev = [], None
     for r in rows:
         if prev is not None and r["company"] != prev:
             out.append({c: "" for c in COLUMNS})
-        rec = {COLUMNS[0]: r["company"], COLUMNS[1]: r["sector"], COLUMNS[2]: r["fy"]}
-        for key, col in VALUE_KEYS:
-            rec[col] = _res(r, key).text()
+
+        price = _res(r, "price")
+        rec = {
+            COLUMNS[0]: r["company"],
+            COLUMNS[1]: r["sector"],
+            COLUMNS[2]: fy_label(r["fy"]),
+            COLUMNS[3]: price.text(),
+        }
+        for key, iv_col, diff_col in MODEL_COLUMNS:
+            model = _res(r, key)
+            rec[iv_col] = model.text()
+            rec[diff_col] = _diff_text(difference(price, model))
         out.append(rec)
         prev = r["company"]
     return pd.DataFrame(out, columns=COLUMNS)
+
+
+def build_data_frame(rows):
+    """
+    Numeric twin: identical headers, plain floats, no blank separator rows, no
+    currency glyphs, no reason codes. The analyzer reads this.
+    """
+    out = []
+    for r in rows:
+        price = _res(r, "price")
+        anchor = _res(r, "price_anchor")
+        rec = {
+            COLUMNS[0]: r["company"],
+            COLUMNS[1]: r["sector"],
+            COLUMNS[2]: fy_label(r["fy"]),
+            COLUMNS[3]: round(price.value, 4) if price.ok else None,
+            "FY (internal)": r["fy"],
+            "Assessment FY": fy_label(assessment_fy(r["fy"])),
+            "Valuation Anchor Price": round(anchor.value, 4) if anchor.ok else None,
+        }
+        for key, iv_col, diff_col in MODEL_COLUMNS:
+            model = _res(r, key)
+            d = difference(price, model)
+            rec[iv_col] = round(model.value, 4) if model.ok else None
+            rec[diff_col] = round(d.value, 4) if d.ok else None
+        out.append(rec)
+    return pd.DataFrame(out, columns=DATA_COLUMNS)
 
 
 def build_diagnostics(rows):
@@ -90,7 +174,7 @@ def build_diagnostics(rows):
                 {
                     DIAG_COLUMNS[0]: r["company"],
                     DIAG_COLUMNS[1]: r["sector"],
-                    DIAG_COLUMNS[2]: r["fy"],
+                    DIAG_COLUMNS[2]: fy_label(r["fy"]),
                     DIAG_COLUMNS[3]: col,
                     DIAG_COLUMNS[4]: res.code or "",
                     DIAG_COLUMNS[5]: res.detail or "",
@@ -109,7 +193,7 @@ def build_methods(rows):
             recs.append(
                 {
                     METHOD_COLUMNS[0]: r["company"],
-                    METHOD_COLUMNS[1]: r["fy"],
+                    METHOD_COLUMNS[1]: fy_label(r["fy"]),
                     METHOD_COLUMNS[2]: col,
                     METHOD_COLUMNS[3]: round(res.value, 2),
                     METHOD_COLUMNS[4]: "YES" if res.estimated else "no",
@@ -142,6 +226,14 @@ def _style(ws, df, widths, wrap_last=False):
             )
 
 
+def _report_widths():
+    w = {0: 34, 1: 26, 2: 14, 3: 16}
+    for i in range(4, len(COLUMNS)):
+        # difference columns sit at odd offsets from 5 onwards
+        w[i] = 22 if (i - 4) % 2 == 0 else 20
+    return w
+
+
 def export(rows):
     try:
         config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -152,6 +244,11 @@ def export(rows):
 
         aux_paths = []
         dd = mm = None
+
+        data_df = build_data_frame(rows)
+        data_path = config.OUTPUT_DIR / f"{config.DATA_BASENAME}.csv"
+        data_df.to_csv(data_path, index=False, encoding="utf-8-sig")
+        aux_paths.append(data_path)
 
         if config.WRITE_DIAGNOSTICS:
             dd = build_diagnostics(rows)
@@ -168,22 +265,7 @@ def export(rows):
         try:
             with pd.ExcelWriter(xlsx_path, engine="openpyxl") as xw:
                 df.to_excel(xw, index=False, sheet_name="Intrinsic Values")
-                _style(
-                    xw.sheets["Intrinsic Values"],
-                    df,
-                    {
-                        0: 34,
-                        1: 26,
-                        2: 14,
-                        3: 16,
-                        4: 22,
-                        5: 22,
-                        6: 22,
-                        7: 22,
-                        8: 22,
-                        9: 22,
-                    },
-                )
+                _style(xw.sheets["Intrinsic Values"], df, _report_widths())
                 xw.sheets["Intrinsic Values"].freeze_panes = "D2"
 
                 if dd is not None:

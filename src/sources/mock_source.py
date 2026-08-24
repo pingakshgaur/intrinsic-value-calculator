@@ -1,6 +1,15 @@
 """
 Offline synthetic dataset. Fires every reason code deterministically.
-Usage:  python main.py --offline
+Usage:  python run.py --offline
+
+Three price fields per year, and they are NOT interchangeable:
+
+    price        in-FY mean. The valuation ANCHOR the models consume.
+    price_fwd    mean price of FY+1. Numerator of the ML forward-ratio label.
+    price_bench  52-week HIGH of the assessment year (FY+1). The BENCHMARK
+                 every model is scored against. Set above price_fwd by a
+                 constant factor, exactly as a real annual high sits above
+                 that year's mean.
 """
 
 import config
@@ -26,6 +35,10 @@ def _y(fy, **kw):
         "shares": 1.0e8,
         "tax_rate": 0.25,
         "price": 500.0 * m,
+        # mean price of FY+1 -> the ML label
+        "price_fwd": 500.0 * MULT.get(fy + 1, m * 1.12),
+        # 52-week HIGH of the assessment year -> the benchmark
+        "price_bench": 500.0 * MULT.get(fy + 1, m * 1.12) * 1.22,
         "_diag": {},
         "_notes": [],
     }
@@ -44,6 +57,14 @@ def _blank(fy, reason, detail, keep_price=True):
             "shares": 1.0e8,
             "tax_rate": config.DEFAULT_TAX_RATE,
             "price": 500.0 * MULT[fy] if keep_price else None,
+            "price_fwd": (
+                (500.0 * MULT.get(fy + 1, MULT[fy] * 1.12)) if keep_price else None
+            ),
+            "price_bench": (
+                (500.0 * MULT.get(fy + 1, MULT[fy] * 1.12) * 1.22)
+                if keep_price
+                else None
+            ),
             "_diag": {
                 k: (reason, detail)
                 for k in ("ebit", "ebitda", "eps", "net_income", "da", "capex", "ocf")
@@ -53,6 +74,7 @@ def _blank(fy, reason, detail, keep_price=True):
     )
     if not keep_price:
         d["_diag"]["price"] = (R.PRICE_MISSING, detail)
+        d["_diag"]["price_bench"] = (R.PRICE_MISSING, detail)
     return d
 
 
@@ -120,6 +142,7 @@ def _build():
             fy: _y(
                 fy,
                 price=None,
+                price_bench=None,
                 _diag={
                     "price": (
                         R.PRICE_MISSING,
