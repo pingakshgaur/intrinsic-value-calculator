@@ -17,16 +17,6 @@ def fy_end(fy: int) -> dt.date:
     return dt.date(fy, config.FY_END_MONTH, config.FY_END_DAY)
 
 
-def assessment_fy(fy: int) -> int:
-    """The FY whose traded prices score FY_t's intrinsic value."""
-    return fy + getattr(config, "BENCHMARK_OFFSET_YEARS", 1)
-
-
-def assessment_window(fy: int):
-    """Date span of the assessment year for FY_t."""
-    return fy_window(assessment_fy(fy))
-
-
 def fy_label(fy: int) -> str:
     """
     FY2024 -> '2023-24'.  Display only; the internal key stays the integer.
@@ -40,6 +30,16 @@ def fy_label(fy: int) -> str:
     if getattr(config, "FY_LABEL_STYLE", "range") != "range":
         return str(fy)
     return f"{fy - 1}-{str(fy)[-2:]}"
+
+
+def assessment_fy(fy: int) -> int:
+    """The FY whose traded prices score FY_t's intrinsic value."""
+    return fy + getattr(config, "BENCHMARK_OFFSET_YEARS", 1)
+
+
+def assessment_window(fy: int):
+    """Date span of the assessment year for FY_t."""
+    return fy_window(assessment_fy(fy))
 
 
 def fy_of_date(d: dt.date) -> int:

@@ -1,0 +1,11 @@
+// FILE: .vscode/settings.json
+{
+    "python.analysis.autoImportCompletions": false,
+    "python.analysis.extraPaths": [
+        "./src",
+        "./src/sources",
+        "./src/models",
+        "./src/io_layer",
+        "./tools"
+    ]
+}

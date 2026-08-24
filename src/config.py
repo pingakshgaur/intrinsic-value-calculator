@@ -25,6 +25,23 @@ FY_MEAN_BASIS = "trading"  # or "calendar"
 MIN_TRADING_DAYS_FOR_FY = 60
 PARTIAL_YEAR_SESSIONS = 200
 
+# ---------------- Benchmark price (ASSESSMENT YEAR) ----------------
+# This is the price the models are SCORED AGAINST. It is drawn from the
+# financial year AFTER the one being valued, so it is an out-of-sample outcome
+# and never an input. FY2024 (Apr-2023..Mar-2024) is scored against the
+# assessment year FY2025 (Apr-2024..Mar-2025).
+#
+#   "high_52w"  max intraday high over the assessment year   (default)
+#   "mean"      arithmetic mean of daily closes              (old behaviour)
+#   "close"     last traded close of the assessment year
+#
+# Regenerate the workbook under each for the robustness appendix. Only this
+# one line changes; nothing downstream needs touching.
+BENCHMARK_BASIS = "high_52w"
+BENCHMARK_OFFSET_YEARS = 1
+MIN_SESSIONS_FOR_BENCHMARK = 60
+BENCHMARK_FULL_YEAR_SESSIONS = 200
+
 # ---------------- Cost of capital ----------------
 RISK_FREE_RATE = 0.0705
 EQUITY_RISK_PREMIUM = 0.0550
@@ -75,15 +92,21 @@ WRITE_DIAGNOSTICS = True
 LOG_FILE = "run_log.txt"
 
 # ---------------- Output ----------------
-# Numeric twin of the report: same headers, plain floats, no blank separator
-# rows, no currency glyphs. This is what the analyzer consumes.
-# "range" -> Financial Year column reads 2023-24
-# "int"   -> Financial Year column reads 2024   (the internal FY number)
 OUTPUT_BASENAME = "Intrinsic_Value_Report"
-DATA_BASENAME = "Intrinsic_Value_Data"
-FY_LABEL_STYLE = "range"
 DIAGNOSTICS_BASENAME = "Intrinsic_Value_Diagnostics"
 METHODS_BASENAME = "Intrinsic_Value_Methods"
+# Numeric twin of the report: same headers, plain floats, no blank separator
+# rows, no currency glyphs. This is what the analyzer consumes.
+DATA_BASENAME = "Intrinsic_Value_Data"
+
+# "range" -> Financial Year column reads 2023-24
+# "int"   -> Financial Year column reads 2024   (the internal FY number)
+FY_LABEL_STYLE = "range"
+
+# ---------------- Analysis ----------------
+ANALYSIS_ENABLED = True
+CHART_DIR_NAME = "charts"
+CHART_DPI = 200
 
 # ---------------- Machine learning ----------------
 ML_ENABLED = True
@@ -97,8 +120,3 @@ ML_RANDOM_STATE = 42
 ML_RATIO_BOUNDS = (0.25, 4.0)
 ML_IMPUTE_FROM_SECTOR = True
 ML_MIN_FEATURES = 4
-
-# ---------------- Analysis ----------------
-ANALYSIS_ENABLED = True
-CHART_DIR_NAME = "charts"
-CHART_DPI = 200

@@ -1,6 +1,8 @@
-2026-08-24 22:24:41,393 ERROR    valuation: fatal
+2026-08-24 22:28:49,567 ERROR    valuation: fatal
 Traceback (most recent call last):
   File "C:\Users\Pingaksh\MyDocs\Ongoing Projects\GitHub Repos\intrinsic-value-calculator\run.py", line 149, in main
     pipeline.run(companies, extra_training=extra)
-    ^^^^^^^^^^^^
-AttributeError: module 'pipeline' has no attribute 'run'
+  File "C:\Users\Pingaksh\MyDocs\Ongoing Projects\GitHub Repos\intrinsic-value-calculator\src\pipeline.py", line 208, in run
+    f"(assessment-year benchmark, basis='{config.BENCHMARK_BASIS}')"
+                                          ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'config' has no attribute 'BENCHMARK_BASIS'

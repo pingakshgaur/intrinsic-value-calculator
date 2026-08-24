@@ -84,8 +84,27 @@ def _strip_suffixes(name):
         " india limited",
     ):
         if n.lower().endswith(tail):
-            n = n[: -len(tail)].strip()
+            # Strip ONE suffix, not every matching one. The loop used to keep
+            # going, so "Royal India Corporation Limited" lost both " limited"
+            # and " corporation" and became "Royal India", which matches no
+            # MANUAL key and searches for the wrong company.
+            return n[: -len(tail)].strip()
     return n
+
+
+def _lookup_keys(company_name: str):
+    """
+    Both the raw name and the suffix-stripped name, uppercased.
+
+    The MANUAL map is keyed without the corporate suffix ("BHARAT ELECTRONICS")
+    while companies.csv carries it ("Bharat Electronics Limited"), so an exact
+    match never fired and every hand-verified entry was being skipped in favour
+    of whatever the Yahoo search happened to return. For a thesis that is worse
+    than a crash: the wrong scrip resolves silently and the numbers look fine.
+    """
+    raw = company_name.strip().upper()
+    stripped = _strip_suffixes(company_name).strip().upper()
+    return [raw] if raw == stripped else [raw, stripped]
 
 
 def resolve(company_name: str, explicit_ticker: str = None):
@@ -94,7 +113,20 @@ def resolve(company_name: str, explicit_ticker: str = None):
         t = explicit_ticker.strip().upper()
         return t if ("." in t) else t + config.EXCHANGE_SUFFIX
 
-    key = company_name.strip().upper()
+    keys = _lookup_keys(company_name)
+
+    # MANUAL is hand-verified and must outrank the cache, which is populated
+    # from unverified search results.
+    for k in keys:
+        if MANUAL.get(k):
+            return MANUAL[k]
+
+    cache = _load_cache()
+    for k in keys:
+        if cache.get(k):
+            return cache[k]
+    key = keys[0]
+    
     if key in MANUAL and MANUAL[key]:
         return MANUAL[key]
 

@@ -1,9 +1,14 @@
+# FILE: run.py
 """
++#!/usr/bin/env python3
+
 Intrinsic Value Calculator - entry point.
 
     python run.py
     python run.py --input data/companies.csv
     python run.py --no-ml --reasons short
+    python run.py --benchmark-basis mean       # robustness re-run
+    python run.py --no-analyze                 # skip charts
     python run.py --make-override-template     # writes the fill-in sheet
 """
 
@@ -110,6 +115,7 @@ def main():
 
     if args.offline:
         import mock_source
+
         config.OFFLINE = True
         ticker_resolver.resolve = mock_source.resolve
 

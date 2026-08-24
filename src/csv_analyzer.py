@@ -8,33 +8,33 @@ machine-readable metric tables and an HTML index.
 
 INPUT
     Any CSV carrying the 16-column results schema. Tolerant of:
-        - blank separator rows (dropped)
-        - '#' comment lines above the header (skipped)
-        - currency-prefixed cells such as 'Rs 1,234.50' (coerced)
-        - minor header wording drift (fuzzy column resolution)
+      - blank separator rows (dropped)
+      - '#' comment lines above the header (skipped)
+      - currency-prefixed cells such as 'Rs 1,234.50' (coerced)
+      - minor header wording drift (fuzzy column resolution)
 
 METRICS
     Per model, and sliced by sector / financial year / company:
 
-        MAE      mean absolute error, in rupees
-        RMSE     root mean squared error, in rupees. Penalises large misses
-                quadratically, so a model with a few catastrophic outliers
-                scores far worse here than on MAE. RMSE >> MAE signals
-                instability rather than uniform inaccuracy.
-        MAPE     mean absolute percentage error. Scale-free, so it is the only
-                metric comparable across companies of different price levels.
-        MedAPE   median absolute percentage error. Reported alongside MAPE
-                because MAPE is dragged upward by a handful of blow-ups; a wide
-                MAPE/MedAPE gap means the average is not representative.
-        Bias     mean signed error (estimate - market). Negative means the model
-                systematically prices below the market benchmark.
-        Hit20    share of observations within +/-20 percent of the benchmark.
-        Spearman rank correlation between estimate and benchmark. A model can
-                have poor MAPE yet high Spearman: it gets the *ordering* right
-                while being miscalibrated in level. For relative-value screening
-                that is often the more useful property.
-        Wins     count of observations where this model was closest in absolute
-                terms among all models that produced a value for that row.
+    MAE      mean absolute error, in rupees
+    RMSE     root mean squared error, in rupees. Penalises large misses
+             quadratically, so a model with a few catastrophic outliers
+             scores far worse here than on MAE. RMSE >> MAE signals
+             instability rather than uniform inaccuracy.
+    MAPE     mean absolute percentage error. Scale-free, so it is the only
+             metric comparable across companies of different price levels.
+    MedAPE   median absolute percentage error. Reported alongside MAPE
+             because MAPE is dragged upward by a handful of blow-ups; a wide
+             MAPE/MedAPE gap means the average is not representative.
+    Bias     mean signed error (estimate - market). Negative means the model
+             systematically prices below the market benchmark.
+    Hit20    share of observations within +/-20 percent of the benchmark.
+    Spearman rank correlation between estimate and benchmark. A model can
+             have poor MAPE yet high Spearman: it gets the *ordering* right
+             while being miscalibrated in level. For relative-value screening
+             that is often the more useful property.
+    Wins     count of observations where this model was closest in absolute
+             terms among all models that produced a value for that row.
 
 CHARTS
     sector_<name>_levels.png       FY vs value per company, all 7 series

@@ -1,7 +1,6 @@
 # FILE: tools/analyze.py
-"""
 #!/usr/bin/env python3
-
+"""
 Re-run the analysis stage over an already-exported results CSV.
 
 The analyzer fires automatically at the end of `python run.py`. This wrapper

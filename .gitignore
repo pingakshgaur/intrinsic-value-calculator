@@ -1,86 +1,47 @@
-# ============================================================
-#  Intrinsic Value Calculator
-# ============================================================
+# ---------------------------------------------------------------------------
+# INTVAL-Calc
+# ---------------------------------------------------------------------------
 
-# ---------- Python ----------
+# --- Generated output -------------------------------------------------------
+# Every run rewrites this folder: the report + xlsx, the numeric twin, five
+# metric tables, the HTML index, run_log.txt, and twelve HD PNGs under
+# charts/. The PNGs are a few MB per run and git stores each version in full,
+# so committing them makes the repo grow without bound.
+output/*
+
+# --- Caches -----------------------------------------------------------------
+# Resolved tickers from Yahoo search. Machine-specific, unverified, and it
+# silently outranks nothing now that MANUAL takes priority - but a stale entry
+# for a name absent from MANUAL will still be reused. Regenerate it rather
+# than sharing it.
+.cache/
+
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
-build/
-dist/
-*.egg-info/
-.eggs/
-pip-wheel-metadata/
 
-# ---------- Virtual environments ----------
+# --- Environments -----------------------------------------------------------
 .venv/
 venv/
 env/
 ENV/
 .python-version
 
-# ---------- Project caches ----------
-.cache/
-*.pkl
-*.joblib
-
-# ---------- Generated output ----------
-# Every run overwrites these. Regenerate with:  python run.py
-output/
-
-# Keep the folder itself in the repo so the code has somewhere to write.
-!output/.gitkeep
-
-# ---------- Manual research data: TRACKED ON PURPOSE ----------
-# fundamentals_override.csv holds hours of hand-entered figures from annual
-# reports. Losing it means redoing that work, and it is part of your
-# methodology's audit trail. It stays in version control.
-!data/fundamentals_override.csv
-!data/companies.csv
-
-# ---------- Secrets ----------
-.env
-.env.*
-*.key
-secrets.json
-credentials.json
-
-# ---------- Editors / IDE ----------
-.vscode/
+# --- Editors ----------------------------------------------------------------
+# .vscode/settings.json IS tracked - it carries the extraPaths that make the
+# flat imports resolve, so a fresh clone needs it. Ignore everything else.
+.vscode/*
 !.vscode/settings.json
-!.vscode/extensions.json
 .idea/
 *.swp
-*.swo
 *~
-
-# ---------- Jupyter ----------
-.ipynb_checkpoints/
-*.ipynb_checkpoints
-
-# ---------- OS ----------
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
+Thumbs.db
 
-# ---------- Office lock files ----------
-# Excel creates these while a workbook is open; they are never wanted.
-~$*.xlsx
-~$*.docx
-~$*.pptx
-.~lock.*#
+# --- Notebooks --------------------------------------------------------------
+.ipynb_checkpoints/
 
-# ---------- Stray copies ----------
-*copy.xlsx
-*copy.csv
-* - Copy.*
-*.bak
+# --- Scratch ----------------------------------------------------------------
+*.log
 *.tmp
+scratch/
