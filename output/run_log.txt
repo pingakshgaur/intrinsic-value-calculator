@@ -1,0 +1,6 @@
+2026-08-24 22:24:41,393 ERROR    valuation: fatal
+Traceback (most recent call last):
+  File "C:\Users\Pingaksh\MyDocs\Ongoing Projects\GitHub Repos\intrinsic-value-calculator\run.py", line 149, in main
+    pipeline.run(companies, extra_training=extra)
+    ^^^^^^^^^^^^
+AttributeError: module 'pipeline' has no attribute 'run'
