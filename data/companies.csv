@@ -1,42 +1,53 @@
 company name,sector name,market cap,ticker
-Garden Reach Shipbuilders and Engineers Limited,Defence and Aerospace,Large,GRSE.NS
-Bharat Electronics Limited,Defence and Aerospace,Large,BEL.NS
 Hindustan Aeronautics Limited,Defence and Aerospace,Large,HAL.NS
-Apollo Micro Systems Limited,Defence and Aerospace,Mid,APOLLO.NS
-Sigma Advanced Systems Limited,Defence and Aerospace,Mid,
-JK Cement Limited,Cement and Building Materials,Large,JKCEMENT.NS
-Godawari Power and Ispat Limited,Cement and Building Materials,Small,GPIL.NS
-Taparia Tools Limited,Cement and Building Materials,Small,505685.BO
-Chennai Petroleum Corporation Limited,Oil Gas and Energy,Large,CHENNPETRO.NS
-Petronet LNG Limited,Oil Gas and Energy,Mid,PETRONET.NS
-NMDC Limited,Oil Gas and Energy,Mid,NMDC.NS
-National Aluminium Company Limited,Oil Gas and Energy,Large,NATIONALUM.NS
-Sun Pharmaceutical Industries Limited,Pharmaceuticals and Healthcare,Large,SUNPHARMA.NS
-Lupin Limited,Pharmaceuticals and Healthcare,Large,LUPIN.NS
-Glenmark Pharmaceuticals Limited,Pharmaceuticals and Healthcare,Mid,GLENMARK.NS
-Emcure Pharmaceuticals Limited,Pharmaceuticals and Healthcare,Mid,EMCURE.NS
-Hikal Limited,Pharmaceuticals and Healthcare,Small,HIKAL.NS
-Mahindra and Mahindra Limited,Automobile and Auto Components,Large,M&M.NS
-Hero MotoCorp Limited,Automobile and Auto Components,Large,HEROMOTOCO.NS
-Hitachi Energy India Limited,Automobile and Auto Components,Large,POWERINDIA.NS
-ABB India Limited,Automobile and Auto Components,Large,ABB.NS
-Bharat Forge Limited,Automobile and Auto Components,Large,BHARATFORG.NS
-Kalyani Steels Limited,Automobile and Auto Components,Small,KSL.NS
-Kalyani Forge Limited,Automobile and Auto Components,Small,KALYANIFRG.NS
-Kotak Mahindra Bank Limited,Banking Financial Services and Insurance,Large,KOTAKBANK.NS
-Union Bank of India,Banking Financial Services and Insurance,Large,UNIONBANK.NS
-Life Insurance Corporation of India,Banking Financial Services and Insurance,Large,LICI.NS
-General Insurance Corporation of India,Banking Financial Services and Insurance,Mid,GICRE.NS
-BF Utilities Limited,Banking Financial Services and Insurance,Small,BFUTILITIE.NS
-Unifinz Capital India Limited,Banking Financial Services and Insurance,Small,
-Royal India Corporation Limited,Banking Financial Services and Insurance,Small,
-KSL Holdings Limited,Banking Financial Services and Insurance,Small,
-Adani Ports and Special Economic Zone Limited,Infrastructure and Construction,Large,ADANIPORTS.NS
-Kalpataru Projects International Limited,Infrastructure and Construction,Small,KPIL.NS
-Hindalco Industries Limited,Metals Mining and Materials,Large,HINDALCO.NS
-Vedanta Limited,Metals Mining and Materials,Large,VEDL.NS
-Mahalaxmi Rubtech Limited,Metals Mining and Materials,Small,
-Tech Mahindra Limited,IT and Software,Large,TECHM.NS
-California Software Company Limited,IT and Software,Small,
-Bombay Burmah Trading Corporation Limited,Trading and Diversified,Small,BBTC.NS
-Kalyan Jewellers India Limited,Jewellery and Retail,Mid,KALYANKJIL.NS
+Bharat Electronics Limited,Defence and Aerospace,Large,BEL.NS
+Bharat Dynamics Limited,Defence and Aerospace,Mid,BDL.NS
+Garden Reach Shipbuilders and Engineers Limited,Defence and Aerospace,Mid,GRSE.NS
+Data Patterns (India) Limited,Defence and Aerospace,Small,DATAPATTNS.NS
+Zen Technologies Limited,Defence and Aerospace,Small,ZENTEC.NS
+Tata Motors Limited,Capital Goods,Large,TATAMOTORS.NS
+Ashok Leyland Limited,Capital Goods,Large,ASHOKLEY.NS
+Escorts Kubota Limited,Capital Goods,Mid,ESCORTS.NS
+Ajax Engineering Limited,Capital Goods,Small,AJAXENGG.NS
+Atul Auto Limited,Capital Goods,Small,ATULAUTO.NS
+State Bank of India,Banking Financial Services and Insurance,Large,SBIN.NS
+Bank of Baroda,Banking Financial Services and Insurance,Large,BANKBARODA.NS
+Canara Bank,Banking Financial Services and Insurance,Large,CANBK.NS
+Bank of India,Banking Financial Services and Insurance,Mid,BANKINDIA.NS
+Bank of Maharashtra,Banking Financial Services and Insurance,Mid,MAHABANK.NS
+IDBI Bank Limited,Banking Financial Services and Insurance,Small,IDBI.NS
+Godfrey Phillips India Limited,Cigarette and Tobacco Products,Mid,GODFRYPHLP.NS
+VST Industries Limited,Cigarette and Tobacco Products,Mid,VSTIND.NS
+NTC Industries Limited,Cigarette and Tobacco Products,Small,
+Elitecon International Limited,Cigarette and Tobacco Products,Small,
+ITC Limited,Diversified FMCG,Large,ITC.NS
+Hindustan Unilever Limited,Diversified FMCG,Large,HINDUNILVR.NS
+Hindustan Foods Limited,Diversified FMCG,Mid,HNDFDS.NS
+Godavari Biorefineries Limited,Diversified FMCG,Small,GODAVARIB.NS
+PB Fintech Limited,Fintech,Mid,POLICYBZR.NS
+One97 Communications Limited,Fintech,Mid,PAYTM.NS
+MOS Utility Limited,Fintech,Small,
+Seshaasai Technologies Limited,Fintech,Small,
+Poly Medicure Limited,Healthcare Equipment and Supplies,Mid,POLYMED.NS
+Q-Line Biotech Limited,Healthcare Equipment and Supplies,Small,
+OSEL Devices Limited,Healthcare Equipment and Supplies,Small,
+Molbio Diagnostics Limited,Healthcare Equipment and Supplies,Small,
+Vedanta Limited,Diversified Metals,Large,VEDL.NS
+Jain Resource Recycling Limited,Diversified Metals,Mid,
+Pondy Oxides and Chemicals Limited,Diversified Metals,Mid,PONDYOXIDE.NS
+Ardee Industries Limited,Diversified Metals,Small,
+Adani Power Limited,Power,Large,ADANIPOWER.NS
+Adani Energy Solutions Limited,Power,Large,ADANIENSOL.NS
+Tata Power Company Limited,Power,Large,TATAPOWER.NS
+Power Grid Corporation of India Limited,Power,Large,POWERGRID.NS
+NHPC Limited,Power,Large,NHPC.NS
+Nava Limited,Power,Mid,NAVA.NS
+KPI Green Energy Limited,Power,Mid,KPIGREEN.NS
+Jaiprakash Power Ventures Limited,Power,Small,JPPOWER.NS
+Tata Consultancy Services Limited,IT and Software,Large,TCS.NS
+Infosys Limited,IT and Software,Large,INFY.NS
+HCL Technologies Limited,IT and Software,Large,HCLTECH.NS
+Wipro Limited,IT and Software,Large,WIPRO.NS
+Oracle Financial Services Software Limited,IT and Software,Mid,OFSS.NS
+Sonata Software Limited,IT and Software,Mid,SONATSOFTW.NS
+Ksolves India Limited,IT and Software,Small,KSOLVES.NS
