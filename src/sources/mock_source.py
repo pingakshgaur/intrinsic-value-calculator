@@ -1,3 +1,4 @@
+# FILE: src/sources/mock_source.py
 """
 Offline synthetic dataset. Fires every reason code deterministically.
 Usage:  python run.py --offline
@@ -6,10 +7,15 @@ Three price fields per year, and they are NOT interchangeable:
 
     price        in-FY mean. The valuation ANCHOR the models consume.
     price_fwd    mean price of FY+1. Numerator of the ML forward-ratio label.
-    price_bench  52-week HIGH of the assessment year (FY+1). The BENCHMARK
-                 every model is scored against. Set above price_fwd by a
-                 constant factor, exactly as a real annual high sits above
-                 that year's mean.
+    price_bench  close nearest 1 May following FY end. The BENCHMARK every
+                model is scored against. 1 May of year `fy` sits one month
+                into FY+1, so it is modelled here as a point early on the
+                path from the FY mean to the FY+1 mean - which is where a
+                real one lands.
+
+A fourth, price_bench_date, mirrors the live source: 1 May 2024 was a
+Wednesday but a market holiday, so the mock returns 2 May to exercise the
+"nearest session, not exact" path through the exporter and Methods sheet.
 """
 
 import config
@@ -17,6 +23,22 @@ from result import R
 
 # growth path -> FCFF CAGR of roughly 12%
 MULT = {2021: 0.70, 2022: 0.82, 2023: 0.92, 2024: 1.00, 2025: 1.12}
+
+# Dates the mock reports as the realised benchmark session. Deliberately mixed:
+# some land on 1 May, most do not, exactly as the exchange calendar dictates.
+BENCH_DATES = {
+    2021: "2021-05-03",  # 1 May was a Saturday
+    2022: "2022-05-02",  # 1 May was a Sunday
+    2023: "2023-05-02",  # Maharashtra Day holiday
+    2024: "2024-05-02",  # Maharashtra Day holiday
+    2025: "2025-05-02",  # Maharashtra Day holiday
+}
+
+
+def _bench(fy, m):
+    """Price one month into FY+1: mostly the FY+1 level, slightly early."""
+    nxt = MULT.get(fy + 1, m * 1.12)
+    return 500.0 * (0.25 * m + 0.75 * nxt)
 
 
 def _y(fy, **kw):
@@ -37,8 +59,9 @@ def _y(fy, **kw):
         "price": 500.0 * m,
         # mean price of FY+1 -> the ML label
         "price_fwd": 500.0 * MULT.get(fy + 1, m * 1.12),
-        # 52-week HIGH of the assessment year -> the benchmark
-        "price_bench": 500.0 * MULT.get(fy + 1, m * 1.12) * 1.22,
+        # close nearest 1 May following FY end -> the benchmark
+        "price_bench": _bench(fy, m),
+        "price_bench_date": BENCH_DATES.get(fy, f"{fy}-05-02"),
         "_diag": {},
         "_notes": [],
     }
@@ -49,6 +72,7 @@ def _y(fy, **kw):
 def _blank(fy, reason, detail, keep_price=True):
     """A year where the statements are missing but the price may survive."""
     d = {k: None for k in ("ebit", "ebitda", "eps", "net_income", "da", "capex", "ocf")}
+    m = MULT[fy]
     d.update(
         {
             "delta_nwc": 0.0,
@@ -56,14 +80,11 @@ def _blank(fy, reason, detail, keep_price=True):
             "cash": 0.0,
             "shares": 1.0e8,
             "tax_rate": config.DEFAULT_TAX_RATE,
-            "price": 500.0 * MULT[fy] if keep_price else None,
-            "price_fwd": (
-                (500.0 * MULT.get(fy + 1, MULT[fy] * 1.12)) if keep_price else None
-            ),
-            "price_bench": (
-                (500.0 * MULT.get(fy + 1, MULT[fy] * 1.12) * 1.22)
-                if keep_price
-                else None
+            "price": 500.0 * m if keep_price else None,
+            "price_fwd": ((500.0 * MULT.get(fy + 1, m * 1.12)) if keep_price else None),
+            "price_bench": _bench(fy, m) if keep_price else None,
+            "price_bench_date": (
+                BENCH_DATES.get(fy, f"{fy}-05-02") if keep_price else None
             ),
             "_diag": {
                 k: (reason, detail)
@@ -143,11 +164,18 @@ def _build():
                 fy,
                 price=None,
                 price_bench=None,
+                price_bench_date=None,
                 _diag={
                     "price": (
                         R.PRICE_MISSING,
                         "scrip listed after this FY; no traded " "closes in the window",
-                    )
+                    ),
+                    "price_bench": (
+                        R.PRICE_MISSING,
+                        f"no trading session within "
+                        f"{getattr(config, 'BENCHMARK_MAX_OFFSET_DAYS', 10)} "
+                        f"day(s) of the {fy}-05-01 benchmark date",
+                    ),
                 },
             )
             for fy in fys

@@ -6,8 +6,8 @@ Four outputs:
     Intrinsic_Value_Diagnostics.*   full explanation for every empty cell
     Intrinsic_Value_Methods.*       provenance for every filled cell
 
-The grid is now 16 columns: the original 10 plus one difference column
-immediately after each model's intrinsic value.
+The grid is 16 columns: the original 10 plus one difference column immediately
+after each model's intrinsic value.
 
     difference = Market Price - Intrinsic Value
 
@@ -17,9 +17,16 @@ immediately after each model's intrinsic value.
 State that convention in the thesis. The opposite one flips the sign of every
 bias statistic downstream.
 
-"Market Price" is the ASSESSMENT-YEAR benchmark (d["price_bench"]), not the
-in-FY valuation anchor. The anchor is still carried, in the numeric twin only,
-as "Valuation Anchor Price" so the two can be compared during review.
+"Market Price" is the 1-MAY BENCHMARK (d["price_bench"]): the close on the
+trading day nearest 1 May of the calendar year in which the FY ends. FY2023-24
+is scored against the close nearest 1-May-2024. The in-FY valuation anchor is
+still carried, in the numeric twin only, as "Valuation Anchor Price" so the two
+can be compared during review.
+
+The numeric twin also carries "Benchmark Date", the date that close was
+actually taken from. It is rarely 1 May itself - that is Maharashtra Day and
+the exchanges are shut - so publishing the realised date is what makes the
+benchmark auditable rather than merely asserted.
 """
 
 import logging
@@ -28,7 +35,7 @@ import pandas as pd
 
 import config
 from result import Result, R
-from fy_utils import fy_label, assessment_fy
+from fy_utils import fy_label
 
 log = logging.getLogger(__name__)
 
@@ -79,7 +86,11 @@ METHOD_COLUMNS = [
     "Method",
 ]
 
-DATA_COLUMNS = COLUMNS + ["FY (internal)", "Assessment FY", "Valuation Anchor Price"]
+DATA_COLUMNS = COLUMNS + [
+    "FY (internal)",
+    "Benchmark Date",
+    "Valuation Anchor Price",
+]
 
 
 def _res(r, key):
@@ -151,7 +162,7 @@ def build_data_frame(rows):
             COLUMNS[2]: fy_label(r["fy"]),
             COLUMNS[3]: round(price.value, 4) if price.ok else None,
             "FY (internal)": r["fy"],
-            "Assessment FY": fy_label(assessment_fy(r["fy"])),
+            "Benchmark Date": r.get("price_bench_date") or "",
             "Valuation Anchor Price": round(anchor.value, 4) if anchor.ok else None,
         }
         for key, iv_col, diff_col in MODEL_COLUMNS:
@@ -190,6 +201,14 @@ def build_methods(rows):
             res = _res(r, key)
             if not res.ok:
                 continue
+            method = res.method or "directly computed from reported figures"
+            # For the benchmark row, name the realised date. Without it the
+            # Methods sheet asserts a 1 May price without ever showing which
+            # session supplied it.
+            if key == "price" and r.get("price_bench_date"):
+                method = (
+                    f"close on {r['price_bench_date']} (nearest to 1 May); {method}"
+                )
             recs.append(
                 {
                     METHOD_COLUMNS[0]: r["company"],
@@ -197,8 +216,7 @@ def build_methods(rows):
                     METHOD_COLUMNS[2]: col,
                     METHOD_COLUMNS[3]: round(res.value, 2),
                     METHOD_COLUMNS[4]: "YES" if res.estimated else "no",
-                    METHOD_COLUMNS[5]: res.method
-                    or "directly computed from reported figures",
+                    METHOD_COLUMNS[5]: method,
                 }
             )
     return pd.DataFrame(recs, columns=METHOD_COLUMNS)

@@ -54,8 +54,13 @@ def main():
     ap.add_argument("--mean-basis", choices=["trading", "calendar"])
     ap.add_argument(
         "--benchmark-basis",
-        choices=["high_52w", "mean", "close"],
-        help="how the assessment-year market price is drawn (default: high_52w)",
+        choices=["may1", "mean", "close"],
+        help=(
+            "how the benchmark market price is drawn. 'may1' (default) takes "
+            "the close on the trading day nearest 1 May following FY end; "
+            "'mean' and 'close' aggregate the whole following FY and exist "
+            "only as robustness re-runs"
+        ),
     )
     ap.add_argument(
         "--fy-labels",

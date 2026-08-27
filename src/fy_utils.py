@@ -1,3 +1,4 @@
+# FILE: src/fy_utils.py
 """Financial-year date maths + tiny helpers."""
 
 import datetime as dt
@@ -32,13 +33,42 @@ def fy_label(fy: int) -> str:
     return f"{fy - 1}-{str(fy)[-2:]}"
 
 
+def benchmark_date(fy: int) -> dt.date:
+    """
+    Target benchmark date for FY_t: 1 May of the calendar year the FY ends in.
+
+        FY2024 (labelled 2023-24, ending 31-Mar-2024) -> 2024-05-01
+        FY2025 (labelled 2024-25, ending 31-Mar-2025) -> 2025-05-01
+
+    Because fy_window() places the FY end in March of year `fy`, the target is
+    simply 1 May of year `fy` - 31 days after the fundamentals window closes.
+    That gap is deliberate and it is what makes the figure a fair out-of-sample
+    test: the accounting period is over, but the market has not yet had a full
+    year to drift away from it.
+
+    The actual close is taken from the NEAREST trading day (see yf_source),
+    because 1 May is Maharashtra Day and the exchanges are shut.
+    """
+    return dt.date(
+        int(fy),
+        getattr(config, "BENCHMARK_MONTH", 5),
+        getattr(config, "BENCHMARK_DAY", 1),
+    )
+
+
 def assessment_fy(fy: int) -> int:
-    """The FY whose traded prices score FY_t's intrinsic value."""
+    """
+    The FY whose traded prices score FY_t, under the window-based bases.
+
+    Only the "mean" and "close" robustness bases still use this. The default
+    "may1" basis is a single dated observation, not a window, so it goes
+    through benchmark_date() instead.
+    """
     return fy + getattr(config, "BENCHMARK_OFFSET_YEARS", 1)
 
 
 def assessment_window(fy: int):
-    """Date span of the assessment year for FY_t."""
+    """Date span of the assessment year for FY_t. Window-based bases only."""
     return fy_window(assessment_fy(fy))
 
 

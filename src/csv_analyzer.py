@@ -8,33 +8,33 @@ machine-readable metric tables and an HTML index.
 
 INPUT
     Any CSV carrying the 16-column results schema. Tolerant of:
-      - blank separator rows (dropped)
-      - '#' comment lines above the header (skipped)
-      - currency-prefixed cells such as 'Rs 1,234.50' (coerced)
-      - minor header wording drift (fuzzy column resolution)
+    - blank separator rows (dropped)
+    - '#' comment lines above the header (skipped)
+    - currency-prefixed cells such as 'Rs 1,234.50' (coerced)
+    - minor header wording drift (fuzzy column resolution)
 
 METRICS
     Per model, and sliced by sector / financial year / company:
 
     MAE      mean absolute error, in rupees
     RMSE     root mean squared error, in rupees. Penalises large misses
-             quadratically, so a model with a few catastrophic outliers
-             scores far worse here than on MAE. RMSE >> MAE signals
-             instability rather than uniform inaccuracy.
+            quadratically, so a model with a few catastrophic outliers
+            scores far worse here than on MAE. RMSE >> MAE signals
+            instability rather than uniform inaccuracy.
     MAPE     mean absolute percentage error. Scale-free, so it is the only
-             metric comparable across companies of different price levels.
+            metric comparable across companies of different price levels.
     MedAPE   median absolute percentage error. Reported alongside MAPE
-             because MAPE is dragged upward by a handful of blow-ups; a wide
-             MAPE/MedAPE gap means the average is not representative.
+            because MAPE is dragged upward by a handful of blow-ups; a wide
+            MAPE/MedAPE gap means the average is not representative.
     Bias     mean signed error (estimate - market). Negative means the model
-             systematically prices below the market benchmark.
+            systematically prices below the market benchmark.
     Hit20    share of observations within +/-20 percent of the benchmark.
     Spearman rank correlation between estimate and benchmark. A model can
-             have poor MAPE yet high Spearman: it gets the *ordering* right
-             while being miscalibrated in level. For relative-value screening
-             that is often the more useful property.
+            have poor MAPE yet high Spearman: it gets the *ordering* right
+            while being miscalibrated in level. For relative-value screening
+            that is often the more useful property.
     Wins     count of observations where this model was closest in absolute
-             terms among all models that produced a value for that row.
+            terms among all models that produced a value for that row.
 
 CHARTS
     sector_<name>_levels.png       FY vs value per company, all 7 series
@@ -46,13 +46,14 @@ CHARTS
     error_distribution.png         signed percentage-error distributions
     metrics_table.png              full metric table as an image
 
-CAVEAT ON THE BENCHMARK
-    The benchmark is the 52-week high of the assessment year, which is the
-    maximum of a price distribution rather than a central value. Every model
-    will therefore show negative bias, and MAPE carries a constant upward
-    offset. Comparisons *between* models remain valid because all six face
-    the identical benchmark; absolute error levels do not represent
-    mispricing and must not be read as such.
+NOTE ON THE BENCHMARK
+    The benchmark is the traded close on the session nearest 1 May following
+    the end of the financial year valued. It is a single dated observation,
+    not an annual aggregate, so errors are directly interpretable as
+    mispricing against a price the share actually changed hands at. All six
+    models face the identical figure. The date sits one month after the
+    accounting period closes, which is deliberate: long enough to be out of
+    sample, short enough that a year of unrelated news has not intervened.
 """
 
 from __future__ import annotations
@@ -534,7 +535,7 @@ def chart_sector_levels(
         f"Reading this chart. One panel per company in {sector}. The x axis is the "
         f"financial year whose fundamentals were valued; the y axis is value per share in "
         f"{CURRENCY}. The heavy black line is the benchmark market price, defined as the "
-        f"52-week high of the assessment year, the FY after the one valued. Each coloured line is one model's "
+        f"close on the session nearest 1 May following the FY end. Each coloured line is one model's "
         f"intrinsic value for that year. A model tracks the benchmark well when its line "
         f"runs parallel to the black line and close to it: parallel but offset means the "
         f"model reads the direction of value correctly while being miscalibrated in level, "
@@ -546,9 +547,10 @@ def chart_sector_levels(
         f"({valid.loc[worst, 'MAPE %']:.1f} percent). Panels are drawn on independent y scales "
         f"because share prices differ by an order of magnitude across cap tiers; compare the "
         f"shape of the gap within each panel, not the height of the lines between panels.\n"
-        f"Caution. Because the benchmark is a 52-week high rather than a mean, every model is "
-        f"expected to sit below the black line. Treat the ranking as meaningful and the "
-        f"absolute distance as inflated."
+        f"Reading the gap. The benchmark is a single dated close, so distance from the black "
+        f"line is interpretable directly as mispricing - there is no built-in offset to "
+        f"discount, and a model sitting above the line is genuinely calling the stock "
+        f"overvalued."
         + (
             f" {len(skipped)} company/companies in this sector produced no data at all "
             f"and are omitted here rather than drawn as empty panels "
@@ -658,10 +660,10 @@ def chart_sector_normalised(
         f"What it shows here. {tightest} sits nearest parity with a mean ratio of "
         f"{means[tightest]:.2f}. A ratio consistently near a fixed value other than 1.0 is a "
         f"calibration finding, not a failure: it says the model is a stable fraction of the "
-        f"52-week high and can be scaled. A ratio that swings across years is the more "
+        f"1 May close and can be scaled. A ratio that swings across years is the more "
         f"serious problem, because there is no single scalar that repairs it.\n"
-        f"Caution. Ratios below 1.0 are the expected default here given the peak-price "
-        f"benchmark. Judge models by the tightness of their cloud, not by its height."
+        f"Caution. Ratios carry no built-in bias under a dated-close benchmark, so a cloud "
+        f"centred well away from 1.0 is a real calibration finding, not an artefact."
     )
 
     canvas = Canvas(
@@ -1006,11 +1008,10 @@ def chart_accuracy_by_year(
         f"investigating directly, since the two families fail for different reasons: "
         f"traditional models break when their inputs break, whereas learned models break "
         f"when the year falls outside the distribution they were trained on.\n"
-        f"Caution. The most recent financial year in the panel may have an incomplete "
-        f"assessment window, since its 52-week high is drawn from a year that has not yet "
-        f"finished. A partial window truncates the observed maximum and mechanically "
-        f"flatters every model. Confirm the window status before interpreting the final point "
-        f"on each line."
+        f"Caution. The most recent financial year is scored only if its 1 May benchmark date "
+        f"has already passed. If it has not, that year carries no benchmark at all and drops "
+        f"out of the metrics rather than being scored against a truncated window. Check the "
+        f"Benchmark Date column before interpreting the final point on each line."
     )
 
     canvas = Canvas(
@@ -1080,9 +1081,9 @@ def chart_error_distribution(
         f"that is badly biased but tight is more useful than one centred on zero but wildly "
         f"scattered, because the first can be corrected with a single constant and the second "
         f"cannot be corrected at all.\n"
-        f"Caution. Boxes are expected to sit below zero because the benchmark is a 52-week "
-        f"high. The informative comparison is which model sits closest to zero relative to "
-        f"the others, and how wide each box is, not whether any box straddles zero."
+        f"Reading the boxes. Under a dated-close benchmark there is no mechanical reason for a "
+        f"box to sit below zero, so one that does is showing genuine systematic "
+        f"undervaluation by that model. Judge both position and width."
     )
 
     canvas = Canvas(
@@ -1356,7 +1357,7 @@ def run_analysis(
             else "n/a"
         ),
         "Charts written": len(charts),
-        "Benchmark": "52-week high of the assessment year (the FY after the one valued)",
+        "Benchmark": "close on the trading session nearest 1 May following FY end",
     }
 
     report = _write_html(outdir, charts, summary)

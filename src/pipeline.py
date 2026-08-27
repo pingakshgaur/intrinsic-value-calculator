@@ -1,3 +1,4 @@
+# FILE: pipeline.py
 """Fetch -> estimate -> value -> export -> analyse. All exception capture lives here."""
 
 import logging
@@ -72,6 +73,7 @@ def build_universe(companies):
 
         n = len(config.FY_LIST)
         px = sum(1 for d in data["years"].values() if d.get("price"))
+        bench = sum(1 for d in data["years"].values() if d.get("price_bench"))
         fund = sum(1 for d in data["years"].values() if d.get("ebit") is not None)
         ovr = sum(
             1
@@ -79,7 +81,10 @@ def build_universe(companies):
             if any("manually supplied" in s for s in d.get("_notes", []))
         )
         tag = f"  overrides {ovr}" if ovr else ""
-        print(f"OK  [{ticker}]  prices {px}/{n}  fundamentals {fund}/{n}{tag}")
+        print(
+            f"OK  [{ticker}]  prices {px}/{n}  benchmarks {bench}/{n}  "
+            f"fundamentals {fund}/{n}{tag}"
+        )
         if not config.OFFLINE:
             time.sleep(config.REQUEST_PAUSE)
     return universe, failures
@@ -143,6 +148,7 @@ def run(companies, extra_training=None):
                         **base,
                         "price": f,
                         "price_anchor": f,
+                        "price_bench_date": "",
                         "dcf": f,
                         "pe": f,
                         "ev": f,
@@ -157,15 +163,19 @@ def run(companies, extra_training=None):
             d = data["years"].get(fy, {})
             row = {
                 **base,
-                # "price" is the ASSESSMENT-YEAR benchmark: the 52-week high of
-                # FY+1. It is what every model is scored against.
+                # "price" is the BENCHMARK: the close on the trading day
+                # nearest 1 May following FY end. It is what every model is
+                # scored against.
                 "price": field_result(
-                    d, "price_bench", fy, "assessment-year market price"
+                    d, "price_bench", fy, "1-May benchmark market price"
                 ),
                 # the in-FY mean price the models actually consumed. Carried
                 # for the numeric twin so anchor and benchmark can be compared
                 # during review; never shown in the main grid.
                 "price_anchor": field_result(d, "price", fy, "in-FY mean price"),
+                # the date the benchmark close was actually taken from - 1 May
+                # is a market holiday, so this is rarely 1 May itself.
+                "price_bench_date": d.get("price_bench_date") or "",
                 "dcf": guard(model_dcf.intrinsic_value, data, fy),
                 "pe": guard(
                     model_pe.intrinsic_value, universe, pe_table, name, sector, fy
@@ -205,12 +215,21 @@ def run(companies, extra_training=None):
     oka = sum(1 for r in rows if r.get("price_anchor") and r["price_anchor"].ok)
     print(
         f"   {'Market Price':16s} {okp:4d}/{len(rows)}   "
-        f"(assessment-year benchmark, basis='{config.BENCHMARK_BASIS}')"
+        f"(benchmark, basis='{config.BENCHMARK_BASIS}')"
     )
     print(
         f"   {'  in-FY anchor':16s} {oka:4d}/{len(rows)}   "
         f"(valuation input, not a benchmark)"
     )
+
+    if config.BENCHMARK_BASIS == "may1":
+        exact = sum(1 for r in rows if r.get("price_bench_date", "").endswith("-05-01"))
+        dated = sum(1 for r in rows if r.get("price_bench_date"))
+        print(
+            f"   benchmark date = close nearest 1 May following FY end "
+            f"({exact}/{dated} landed exactly on 1 May; the rest are the "
+            f"nearest session, since 1 May is Maharashtra Day)"
+        )
 
     if ml_store and ml_store.metrics:
         print("\n[ml fold performance]  (forward-ratio target)")

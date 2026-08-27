@@ -1,3 +1,4 @@
+# FILE: src/config.py
 """Global assumptions and knobs. Tune these before running."""
 
 from pathlib import Path
@@ -18,26 +19,49 @@ FY_END_MONTH, FY_END_DAY = 3, 31
 # ---------------- Market price (VALUATION ANCHOR) ----------------
 # This is the price the models CONSUME: it sets the equity weight in WACC, the
 # observed P/E and EV/EBITDA multiples, and five of the ML features. It must
-# stay inside FY_t. Do not point it at the assessment year - that would feed
-# next year's price into this year's valuation, which is look-ahead bias.
+# stay inside FY_t. Do not point it at the benchmark date - that would feed a
+# post-FY price into this year's valuation, which is look-ahead bias.
 PRICE_MODE = "average"
 FY_MEAN_BASIS = "trading"  # or "calendar"
 MIN_TRADING_DAYS_FOR_FY = 60
 PARTIAL_YEAR_SESSIONS = 200
 
-# ---------------- Benchmark price (ASSESSMENT YEAR) ----------------
-# This is the price the models are SCORED AGAINST. It is drawn from the
-# financial year AFTER the one being valued, so it is an out-of-sample outcome
-# and never an input. FY2024 (Apr-2023..Mar-2024) is scored against the
-# assessment year FY2025 (Apr-2024..Mar-2025).
+# ---------------- Benchmark price (1 MAY, POST-FY) ----------------
+# This is the price the models are SCORED AGAINST. It is the traded close on
+# the trading day NEAREST to 1 May of the calendar year in which FY_t ends.
 #
-#   "high_52w"  max intraday high over the assessment year   (default)
-#   "mean"      arithmetic mean of daily closes              (old behaviour)
-#   "close"     last traded close of the assessment year
+#   FY2024 == FY2023-24, fundamentals cover Apr-2023 .. Mar-2024
+#   benchmark = close nearest 1-May-2024
 #
-# Regenerate the workbook under each for the robustness appendix. Only this
-# one line changes; nothing downstream needs touching.
-BENCHMARK_BASIS = "high_52w"
+# The date sits one month after the fundamentals window closes, so it is an
+# out-of-sample outcome and never an input. A single dated observation is a
+# cleaner accuracy test than an annual aggregate: it is one price a share
+# actually traded at, and every model faces the identical figure.
+#
+#   "may1"   close nearest 1 May following FY end          (default)
+#   "mean"   arithmetic mean of the whole assessment year  (robustness re-run)
+#   "close"  last traded close of the assessment year      (robustness re-run)
+#
+# The old "high_52w" basis has been removed. It drew the maximum of a price
+# distribution rather than a central value, which forced a constant negative
+# bias into every model and inflated every MAPE figure.
+BENCHMARK_BASIS = "may1"
+
+# Target date, expressed as (month, day) of the calendar year the FY ends in.
+BENCHMARK_MONTH = 5
+BENCHMARK_DAY = 1
+
+# Widest gap tolerated between the target date and the chosen trading day.
+# 1 May is Maharashtra Day - a market holiday - and frequently abuts a
+# weekend, so an exact hit is the exception. Ten calendar days absorbs the
+# holiday plus an adjacent weekend plus a stray closure. Anything wider means
+# the scrip genuinely was not trading (pre-listing, suspension) and should
+# surface as a blank cell with a reason rather than reach for a price weeks
+# away and pass it off as a 1 May observation.
+BENCHMARK_MAX_OFFSET_DAYS = 10
+
+# Used only by the "mean" and "close" robustness bases, which still operate
+# over the whole assessment year (the FY after the one valued).
 BENCHMARK_OFFSET_YEARS = 1
 MIN_SESSIONS_FOR_BENCHMARK = 60
 BENCHMARK_FULL_YEAR_SESSIONS = 200

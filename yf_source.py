@@ -3,14 +3,19 @@
 yfinance extraction layer with per-field diagnosis.
 
 Hard rule unchanged: only the fields the three models consume are returned.
-New: every field that comes back None also records WHY, in d["_diag"][field]
-as a (code, detail) tuple.
+Every field that comes back None also records WHY, in d["_diag"][field] as a
+(code, detail) tuple.
 
 Three price fields, and they are NOT interchangeable:
     price        in-FY mean. The valuation ANCHOR the models consume.
     price_fwd    mean price of FY+1. Numerator of the ML forward-ratio label.
-    price_bench  52-week high of the assessment year (FY+1). The BENCHMARK
-                every model is scored against. Never an input to any model.
+    price_bench  close on the trading day NEAREST 1 May following FY end. The
+                BENCHMARK every model is scored against. Never an input.
+
+A fourth, d["price_bench_date"], carries the ISO date the benchmark close was
+actually taken from, so the Methods sheet and the numeric twin can state it
+rather than leave the reader to assume 1 May was a trading day. It usually
+is not.
 """
 
 import datetime as dt
@@ -27,6 +32,7 @@ from result import R
 from fy_utils import (
     fy_window,
     fy_for_period_end,
+    benchmark_date,
     assessment_fy,
     assessment_window,
     num,
@@ -89,6 +95,7 @@ FIELDS = [
     "tax_rate",
     "price",
     "price_bench",
+    "price_bench_date",
     "revenue",
     "assets",
     "cur_liab",
@@ -274,44 +281,134 @@ def _price_for_fy(closes, closes_err, fy, diag, notes):
     return num(mean_price)
 
 
-def _benchmark_price_for_fy(highs, closes, closes_err, fy, diag, notes):
+def _nearest_session(series, target):
     """
-    Benchmark price for FY_t = the 52-week high of the ASSESSMENT YEAR, which
-    is the financial year after the one being valued.
+    Position of the trading day closest to `target`.
+
+    Ties break in favour of the LATER date: if 30 April and 2 May are both one
+    day out, 2 May wins. Arbitrary but deterministic, and stating it in the
+    thesis is a one-line footnote rather than an unexplained asymmetry.
+
+    -> (positional index, signed offset in days). Offset is negative when the
+    chosen session precedes the target.
+    """
+    t = pd.Timestamp(target)
+    idx = series.index.normalize()
+    best = min(
+        range(len(idx)),
+        key=lambda i: (abs((idx[i] - t).days), -((idx[i] - t).days)),
+    )
+    return best, int((idx[best] - t).days)
+
+
+def _benchmark_price_for_fy(closes, closes_err, fy, diag, notes):
+    """
+    Benchmark price for FY_t = the traded close on the trading day NEAREST to
+    1 May of the calendar year in which FY_t ends.
 
         FY2024 intrinsic value   (fundamentals Apr-2023 .. Mar-2024)
-        is scored against        (traded prices Apr-2024 .. Mar-2025)
+        is scored against        (close nearest 1-May-2024)
 
-    The assessment window opens strictly after the fundamentals window closes,
-    so this price is an out-of-sample OUTCOME. It is never fed back into any
-    model - d["price"] remains the valuation anchor for WACC, the observed
-    multiples and the ML features. Conflating the two would put next year's
-    peak price inside this year's P/E, which is the exact look-ahead the
-    specification forbids.
+    The date sits one month after the fundamentals window closes, so this price
+    is an out-of-sample OUTCOME. It is never fed back into any model -
+    d["price"] remains the valuation anchor for WACC, the observed multiples
+    and the ML features. Conflating the two would put a post-FY price inside
+    this year's P/E, which is the exact look-ahead the specification forbids.
+
+    Why a single dated close rather than an annual aggregate: an aggregate over
+    the whole following year mixes twelve months of unrelated news into the
+    figure the valuation is judged against, and if the aggregate is a maximum
+    it is not a central value at all - it forced a constant negative bias into
+    every model. One dated price is what a share actually changed hands at,
+    and all six models face the identical number.
+
+    Why the NEAREST session rather than the next one forward: 1 May is
+    Maharashtra Day and the exchanges are closed; it also lands on a weekend
+    two years in seven. Rolling strictly forward would systematically pick a
+    later date than rolling to the nearest, introducing a small directional
+    drift for no benefit. 30 April is as valid an observation as 2 May.
 
     Yahoo back-adjusts OHLC for splits and bonus issues regardless of
-    auto_adjust (that flag governs dividend adjustment only), so the High
-    series is already expressed in current share terms and a split inside the
-    window will not produce a phantom high.
+    auto_adjust (that flag governs dividend adjustment only), so a split
+    between the FY end and the benchmark date will not produce a phantom jump.
+
+    -> (value, iso_date_string) or (None, None)
     """
-    a_fy = assessment_fy(fy)
-    start, end = assessment_window(fy)
-    basis = getattr(config, "BENCHMARK_BASIS", "high_52w")
+    basis = getattr(config, "BENCHMARK_BASIS", "may1")
 
-    series, src_label = highs, "intraday highs"
-    if series is None or len(series) == 0:
-        series, src_label = closes, "daily closes (High unavailable from source)"
-
-    if series is None or len(series) == 0:
+    if closes is None or len(closes) == 0:
         diag["price_bench"] = (
             R.PRICE_MISSING,
             closes_err or "no price history from yfinance or NSE portal",
         )
-        return None
+        return None, None
+
+    series = closes.dropna()
+    if series.empty:
+        diag["price_bench"] = (
+            R.PRICE_MISSING,
+            closes_err or "price history contains no non-NaN closes",
+        )
+        return None, None
+
+    # ------------------------------------------------------------------
+    # Default basis: single dated close nearest 1 May
+    # ------------------------------------------------------------------
+    if basis == "may1":
+        target = benchmark_date(fy)
+        max_off = int(getattr(config, "BENCHMARK_MAX_OFFSET_DAYS", 10))
+
+        pos, offset = _nearest_session(series, target)
+
+        if abs(offset) > max_off:
+            have = f"{series.index.min().date()} to {series.index.max().date()}"
+            diag["price_bench"] = (
+                R.PRICE_MISSING,
+                f"no trading session within {max_off} day(s) of the benchmark "
+                f"date {target}; the nearest available close is "
+                f"{abs(offset)} day(s) away. Price history covers {have}. "
+                f"Either the scrip listed after this date, it was suspended "
+                f"around it, or {target} has not been reached yet.",
+            )
+            return None, None
+
+        value = num(series.iloc[pos])
+        when = series.index[pos].normalize().date()
+
+        if value is None:
+            diag["price_bench"] = (
+                R.PRICE_MISSING,
+                f"the close on {when}, nearest to benchmark date {target}, "
+                f"is blank/NaN in the price history",
+            )
+            return None, None
+
+        if offset == 0:
+            notes.append(
+                f"FY{fy} benchmark = close on {when}, "
+                f"{config.CURRENCY_SYMBOL}{value:,.2f} (1 May, exact match)"
+            )
+        else:
+            side = "after" if offset > 0 else "before"
+            notes.append(
+                f"FY{fy} benchmark = close on {when}, "
+                f"{config.CURRENCY_SYMBOL}{value:,.2f} - the nearest trading "
+                f"day to {target}, {abs(offset)} day(s) {side}. 1 May is "
+                f"Maharashtra Day, a market holiday, so an exact match is "
+                f"the exception rather than the rule."
+            )
+
+        return value, when.isoformat()
+
+    # ------------------------------------------------------------------
+    # Robustness bases: aggregate over the whole assessment year
+    # ------------------------------------------------------------------
+    a_fy = assessment_fy(fy)
+    start, end = assessment_window(fy)
 
     window = series[
         (series.index >= pd.Timestamp(start)) & (series.index <= pd.Timestamp(end))
-    ].dropna()
+    ]
 
     if window.empty:
         have = f"{series.index.min().date()} to {series.index.max().date()}"
@@ -321,7 +418,7 @@ def _benchmark_price_for_fy(highs, closes, closes_err, fy, diag, notes):
             f"({start} to {end}); history available only for {have}. "
             f"If {end} is still in the future this year cannot be scored yet.",
         )
-        return None
+        return None, None
 
     n = len(window)
     floor = getattr(config, "MIN_SESSIONS_FOR_BENCHMARK", 60)
@@ -330,46 +427,43 @@ def _benchmark_price_for_fy(highs, closes, closes_err, fy, diag, notes):
             R.PRICE_MISSING,
             f"only {n} session(s) in the FY{a_fy} assessment window "
             f"({window.index.min().date()} to {window.index.max().date()}); "
-            f"a 52-week high over fewer than {floor} sessions is not a "
-            f"52-week high. Either the assessment year is still running or "
-            f"the scrip was suspended.",
+            f"an annual aggregate over fewer than {floor} sessions is not an "
+            f"annual aggregate. Either the assessment year is still running "
+            f"or the scrip was suspended.",
         )
-        return None
+        return None, None
 
-    if basis == "high_52w":
-        value = float(window.max())
-        when = window.idxmax()
-        notes.append(
-            f"FY{fy} benchmark = 52-week high of assessment year FY{a_fy} "
-            f"({start} to {end}), {config.CURRENCY_SYMBOL}{value:,.2f} set on "
-            f"{pd.Timestamp(when).date()} across {n} sessions of {src_label}"
-        )
-    elif basis == "mean":
+    if basis == "mean":
         value = float(window.mean())
+        when = window.index[-1].normalize().date()
         notes.append(
             f"FY{fy} benchmark = mean of {n} sessions in assessment year "
-            f"FY{a_fy} ({start} to {end})"
+            f"FY{a_fy} ({start} to {end}) [robustness basis, not the default]"
         )
     elif basis == "close":
         value = float(window.iloc[-1])
+        when = window.index[-1].normalize().date()
         notes.append(
             f"FY{fy} benchmark = final close of assessment year FY{a_fy} "
-            f"on {pd.Timestamp(window.index[-1]).date()}"
+            f"on {when} [robustness basis, not the default]"
         )
     else:
-        diag["price_bench"] = (R.CALC_ERROR, f"unknown BENCHMARK_BASIS {basis!r}")
-        return None
+        diag["price_bench"] = (
+            R.CALC_ERROR,
+            f"unknown BENCHMARK_BASIS {basis!r}; expected 'may1', 'mean' "
+            f"or 'close'",
+        )
+        return None, None
 
     full = getattr(config, "BENCHMARK_FULL_YEAR_SESSIONS", 200)
     if n < full:
         notes.append(
             f"FY{fy} benchmark drawn from a PARTIAL assessment year "
-            f"({n} sessions, first {window.index.min().date()}). A truncated "
-            f"window cannot contain the true annual maximum, so this benchmark "
-            f"is biased low and every model will look better than it is."
+            f"({n} sessions, first {window.index.min().date()}); the aggregate "
+            f"does not cover a full year and is not comparable to peers."
         )
 
-    return num(value)
+    return num(value), when.isoformat()
 
 
 def fetch_company(ticker: str, fy_list=None) -> dict:
@@ -386,10 +480,11 @@ def fetch_company(ticker: str, fy_list=None) -> dict:
 
     # ---- prices ----
     p_start = fy_window(min(fy_list))[0] - dt.timedelta(days=10)
-    # +1 year: the ML label needs the mean price of the FY AFTER the last one,
-    # and the benchmark needs that same year's 52-week high
+    # +1 year: the ML label still needs the mean price of the FY AFTER the last
+    # one. The 1-May benchmark for the last FY falls a month after that FY ends
+    # and is comfortably inside this window.
     p_end = fy_window(max(fy_list) + 1)[1] + dt.timedelta(days=5)
-    closes, highs, closes_err = None, None, None
+    closes, closes_err = None, None
     try:
         hist = t.history(
             start=p_start.isoformat(), end=p_end.isoformat(), auto_adjust=False
@@ -399,10 +494,6 @@ def fetch_company(ticker: str, fy_list=None) -> dict:
         else:
             closes = hist["Close"]
             closes.index = pd.to_datetime(closes.index).tz_localize(None)
-            # the 52-week high needs intraday highs, not closes
-            if "High" in hist.columns:
-                highs = hist["High"]
-                highs.index = pd.to_datetime(highs.index).tz_localize(None)
     except Exception as e:
         log.exception("price history failed for %s", ticker)
         closes_err = f"yfinance price download raised {type(e).__name__}: {e}"
@@ -410,7 +501,6 @@ def fetch_company(ticker: str, fy_list=None) -> dict:
     if closes is None or closes.dropna().empty:
         try:
             closes = nse_source.fetch_close_series(ticker, p_start, p_end)
-            highs = None  # NSE fallback returns closes only
             if closes is None or closes.empty:
                 closes_err = (
                     (closes_err or "") + "; NSE portal fallback also returned nothing "
@@ -574,10 +664,10 @@ def fetch_company(ticker: str, fy_list=None) -> dict:
             "Current Liabilities",
         )
         d["price"] = _price_for_fy(closes, closes_err, fy, diag, notes)
-        # assessment-year benchmark -> the "Market Price" column and every
-        # difference column. Never an input to any model.
-        d["price_bench"] = _benchmark_price_for_fy(
-            highs, closes, closes_err, fy, diag, notes
+        # 1-May benchmark -> the "Market Price" column and every difference
+        # column. Never an input to any model.
+        d["price_bench"], d["price_bench_date"] = _benchmark_price_for_fy(
+            closes, closes_err, fy, diag, notes
         )
         # forward-year mean price -> the ML label
         _fwd_diag, _fwd_notes = {}, []
