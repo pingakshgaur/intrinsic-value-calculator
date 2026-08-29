@@ -5,11 +5,14 @@
 Intrinsic Value Calculator - entry point.
 
     python run.py
+    python run.py --gui                        # open the desktop window
     python run.py --input data/companies.csv
     python run.py --no-ml --reasons short
     python run.py --benchmark-basis mean       # robustness re-run
     python run.py --no-analyze                 # skip charts
     python run.py --make-override-template     # writes the fill-in sheet
+    python run.py --screen-only                # sufficiency dry run, no valuation
+    python run.py --min-complete-fy 3          # loosen the gate for one run
 """
 
 import os
@@ -46,10 +49,13 @@ def setup_logging():
     return path
 
 
-def main():
-    log_path = setup_logging()
-
+def build_parser():
     ap = argparse.ArgumentParser(description="Intrinsic value engine (FY2021-FY2025)")
+    ap.add_argument(
+        "--gui",
+        action="store_true",
+        help="open the desktop window instead of running in the terminal",
+    )
     ap.add_argument("--input", help="path to companies CSV")
     ap.add_argument("--mean-basis", choices=["trading", "calendar"])
     ap.add_argument(
@@ -93,8 +99,42 @@ def main():
         action="store_true",
         help="fetch, then write a fill-in sheet for every gap",
     )
-    args = ap.parse_args()
 
+    # ---- data-sufficiency gate ----
+    ap.add_argument(
+        "--screening",
+        choices=["enforce", "report", "off"],
+        help=(
+            "'enforce' drops companies with insufficient reported data; "
+            "'report' lists them without dropping anyone; 'off' disables "
+            "the check entirely"
+        ),
+    )
+    ap.add_argument(
+        "--min-complete-fy",
+        type=int,
+        help="financial years of complete reported fundamentals required to stay in",
+    )
+    ap.add_argument(
+        "--min-benchmark-fy",
+        type=int,
+        help="financial years that must carry a benchmark price",
+    )
+    ap.add_argument(
+        "--screen-only",
+        action="store_true",
+        help=(
+            "fetch and screen, print the verdict, write the exclusion sheet, "
+            "then stop. Use this to calibrate the threshold before it starts "
+            "deleting companies"
+        ),
+    )
+    return ap
+
+
+def apply_args(args):
+    """Push CLI flags onto config. Shared with the GUI, which builds the same
+    namespace from its widgets."""
     if args.mean_basis:
         config.FY_MEAN_BASIS = args.mean_basis
     if args.benchmark_basis:
@@ -118,6 +158,50 @@ def main():
     elif args.reasons:
         config.REASON_STYLE = args.reasons
 
+    if args.screening == "off":
+        config.SUFFICIENCY_ENABLED = False
+    elif args.screening == "report":
+        config.SUFFICIENCY_ENABLED = True
+        config.SUFFICIENCY_MODE = "report_only"
+    elif args.screening == "enforce":
+        config.SUFFICIENCY_ENABLED = True
+        config.SUFFICIENCY_MODE = "enforce"
+
+    if args.min_complete_fy:
+        config.MIN_COMPLETE_FY = args.min_complete_fy
+    if args.min_benchmark_fy:
+        config.MIN_BENCHMARK_FY = args.min_benchmark_fy
+
+
+def load_companies(args):
+    if args.offline:
+        import mock_source
+
+        return mock_source.COMPANIES
+    if args.input:
+        return inputs.read_csv_input(args.input)
+    if config.DEFAULT_INPUT.exists():
+        return inputs.read_csv_input(config.DEFAULT_INPUT)
+    return inputs.read_terminal_input()
+
+
+def main():
+    log_path = setup_logging()
+    args = build_parser().parse_args()
+
+    if args.gui:
+        try:
+            import gui
+        except ImportError as e:
+            sys.exit(
+                f"GUI unavailable: {e}\n"
+                "Install the toolkit with:  pip install ttkbootstrap"
+            )
+        gui.launch()
+        return
+
+    apply_args(args)
+
     if args.offline:
         import mock_source
 
@@ -126,16 +210,7 @@ def main():
 
     # ---- input ----
     try:
-        if args.offline:
-            import mock_source
-
-            companies = mock_source.COMPANIES
-        elif args.input:
-            companies = inputs.read_csv_input(args.input)
-        elif config.DEFAULT_INPUT.exists():
-            companies = inputs.read_csv_input(config.DEFAULT_INPUT)
-        else:
-            companies = inputs.read_terminal_input()
+        companies = load_companies(args)
     except Exception as e:
         log.exception("input parsing failed")
         sys.exit(
@@ -156,6 +231,8 @@ def main():
             import tools.make_override_template as make_override_template
 
             make_override_template.build(companies)
+        elif args.screen_only:
+            pipeline.screen_only(companies)
         else:
             pipeline.run(companies, extra_training=extra)
     except KeyboardInterrupt:

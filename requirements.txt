@@ -5,12 +5,24 @@ requests>=2.31            # NSE portal fallback, Yahoo ticker search
 # --- Core computation ---
 pandas>=2.0               # statement DataFrames, feature matrix, export
 numpy>=1.24               # fold metrics, array maths in ml_common
-matplotlib>=3.7          # chart rendering (Agg backend, no display needed)
+matplotlib>=3.7           # chart rendering (Agg for files, TkAgg inside the GUI)
 
 # --- Output ---
-openpyxl>=3.1             # .xlsx writer (report + diagnostics sheets)
+openpyxl>=3.1             # .xlsx writer (report, diagnostics, methods,
+                          # excluded-companies sheets)
 
 # --- Machine learning ---
 scikit-learn>=1.4         # Random Forest, preprocessing utilities
 xgboost>=2.0              # XGBoost regressor
 lightgbm>=4.3             # LightGBM regressor
+
+# --- Desktop interface ---
+# tkinter itself is NOT listed here: it ships with the python.org Windows
+# installer as part of the standard library and cannot be installed from PyPI.
+# If 'import tkinter' fails, repair the Python install and tick "tcl/tk and
+# IDLE" - do not go looking for a pip package.
+ttkbootstrap>=1.10        # themed widgets over tkinter; pure Python, no
+                          # compiled extensions, no Qt runtime to ship
+Pillow>=10.0              # OPTIONAL: scales the analyzer's PNG charts to fit
+                          # the results pane. Without it the charts tab falls
+                          # back to full-size images in a scroll frame.

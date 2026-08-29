@@ -1,5 +1,5 @@
 # FILE: pipeline.py
-"""Fetch -> estimate -> value -> export -> analyse. All exception capture lives here."""
+"""Fetch -> screen -> estimate -> value -> export -> analyse. All exception capture lives here."""
 
 import logging
 import time
@@ -9,6 +9,7 @@ import config
 import yf_source
 import ticker_resolver
 import overrides
+import sufficiency
 import estimation
 import model_dcf
 import model_pe
@@ -66,6 +67,9 @@ def build_universe(companies):
 
         universe[name] = {
             "sector": c["sector"],
+            # cap is now stored. It was previously dropped here, which left
+            # cap_tier_ord null for every ML row - one of the 21 features was
+            # silently dead. Carrying it costs nothing and revives the feature.
             "cap": c.get("cap", ""),
             "ticker": ticker,
             "data": data,
@@ -90,6 +94,27 @@ def build_universe(companies):
     return universe, failures
 
 
+def screen_only(companies):
+    """
+    Dry run: fetch, screen, report, stop.
+
+    Exists so the sufficiency threshold can be calibrated against what the
+    source actually supplies before it is allowed to delete anything.
+    """
+    if overrides.ensure_template_exists():
+        print(f"[override] created empty {config.OVERRIDE_FILE}\n")
+    overrides.load()
+
+    universe, failures = build_universe(companies)
+    records = sufficiency.screen(companies, universe, failures)
+    sufficiency.print_summary(records)
+
+    path = exporter.export_exclusions(records)
+    print(f"\n[export] sufficiency screen -> {path}")
+    print("[gate] dry run only; no valuation was performed")
+    return records
+
+
 def run(companies, extra_training=None):
     if overrides.ensure_template_exists():
         print(
@@ -99,6 +124,24 @@ def run(companies, extra_training=None):
     overrides.load()
 
     universe, failures = build_universe(companies)
+
+    # ---- sufficiency gate: AFTER fetch, BEFORE estimation ----
+    # Order is load-bearing. estimation.fill_universe() below can fabricate a
+    # documented value for almost any gap, so screening afterwards would pass
+    # everybody. Screening here tests reported data only.
+    records = sufficiency.screen(companies, universe, failures)
+    excluded = sufficiency.excluded_names(records)
+    sufficiency.print_summary(records)
+
+    valued = [c for c in companies if c["name"] not in excluded]
+    if not valued:
+        exporter.export_exclusions(records)
+        print(
+            "\n[gate] no company cleared the gate, so there is nothing to value. "
+            "The exclusion sheet was still written - read it, then lower "
+            "config.MIN_COMPLETE_FY or trim SUFFICIENCY_REQUIRED_FIELDS."
+        )
+        return
 
     train_universe = dict(universe)
     if extra_training:
@@ -113,13 +156,35 @@ def run(companies, extra_training=None):
     # ---- gap filling MUST run before the peer tables are built ----
     estimation.fill_universe(train_universe)
 
-    pe_table = model_pe.build_sector_pe_table(universe) if universe else {}
-    ev_table = model_ev_ebitda.build_sector_table(universe) if universe else {}
+    # Excluded companies stay in the peer medians and the ML training frame by
+    # default. Thin data is not wrong data, and pulling these firms out would
+    # thin the sector medians every surviving company is valued against.
+    if getattr(config, "SUFFICIENCY_KEEP_IN_PEERS", True):
+        peer_universe = universe
+    else:
+        peer_universe = {k: v for k, v in universe.items() if k not in excluded}
+
+    if getattr(config, "SUFFICIENCY_KEEP_IN_ML", True):
+        ml_universe = train_universe
+    else:
+        ml_universe = {k: v for k, v in train_universe.items() if k not in excluded}
+
+    if excluded:
+        print(
+            f"[gate] excluded companies retained in peer medians: "
+            f"{getattr(config, 'SUFFICIENCY_KEEP_IN_PEERS', True)}; "
+            f"in ML training: {getattr(config, 'SUFFICIENCY_KEEP_IN_ML', True)}"
+        )
+
+    pe_table = model_pe.build_sector_pe_table(peer_universe) if peer_universe else {}
+    ev_table = (
+        model_ev_ebitda.build_sector_table(peer_universe) if peer_universe else {}
+    )
 
     ml_store, ml_df = None, None
     if config.ML_ENABLED and universe:
         print("\n[ml] building feature matrix ...")
-        ml_df, ml_failures = ml_common.build_dataset(train_universe)
+        ml_df, ml_failures = ml_common.build_dataset(ml_universe)
         n_lab = int(ml_df["label"].notna().sum()) if not ml_df.empty else 0
         print(f"[ml] {len(ml_df)} rows, {n_lab} labelled, split='{config.ML_SPLIT}'")
         ml_store = ml_common.run_models(
@@ -136,7 +201,7 @@ def run(companies, extra_training=None):
             return Result.bad(R.CALC_ERROR, f"{type(e).__name__}: {e}")
 
     rows = []
-    for c in companies:
+    for c in valued:
         name, sector = c["name"], c["sector"]
         # ascending, so each company block reads oldest FY first
         for fy in sorted(config.FY_LIST):
@@ -193,7 +258,7 @@ def run(companies, extra_training=None):
                 row[m.KEY] = guard(m.intrinsic_value, ml_store, name, fy)
             rows.append(row)
 
-    csv_p, xlsx_p, aux_p = exporter.export(rows)
+    csv_p, xlsx_p, aux_p = exporter.export(rows, exclusions=records)
     print(f"\n[export] {len(rows)} rows -> {csv_p}")
     print(f"[export]              -> {xlsx_p}")
     for p in aux_p:

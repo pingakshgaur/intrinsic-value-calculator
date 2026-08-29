@@ -95,6 +95,65 @@ OFFLINE = False
 # ---------------- Overrides ----------------
 USE_OVERRIDES = True
 
+# ---------------- Data sufficiency gate ----------------
+# Runs AFTER the fetch and BEFORE the estimation layer. That order is the whole
+# point. estimation.py can manufacture a defensible value for almost any gap,
+# so a sufficiency test placed after it would never fail anybody. Everything
+# the gate inspects is therefore reported by the source or hand-entered in
+# fundamentals_override.csv - nothing inferred.
+SUFFICIENCY_ENABLED = True
+
+# "enforce"      -> failing companies are dropped from the report grid
+# "report_only"  -> nobody is dropped; the sheet is still written (dry run)
+SUFFICIENCY_MODE = "enforce"
+
+# A financial year counts as COMPLETE only when every one of these carries a
+# value. Trim the tuple to loosen the gate; that is a cheaper adjustment than
+# lowering MIN_COMPLETE_FY, because it keeps the year count honest.
+SUFFICIENCY_REQUIRED_FIELDS = (
+    "revenue",
+    "ebit",
+    "ebitda",
+    "net_income",
+    "eps",
+    "ocf",
+    "capex",
+    "shares",
+    "total_debt",
+    "cash",
+    "equity",
+)
+
+# Whether the in-FY anchor price must also be present for a year to count.
+SUFFICIENCY_REQUIRE_ANCHOR_PRICE = True
+
+# How many of the FY_LIST years must be complete for a company to stay in.
+#
+# CALIBRATION WARNING: yfinance publishes roughly the latest four annual
+# statement periods, so FY2021 is usually unavailable and 4 is effectively the
+# observable ceiling, not a comfortable middle. output/screening_report.csv
+# already records HAL and BEL at three usable years. Run
+# 'python run.py --screen-only' before trusting this number.
+MIN_COMPLETE_FY = 4
+
+# How many years must carry a benchmark price for the company to be scorable.
+# A company with fundamentals but no post-FY price cannot be evaluated against
+# anything, which makes it useless as a test case however clean its accounts.
+MIN_BENCHMARK_FY = 4
+
+# What happens to an excluded company elsewhere in the run. Both default True:
+# thin data is not wrong data, and pulling these firms out of the sector
+# medians would degrade the valuations of every company that survived.
+SUFFICIENCY_KEEP_IN_PEERS = True
+SUFFICIENCY_KEEP_IN_ML = True
+
+# Write the passing companies into the sheet too, so it reads as a full audit
+# of the sample rather than a list of casualties.
+EXCLUSION_SHEET_INCLUDE_PASSED = False
+
+EXCLUSIONS_BASENAME = "Intrinsic_Value_Excluded"
+EXCLUSIONS_SHEET_NAME = "Excluded Companies"
+
 # ---------------- Estimation layer ----------------
 # "off"        -> report only what was fetched
 # "balanced"   -> fill gaps with documented methods (recommended)
@@ -144,3 +203,9 @@ ML_RANDOM_STATE = 42
 ML_RATIO_BOUNDS = (0.25, 4.0)
 ML_IMPUTE_FROM_SECTOR = True
 ML_MIN_FEATURES = 4
+
+# ---------------- GUI ----------------
+GUI_THEME = "flatly"  # ttkbootstrap light theme; "darkly" for dark
+GUI_THEME_DARK = "darkly"
+GUI_WINDOW_SIZE = "1280x820"
+GUI_MIN_SIZE = (1060, 700)

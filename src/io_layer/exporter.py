@@ -1,10 +1,14 @@
 # FILE: src/io_layer/exporter.py
 """
-Four outputs:
+Five outputs:
     Intrinsic_Value_Report.*        clean grid - values (* = estimated) or a code
     Intrinsic_Value_Data.csv        numeric twin of the grid, for the analyzer
     Intrinsic_Value_Diagnostics.*   full explanation for every empty cell
     Intrinsic_Value_Methods.*       provenance for every filled cell
+    Intrinsic_Value_Excluded.csv    companies dropped by the sufficiency gate
+
+The workbook carries four sheets: Intrinsic Values, Diagnostics, Methods, and
+Excluded Companies.
 
 The grid is 16 columns: the original 10 plus one difference column immediately
 after each model's intrinsic value.
@@ -27,6 +31,10 @@ The numeric twin also carries "Benchmark Date", the date that close was
 actually taken from. It is rarely 1 May itself - that is Maharashtra Day and
 the exchanges are shut - so publishing the realised date is what makes the
 benchmark auditable rather than merely asserted.
+
+The Excluded Companies sheet is a positive result, not an error log. A study
+that reports which firms it could not value, and precisely why, is stronger
+than one that quietly values 41 companies on data thin enough to break.
 """
 
 import logging
@@ -34,6 +42,7 @@ import logging
 import pandas as pd
 
 import config
+import sufficiency
 from result import Result, R
 from fy_utils import fy_label
 
@@ -90,6 +99,22 @@ DATA_COLUMNS = COLUMNS + [
     "FY (internal)",
     "Benchmark Date",
     "Valuation Anchor Price",
+]
+
+EXCL_COLUMNS = [
+    "Company name",
+    "Sector Name",
+    "Market cap",
+    "Ticker",
+    "Verdict",
+    "Complete FYs",
+    "Complete FYs required",
+    "Benchmark FYs",
+    "Benchmark FYs required",
+    "Fail reason",
+    "Missing fields by financial year",
+    "Traditional models still computable",
+    "Fields supplied by manual override",
 ]
 
 
@@ -222,7 +247,59 @@ def build_methods(rows):
     return pd.DataFrame(recs, columns=METHOD_COLUMNS)
 
 
-def _style(ws, df, widths, wrap_last=False):
+def build_exclusions(records):
+    """
+    One row per company the sufficiency gate rejected. Passing companies are
+    included too when EXCLUSION_SHEET_INCLUDE_PASSED is set, which turns the
+    sheet from a casualty list into a full audit of the sample.
+    """
+    include_passed = getattr(config, "EXCLUSION_SHEET_INCLUDE_PASSED", False)
+    enforcing = (
+        getattr(config, "SUFFICIENCY_ENABLED", True)
+        and getattr(config, "SUFFICIENCY_MODE", "enforce") == "enforce"
+    )
+
+    recs = []
+    for r in records or []:
+        if r["passes"] and not include_passed:
+            continue
+        if r["passes"]:
+            verdict = "RETAINED"
+        else:
+            verdict = "EXCLUDED" if enforcing else "FLAGGED (not dropped)"
+        recs.append(
+            {
+                EXCL_COLUMNS[0]: r["company"],
+                EXCL_COLUMNS[1]: r["sector"],
+                EXCL_COLUMNS[2]: r["cap"],
+                EXCL_COLUMNS[3]: r["ticker"],
+                EXCL_COLUMNS[4]: verdict,
+                EXCL_COLUMNS[5]: r["complete_fy"],
+                EXCL_COLUMNS[6]: r["need_complete"],
+                EXCL_COLUMNS[7]: r["benchmark_fy"],
+                EXCL_COLUMNS[8]: r["need_benchmark"],
+                EXCL_COLUMNS[9]: sufficiency.reason_text(r),
+                EXCL_COLUMNS[10]: sufficiency.missing_text(r),
+                EXCL_COLUMNS[11]: sufficiency.model_ready_text(r),
+                EXCL_COLUMNS[12]: ", ".join(r["overrides"]),
+            }
+        )
+
+    if not recs:
+        # An empty sheet reads as a bug. A sheet that says so does not.
+        recs.append(
+            {
+                EXCL_COLUMNS[0]: "(none)",
+                EXCL_COLUMNS[4]: "every company met the data-sufficiency " "threshold",
+                **{c: "" for c in EXCL_COLUMNS[1:4]},
+                **{c: "" for c in EXCL_COLUMNS[5:]},
+            }
+        )
+
+    return pd.DataFrame(recs, columns=EXCL_COLUMNS)
+
+
+def _style(ws, df, widths, wrap_last=False, left_cols=3):
     from openpyxl.styles import Alignment, Font
 
     for i, col in enumerate(df.columns, start=1):
@@ -240,7 +317,7 @@ def _style(ws, df, widths, wrap_last=False):
             cell.alignment = Alignment(
                 wrap_text=wrap,
                 vertical="top",
-                horizontal="right" if cell.column > 3 else "left",
+                horizontal="right" if cell.column > left_cols else "left",
             )
 
 
@@ -252,7 +329,38 @@ def _report_widths():
     return w
 
 
-def export(rows):
+def _excl_widths():
+    return {
+        0: 34,
+        1: 26,
+        2: 12,
+        3: 14,
+        4: 22,
+        5: 13,
+        6: 13,
+        7: 13,
+        8: 13,
+        9: 60,
+        10: 70,
+        11: 40,
+        12: 30,
+    }
+
+
+def export_exclusions(records):
+    """Standalone CSV. Used by the --screen-only dry run."""
+    try:
+        config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        df = build_exclusions(records)
+        path = config.OUTPUT_DIR / f"{config.EXCLUSIONS_BASENAME}.csv"
+        df.to_csv(path, index=False, encoding="utf-8-sig")
+        return path
+    except Exception as e:
+        log.exception("exclusion export failed")
+        return f"(exclusion export failed: {type(e).__name__}: {e})"
+
+
+def export(rows, exclusions=None):
     try:
         config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         df = build_dataframe(rows)
@@ -261,7 +369,7 @@ def export(rows):
         df.to_csv(csv_path, index=False, encoding="utf-8-sig")
 
         aux_paths = []
-        dd = mm = None
+        dd = mm = xx = None
 
         data_df = build_data_frame(rows)
         data_path = config.OUTPUT_DIR / f"{config.DATA_BASENAME}.csv"
@@ -278,6 +386,12 @@ def export(rows):
             mm = build_methods(rows)
             p = config.OUTPUT_DIR / f"{config.METHODS_BASENAME}.csv"
             mm.to_csv(p, index=False, encoding="utf-8-sig")
+            aux_paths.append(p)
+
+        if exclusions is not None:
+            xx = build_exclusions(exclusions)
+            p = config.OUTPUT_DIR / f"{config.EXCLUSIONS_BASENAME}.csv"
+            xx.to_csv(p, index=False, encoding="utf-8-sig")
             aux_paths.append(p)
 
         try:
@@ -305,6 +419,20 @@ def export(rows):
                         wrap_last=True,
                     )
                     xw.sheets["Methods"].freeze_panes = "A2"
+
+                if xx is not None:
+                    sheet = getattr(
+                        config, "EXCLUSIONS_SHEET_NAME", "Excluded Companies"
+                    )
+                    xx.to_excel(xw, index=False, sheet_name=sheet)
+                    _style(
+                        xw.sheets[sheet],
+                        xx,
+                        _excl_widths(),
+                        wrap_last=True,
+                        left_cols=5,
+                    )
+                    xw.sheets[sheet].freeze_panes = "A2"
         except Exception as e:
             log.exception("xlsx write failed")
             xlsx_path = f"(xlsx skipped: {type(e).__name__}: {e})"
