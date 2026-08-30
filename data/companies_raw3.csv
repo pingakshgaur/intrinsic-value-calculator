@@ -1,11 +1,68 @@
-"Sector","Large Cap","Mid Cap","Small Cap"
-"Defence","Hindustan Aeronautics; Bharat Electronics","Bharat Dynamics; Garden Reach Shipbuilders","Data Patterns; Zen Technologies"
-"Capital Goods","Tata Motors; Ashok Leyland","Escorts Kubota","Ajax Engineering; Atul Auto"
-"Bank","State Bank of India; Bank of Baroda; Canara Bank","Bank of India; Bank of Maharashtra","IDBI Bank"
-"Cigarette & Tobacco Products","—","Godfrey Phillips; VST Industries","NTC Industries; Elitecon International"
-"Diversified FMCG","ITC; Hindustan Unilever","Hindustan Foods","Godavari Biorefineries"
-"Fintech","—","PB Fintech; One97 Communications","MOS Utility; Seshaasai Technologies"
-"Healthcare Equipment & Supplies","—","Poly Medicure","Q-Line Biotech; OSEL Devices; Molbio Diagnostics"
-"Diversified Metals","Vedanta","Jain Resource Recycling; Pondy Oxides","Ardee Industries"
-"Power","Adani Power; Adani Energy Solutions; Tata Power; Power Grid Corporation; NHPC","Nava; KPI Green Energy","Jaiprakash Power Ventures"
-"IT–Software","TCS; Infosys; HCL Technologies; Wipro","Oracle Financial Services Software; Sonata Software","Ksolves India"
+company name,sector name,market cap,ticker
+Mazagon Dock Shipbuilders Limited,Defence and Aerospace,Large,MAZDOCK.NS
+Cochin Shipyard Limited,Defence and Aerospace,Mid,COCHINSHIP.NS
+Garden Reach Shipbuilders & Engineers Limited,Defence and Aerospace,Mid,GRSE.NS
+Solar Industries India Limited,Defence and Aerospace,Large,SOLARINDS.NS
+Bharat Forge Limited,Defence and Aerospace,Large,BHARATFORG.NS
+MTAR Technologies Limited,Defence and Aerospace,Mid,MTARTECH.NS
+Zen Technologies Limited,Defence and Aerospace,Mid,ZENTEC.NS
+Astra Microwave Products Limited,Defence and Aerospace,Mid,ASTRAMICRO.NS
+Apollo Micro Systems Limited,Defence and Aerospace,Small,APOLLO.NS
+Dynamatic Technologies Limited,Defence and Aerospace,Small,DYNAMATECH.NS
+Azad Engineering Limited,Defence and Aerospace,Mid,AZAD.NS
+Unimech Aerospace and Manufacturing Limited,Defence and Aerospace,Small,UNIMECH.NS
+The Tata Power Company Limited,Power and Renewable Energy,Large,TATAPOWER.NS
+Torrent Power Limited,Power and Renewable Energy,Large,TORNTPOWER.NS
+Adani Green Energy Limited,Power and Renewable Energy,Large,ADANIGREEN.NS
+Adani Power Limited,Power and Renewable Energy,Large,ADANIPOWER.NS
+Suzlon Energy Limited,Power and Renewable Energy,Large,SUZLON.NS
+Waaree Energies Limited,Power and Renewable Energy,Large,WAAREEENER.NS
+SJVN Limited,Power and Renewable Energy,Mid,SJVN.NS
+CESC Limited,Power and Renewable Energy,Mid,CESC.NS
+Premier Energies Limited,Power and Renewable Energy,Mid,PREMIERENE.NS
+Inox Wind Limited,Power and Renewable Energy,Small,INOXWIND.NS
+Orient Green Power Company Limited,Power and Renewable Energy,Small,GREENPOWER.NS
+Jaiprakash Power Ventures Limited,Power and Renewable Energy,Small,JPPOWER.NS
+Gujarat Industries Power Company Limited,Power and Renewable Energy,Small,GIPCL.NS
+CG Power and Industrial Solutions Limited,Semiconductor and Electronics Manufacturing,Large,CGPOWER.NS
+Havells India Limited,Semiconductor and Electronics Manufacturing,Large,HAVELLS.NS
+Amber Enterprises India Limited,Semiconductor and Electronics Manufacturing,Mid,AMBER.NS
+PG Electroplast Limited,Semiconductor and Electronics Manufacturing,Mid,PGEL.NS
+Honeywell Automation India Limited,Semiconductor and Electronics Manufacturing,Mid,HONAUT.NS
+Tata Elxsi Limited,Semiconductor and Electronics Manufacturing,Mid,TATAELXSI.NS
+Cyient DLM Limited,Semiconductor and Electronics Manufacturing,Small,CYIENTDLM.NS
+MosChip Technologies Limited,Semiconductor and Electronics Manufacturing,Small,MOSCHIP.NS
+Elin Electronics Limited,Semiconductor and Electronics Manufacturing,Small,ELIN.NS
+Optiemus Infracom Limited,Semiconductor and Electronics Manufacturing,Small,OPTIEMUS.NS
+EPACK Durable Limited,Semiconductor and Electronics Manufacturing,Small,EPACK.NS
+Genus Power Infrastructures Limited,Semiconductor and Electronics Manufacturing,Small,GENUSPOWER.NS
+ABB India Limited,Capital Goods and Industrial Manufacturing,Large,ABB.NS
+Schaeffler India Limited,Capital Goods and Industrial Manufacturing,Large,SCHAEFFLER.NS
+Hitachi Energy India Limited,Capital Goods and Industrial Manufacturing,Large,POWERINDIA.NS
+Bharat Heavy Electricals Limited,Capital Goods and Industrial Manufacturing,Large,BHEL.NS
+Thermax Limited,Capital Goods and Industrial Manufacturing,Mid,THERMAX.NS
+AIA Engineering Limited,Capital Goods and Industrial Manufacturing,Mid,AIAENG.NS
+Grindwell Norton Limited,Capital Goods and Industrial Manufacturing,Mid,GRINDWELL.NS
+Timken India Limited,Capital Goods and Industrial Manufacturing,Mid,TIMKEN.NS
+Elgi Equipments Limited,Capital Goods and Industrial Manufacturing,Mid,ELGIEQUIP.NS
+Kirloskar Oil Engines Limited,Capital Goods and Industrial Manufacturing,Mid,KIRLOSENG.NS
+Kirloskar Brothers Limited,Capital Goods and Industrial Manufacturing,Mid,KIRLOSBROS.NS
+Triveni Turbine Limited,Capital Goods and Industrial Manufacturing,Mid,TRITURBINE.NS
+SKF India Limited,Capital Goods and Industrial Manufacturing,Small,SKFINDIA.NS
+GMM Pfaudler Limited,Capital Goods and Industrial Manufacturing,Small,GMMPFAUDLR.NS
+KSB Limited,Capital Goods and Industrial Manufacturing,Small,KSB.NS
+ESAB India Limited,Capital Goods and Industrial Manufacturing,Small,ESABINDIA.NS
+Max Healthcare Institute Limited,Healthcare and Medical Devices,Large,MAXHEALTH.NS
+Aster DM Healthcare Limited,Healthcare and Medical Devices,Large,ASTERDM.NS
+Global Health Limited,Healthcare and Medical Devices,Large,GLOBALHLTH.NS
+Vijaya Diagnostic Centre Limited,Healthcare and Medical Devices,Mid,VIJAYA.NS
+Poly Medicure Limited,Healthcare and Medical Devices,Mid,POLYMED.NS
+Dr. Lal PathLabs Limited,Healthcare and Medical Devices,Mid,LALPATHLAB.NS
+Rainbow Children's Medicare Limited,Healthcare and Medical Devices,Small,RAINBOW.NS
+HealthCare Global Enterprises Limited,Healthcare and Medical Devices,Small,HCG.NS
+Shalby Limited,Healthcare and Medical Devices,Small,SHALBY.NS
+Krsnaa Diagnostics Limited,Healthcare and Medical Devices,Small,KRSNAA.NS
+Metropolis Healthcare Limited,Healthcare and Medical Devices,Small,METROPOLIS.NS
+Thyrocare Technologies Limited,Healthcare and Medical Devices,Small,THYROCARE.NS
+Tarsons Products Limited,Healthcare and Medical Devices,Small,TARSONS.NS
+Kovai Medical Center and Hospital Limited,Healthcare and Medical Devices,Small,KOVAI.NS
