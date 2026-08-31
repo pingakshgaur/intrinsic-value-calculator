@@ -129,17 +129,24 @@ SUFFICIENCY_REQUIRE_ANCHOR_PRICE = True
 
 # How many of the FY_LIST years must be complete for a company to stay in.
 #
-# CALIBRATION WARNING: yfinance publishes roughly the latest four annual
-# statement periods, so FY2021 is usually unavailable and 4 is effectively the
-# observable ceiling, not a comfortable middle. output/screening_report.csv
-# already records HAL and BEL at three usable years. Run
-# 'python run.py --screen-only' before trusting this number.
-MIN_COMPLETE_FY = 4
+# CALIBRATED, not assumed. The 52-company screening run of 30 Aug 2026 returned
+# a maximum complete_fy of 3 across the entire sample - including TCS, Infosys,
+# HUL, ITC and Power Grid. yfinance serves ~4 annual statement periods, so
+# FY2020-21 is absent for every company and FY2021-22 for most. Three is
+# therefore the observable ceiling, and a higher bar excludes 100% of the
+# sample regardless of which companies are listed.
+#
+# State this in the methodology as a data-availability constraint of the
+# source, not a quality judgement about the firms. The honest framing is:
+# "the panel is FY2022-23 to FY2024-25, three years, because the price and
+# fundamentals provider does not serve deeper annual history."
+MIN_COMPLETE_FY = 3
 
-# How many years must carry a benchmark price for the company to be scorable.
-# A company with fundamentals but no post-FY price cannot be evaluated against
-# anything, which makes it useless as a test case however clean its accounts.
-MIN_BENCHMARK_FY = 4
+# Benchmark prices are far better covered than fundamentals - most companies
+# returned 5/5 - so this can stay stricter than MIN_COMPLETE_FY without
+# excluding anyone. It exists to catch recent IPOs whose pre-listing years
+# have no traded price to be scored against.
+MIN_BENCHMARK_FY = 3
 
 # What happens to an excluded company elsewhere in the run. Both default True:
 # thin data is not wrong data, and pulling these firms out of the sector

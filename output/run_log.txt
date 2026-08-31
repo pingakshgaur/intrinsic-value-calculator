@@ -1,11 +1,30 @@
-2026-08-30 16:28:27,434 ERROR    yfinance: HTTP Error 404: {"quoteSummary":{"result":null,"error":{"code":"Not Found","description":"Quote not found for symbol: TATAMOTORS.NS"}}}
-2026-08-30 16:28:27,793 ERROR    yfinance: $TATAMOTORS.NS: possibly delisted; no timezone found
-2026-08-30 16:29:12,312 ERROR    yfinance: $NTCIND.NS: Data doesn't exist for startDate = 1584815400, endDate = 1775327400
-2026-08-30 16:29:21,161 ERROR    yfinance: $ELITECON.NS: Data doesn't exist for startDate = 1584815400, endDate = 1775327400
-2026-08-30 16:29:46,227 ERROR    yfinance: $MOS-SM.NS: possibly delisted; no price data found  (1d 2020-03-22 -> 2026-04-05)
-2026-08-30 16:29:59,744 ERROR    yfinance: $QLINE-SM.NS: possibly delisted; no price data found  (1d 2020-03-22 -> 2026-04-05)
-2026-08-30 16:30:07,606 ERROR    yfinance: $OSELDEVICE-SM.NS: possibly delisted; no price data found  (1d 2020-03-22 -> 2026-04-05)
-2026-08-30 16:30:16,164 ERROR    yfinance: $MOLBIO.NS: Data doesn't exist for startDate = 1584815400, endDate = 1775327400
-2026-08-30 16:30:31,451 ERROR    yfinance: HTTP Error 404: {"quoteSummary":{"result":null,"error":{"code":"Not Found","description":"Quote not found for symbol: PONDYOXIDE.NS"}}}
-2026-08-30 16:30:31,831 ERROR    yfinance: $PONDYOXIDE.NS: possibly delisted; no timezone found
-2026-08-30 16:30:40,789 ERROR    yfinance: $ARDEE.NS: Data doesn't exist for startDate = 1584815400, endDate = 1775327400
+2026-08-30 17:13:38,521 DEBUG    PIL.PngImagePlugin: STREAM b'IHDR' 16 13
+2026-08-30 17:13:38,521 DEBUG    PIL.PngImagePlugin: STREAM b'pHYs' 41 9
+2026-08-30 17:13:38,521 DEBUG    PIL.PngImagePlugin: STREAM b'sRGB' 62 1
+2026-08-30 17:13:38,521 DEBUG    PIL.PngImagePlugin: STREAM b'gAMA' 75 4
+2026-08-30 17:13:38,521 DEBUG    PIL.PngImagePlugin: STREAM b'tEXt' 91 14
+2026-08-30 17:13:38,521 DEBUG    PIL.PngImagePlugin: STREAM b'IDAT' 117 637
+2026-08-30 17:13:38,537 DEBUG    PIL.PngImagePlugin: STREAM b'IHDR' 16 13
+2026-08-30 17:13:38,537 DEBUG    PIL.PngImagePlugin: STREAM b'pHYs' 41 9
+2026-08-30 17:13:38,537 DEBUG    PIL.PngImagePlugin: STREAM b'sRGB' 62 1
+2026-08-30 17:13:38,537 DEBUG    PIL.PngImagePlugin: STREAM b'gAMA' 75 4
+2026-08-30 17:13:38,537 DEBUG    PIL.PngImagePlugin: STREAM b'tEXt' 91 14
+2026-08-30 17:13:38,538 DEBUG    PIL.PngImagePlugin: STREAM b'IDAT' 117 629
+2026-08-30 17:13:38,545 DEBUG    PIL.PngImagePlugin: STREAM b'IHDR' 16 13
+2026-08-30 17:13:38,545 DEBUG    PIL.PngImagePlugin: STREAM b'pHYs' 41 9
+2026-08-30 17:13:38,545 DEBUG    PIL.PngImagePlugin: STREAM b'sRGB' 62 1
+2026-08-30 17:13:38,545 DEBUG    PIL.PngImagePlugin: STREAM b'gAMA' 75 4
+2026-08-30 17:13:38,545 DEBUG    PIL.PngImagePlugin: STREAM b'tEXt' 91 14
+2026-08-30 17:13:38,545 DEBUG    PIL.PngImagePlugin: STREAM b'IDAT' 117 269
+2026-08-30 17:13:38,546 DEBUG    PIL.PngImagePlugin: STREAM b'IHDR' 16 13
+2026-08-30 17:13:38,546 DEBUG    PIL.PngImagePlugin: STREAM b'pHYs' 41 9
+2026-08-30 17:13:38,546 DEBUG    PIL.PngImagePlugin: STREAM b'sRGB' 62 1
+2026-08-30 17:13:38,546 DEBUG    PIL.PngImagePlugin: STREAM b'gAMA' 75 4
+2026-08-30 17:13:38,546 DEBUG    PIL.PngImagePlugin: STREAM b'tEXt' 91 14
+2026-08-30 17:13:38,546 DEBUG    PIL.PngImagePlugin: STREAM b'IDAT' 117 149
+2026-08-30 17:13:38,547 DEBUG    PIL.PngImagePlugin: STREAM b'IHDR' 16 13
+2026-08-30 17:13:38,547 DEBUG    PIL.PngImagePlugin: STREAM b'pHYs' 41 9
+2026-08-30 17:13:38,547 DEBUG    PIL.PngImagePlugin: STREAM b'sRGB' 62 1
+2026-08-30 17:13:38,547 DEBUG    PIL.PngImagePlugin: STREAM b'gAMA' 75 4
+2026-08-30 17:13:38,547 DEBUG    PIL.PngImagePlugin: STREAM b'tEXt' 91 14
+2026-08-30 17:13:38,547 DEBUG    PIL.PngImagePlugin: STREAM b'IDAT' 117 139
