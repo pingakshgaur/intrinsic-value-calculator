@@ -161,6 +161,22 @@ EXCLUSION_SHEET_INCLUDE_PASSED = False
 EXCLUSIONS_BASENAME = "Intrinsic_Value_Excluded"
 EXCLUSIONS_SHEET_NAME = "Excluded Companies"
 
+# If the gate would reject every single company, drop the threshold to the
+# best figure any company actually achieved and screen again, printing a loud
+# notice. Returning an empty report is never the helpful answer: the user gets
+# no files and no way to tell whether the engine broke or the bar was too high.
+SUFFICIENCY_AUTO_RELAX = True
+
+# ---------------- Plain-language output ----------------
+# Print a jargon-free summary after the technical one. The technical output is
+# what you cite in the thesis; this is what makes the tool usable by someone
+# who has never heard of EV/EBITDA.
+PLAIN_SUMMARY = True
+
+# A model value this far from the market price is called cheap or expensive in
+# the plain-language summary. Inside the band, the verdict is "about right".
+PLAIN_VERDICT_BAND = 0.10
+
 # ---------------- Estimation layer ----------------
 # "off"        -> report only what was fetched
 # "balanced"   -> fill gaps with documented methods (recommended)

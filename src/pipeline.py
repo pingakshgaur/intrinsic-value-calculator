@@ -1,4 +1,4 @@
-# FILE: pipeline.py
+# FILE: src/pipeline.py
 """Fetch -> screen -> estimate -> value -> export -> analyse. All exception capture lives here."""
 
 import logging
@@ -134,12 +134,44 @@ def run(companies, extra_training=None):
     sufficiency.print_summary(records)
 
     valued = [c for c in companies if c["name"] not in excluded]
+
+    # ---- auto-relax safety valve ----
+    # A gate that rejects everybody has told you about the data source, not
+    # about the companies. Rather than return nothing, fall back to the best
+    # figure actually observed and say so in the loudest possible terms.
+    if not valued and getattr(config, "SUFFICIENCY_AUTO_RELAX", True) and records:
+        best_fy = max((r["complete_fy"] for r in records), default=0)
+        best_bench = max((r["benchmark_fy"] for r in records), default=0)
+        if best_fy >= 1:
+            old_fy = config.MIN_COMPLETE_FY
+            old_bench = config.MIN_BENCHMARK_FY
+            config.MIN_COMPLETE_FY = best_fy
+            config.MIN_BENCHMARK_FY = min(old_bench, best_bench)
+            print(
+                f"\n[gate] AUTO-ADJUSTED. No company reached "
+                f"{old_fy} complete financial years, so nothing would have "
+                f"been valued and no report written."
+                f"\n[gate] The best any company managed was {best_fy}. The "
+                f"threshold has been lowered to {config.MIN_COMPLETE_FY} "
+                f"complete years / {config.MIN_BENCHMARK_FY} benchmark years "
+                f"for this run only - config.py is unchanged."
+                f"\n[gate] This is a limit of the data source, not a fault in "
+                f"the companies. Record the figure actually used in your "
+                f"methodology; do not report the one in config.py."
+            )
+            records = sufficiency.screen(companies, universe, failures)
+            excluded = sufficiency.excluded_names(records)
+            valued = [c for c in companies if c["name"] not in excluded]
+            # sufficiency.print_summary(records)
+
     if not valued:
         exporter.export_exclusions(records)
         print(
-            "\n[gate] no company cleared the gate, so there is nothing to value. "
-            "The exclusion sheet was still written - read it, then lower "
-            "config.MIN_COMPLETE_FY or trim SUFFICIENCY_REQUIRED_FIELDS."
+            "\n[gate] no company cleared the gate even after auto-adjustment, "
+            "so there is nothing to value. Every company returned zero usable "
+            "financial years - that points at the data source or the ticker "
+            "symbols, not at the threshold. The exclusion sheet was still "
+            "written; read it first."
         )
         return
 
@@ -320,6 +352,7 @@ def run(companies, extra_training=None):
             print(f"   {n:4d}  {code}")
     else:
         print("\n[why cells are blank]  none - every cell has a value")
+    plain_summary(rows, len(excluded))
 
     # ---- analysis ----
     if not getattr(config, "ANALYSIS_ENABLED", True):
@@ -342,3 +375,71 @@ def run(companies, extra_training=None):
             "[analyzer] the CSV exports above are unaffected; re-run with "
             "'python tools/analyze.py' once fixed"
         )
+
+
+def plain_summary(rows, excluded_count):
+    """
+    Jargon-free closing summary.
+
+    The technical block above is what goes in the thesis. This is what makes
+    the output legible to someone who has never met an EV/EBITDA multiple. It
+    deliberately says "looks cheap" rather than "trades at a discount to
+    intrinsic value" - the second phrasing is more precise and less useful.
+    """
+    if not getattr(config, "PLAIN_SUMMARY", True):
+        return
+
+    band = getattr(config, "PLAIN_VERDICT_BAND", 0.10)
+    keys = ["dcf", "pe", "ev", "xgboost", "random_forest", "lightgbm"]
+    cheap = dear = fair = unknown = 0
+    companies = set()
+
+    for r in rows:
+        companies.add(r["company"])
+        price = r.get("price")
+        vals = [r[k].value for k in keys if k in r and getattr(r[k], "ok", False)]
+        if not (price is not None and getattr(price, "ok", False)) or not vals:
+            unknown += 1
+            continue
+        avg = sum(vals) / len(vals)
+        if avg <= 0:
+            unknown += 1
+        elif price.value < avg * (1 - band):
+            cheap += 1
+        elif price.value > avg * (1 + band):
+            dear += 1
+        else:
+            fair += 1
+
+    total = len(rows)
+    print("\n" + "=" * 74)
+    print("  IN PLAIN ENGLISH")
+    print("=" * 74)
+    print(
+        f"  We looked at {len(companies)} companies across "
+        f"{len(config.FY_LIST)} financial years - {total} company-years in all."
+    )
+    if excluded_count:
+        print(
+            f"  {excluded_count} more were set aside because their published "
+            f"accounts were too incomplete to value fairly. They are listed, "
+            f"with the reason for each, on the 'Excluded Companies' sheet."
+        )
+    print(
+        f"\n  For each company-year we worked out what the business appears to "
+        f"be worth,\n  then compared that with what its shares actually traded "
+        f"at on the following 1 May."
+    )
+    print(f"\n  Of the {total} comparisons:")
+    print(f"    {cheap:5d}  the share price looked LOW next to the estimated worth")
+    print(f"    {dear:5d}  the share price looked HIGH next to the estimated worth")
+    print(f"    {fair:5d}  the two were within {int(band * 100)}% of each other")
+    if unknown:
+        print(f"    {unknown:5d}  could not be judged - not enough data that year")
+    print(
+        "\n  A low price is not automatically a buy signal. These are estimates "
+        "built\n  from past accounts, and every method here has known blind "
+        "spots. Read the\n  'Methods' sheet to see how each number was arrived "
+        "at before trusting it."
+    )
+    print("=" * 74)
