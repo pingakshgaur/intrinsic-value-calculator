@@ -161,6 +161,15 @@ EXCLUSION_SHEET_INCLUDE_PASSED = False
 EXCLUSIONS_BASENAME = "Intrinsic_Value_Excluded"
 EXCLUSIONS_SHEET_NAME = "Excluded Companies"
 
+# The plain-English twin of the sheet above. Same companies, same verdicts,
+# written for someone who has never opened an annual report: a named category
+# of problem, two or three ordinary sentences, and a concrete next step. The
+# technical sheet stays exactly as it was - this sits beside it.
+PLAIN_EXCLUSIONS_BASENAME = "Why_Companies_Were_Left_Out"
+PLAIN_SUMMARY_SHEET_NAME = "Left Out - Summary"
+PLAIN_EXCLUSIONS_SHEET_NAME = "Left Out - In Plain English"
+PLAIN_YEARS_SHEET_NAME = "Left Out - Year By Year"
+
 # If the gate would reject every single company, drop the threshold to the
 # best figure any company actually achieved and screen again, printing a loud
 # notice. Returning an empty report is never the helpful answer: the user gets
@@ -228,7 +237,25 @@ ML_IMPUTE_FROM_SECTOR = True
 ML_MIN_FEATURES = 4
 
 # ---------------- GUI ----------------
-GUI_THEME = "flatly"  # ttkbootstrap light theme; "darkly" for dark
+# Base ttkbootstrap theme, tried in order - the first one this installation
+# actually ships is used. ttkbootstrap 2.x carries the "-light"/"-dark" curated
+# families; 1.x does not, so the older names sit at the end as a fallback.
+# The palette in gui.py is layered on top of whichever base wins, so the app
+# looks the same either way.
+GUI_LIGHT_THEMES = ("one-light", "nord-light", "litera", "flatly", "cosmo")
+GUI_DARK_THEMES = ("one-dark", "nord-dark", "darkly", "superhero", "cyborg")
+
+# Kept for backwards compatibility with older copies of gui.py.
+GUI_THEME = "flatly"
 GUI_THEME_DARK = "darkly"
-GUI_WINDOW_SIZE = "1280x820"
-GUI_MIN_SIZE = (1060, 700)
+
+GUI_WINDOW_SIZE = "1360x880"
+GUI_MIN_SIZE = (1120, 720)
+
+# Remember the light/dark choice between sessions.
+GUI_START_IN_DARK = False
+
+# How many "units" one notch of the mouse wheel scrolls. Three is the Windows
+# default for text; the stock Tk canvas binding uses one, which is what made
+# the settings page feel like it was not scrolling at all.
+GUI_SCROLL_STEP = 3

@@ -42,6 +42,7 @@ import logging
 import pandas as pd
 
 import config
+import plain_reasons
 import sufficiency
 from result import Result, R
 from fy_utils import fy_label
@@ -299,7 +300,43 @@ def build_exclusions(records):
     return pd.DataFrame(recs, columns=EXCL_COLUMNS)
 
 
-def _style(ws, df, widths, wrap_last=False, left_cols=3):
+def build_plain_exclusions(records):
+    """
+    The human-readable twin of build_exclusions().
+
+    Same companies, same verdicts, no jargon: a named category, two or three
+    sentences of ordinary English, the years affected, what was missing in
+    words rather than field names, and what the user can actually do about it.
+    """
+    rows = plain_reasons.plain_rows(records)
+    return pd.DataFrame(rows, columns=plain_reasons.PLAIN_COLUMNS)
+
+
+def build_missing_by_year(records):
+    """One row per company-year that could not be used, and why - in words."""
+    rows = plain_reasons.year_rows(records)
+    return pd.DataFrame(rows, columns=plain_reasons.YEAR_COLUMNS)
+
+
+def build_exclusion_summary(records):
+    """How many companies fell into each category of problem."""
+    rows = plain_reasons.summary_rows(records)
+    return pd.DataFrame(rows, columns=plain_reasons.SUMMARY_COLUMNS)
+
+
+def _plain_widths():
+    return {0: 34, 1: 24, 2: 14, 3: 24, 4: 34, 5: 74, 6: 26, 7: 46, 8: 62}
+
+
+def _year_widths():
+    return {0: 34, 1: 14, 2: 16, 3: 52, 4: 62, 5: 40}
+
+
+def _summary_widths():
+    return {0: 40, 1: 20, 2: 88}
+
+
+def _style(ws, df, widths, wrap_last=False, left_cols=3, wrap_all=False):
     from openpyxl.styles import Alignment, Font
 
     for i, col in enumerate(df.columns, start=1):
@@ -313,11 +350,13 @@ def _style(ws, df, widths, wrap_last=False, left_cols=3):
     last = len(df.columns)
     for row in ws.iter_rows(min_row=2):
         for cell in row:
-            wrap = wrap_last and cell.column == last
+            wrap = wrap_all or (wrap_last and cell.column == last)
             cell.alignment = Alignment(
                 wrap_text=wrap,
                 vertical="top",
-                horizontal="right" if cell.column > left_cols else "left",
+                horizontal=(
+                    "left" if wrap_all or cell.column <= left_cols else "right"
+                ),
             )
 
 
@@ -348,12 +387,31 @@ def _excl_widths():
 
 
 def export_exclusions(records):
-    """Standalone CSV. Used by the --screen-only dry run."""
+    """Standalone CSVs. Used by the --screen-only dry run."""
     try:
         config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         df = build_exclusions(records)
         path = config.OUTPUT_DIR / f"{config.EXCLUSIONS_BASENAME}.csv"
         df.to_csv(path, index=False, encoding="utf-8-sig")
+
+        # The plain-English twin. Written alongside, never instead: the
+        # technical sheet is what a reviewer checks, this is what everyone
+        # else reads.
+        try:
+            base = getattr(
+                config, "PLAIN_EXCLUSIONS_BASENAME", "Why_Companies_Were_Left_Out"
+            )
+            build_plain_exclusions(records).to_csv(
+                config.OUTPUT_DIR / f"{base}.csv", index=False, encoding="utf-8-sig"
+            )
+            build_missing_by_year(records).to_csv(
+                config.OUTPUT_DIR / f"{base}_By_Year.csv",
+                index=False,
+                encoding="utf-8-sig",
+            )
+        except Exception:
+            log.exception("plain exclusion export failed")
+
         return path
     except Exception as e:
         log.exception("exclusion export failed")
@@ -388,11 +446,34 @@ def export(rows, exclusions=None):
             mm.to_csv(p, index=False, encoding="utf-8-sig")
             aux_paths.append(p)
 
+        px = py = ps = None
         if exclusions is not None:
             xx = build_exclusions(exclusions)
             p = config.OUTPUT_DIR / f"{config.EXCLUSIONS_BASENAME}.csv"
             xx.to_csv(p, index=False, encoding="utf-8-sig")
             aux_paths.append(p)
+
+            # Plain-English versions of the same verdicts.
+            try:
+                base = getattr(
+                    config,
+                    "PLAIN_EXCLUSIONS_BASENAME",
+                    "Why_Companies_Were_Left_Out",
+                )
+                px = build_plain_exclusions(exclusions)
+                p = config.OUTPUT_DIR / f"{base}.csv"
+                px.to_csv(p, index=False, encoding="utf-8-sig")
+                aux_paths.append(p)
+
+                py = build_missing_by_year(exclusions)
+                p = config.OUTPUT_DIR / f"{base}_By_Year.csv"
+                py.to_csv(p, index=False, encoding="utf-8-sig")
+                aux_paths.append(p)
+
+                ps = build_exclusion_summary(exclusions)
+            except Exception:
+                log.exception("plain exclusion build failed")
+                px = py = ps = None
 
         try:
             with pd.ExcelWriter(xlsx_path, engine="openpyxl") as xw:
@@ -433,6 +514,37 @@ def export(rows, exclusions=None):
                         left_cols=5,
                     )
                     xw.sheets[sheet].freeze_panes = "A2"
+
+                # --- the three plain-English sheets ---------------------
+                if ps is not None:
+                    name = getattr(
+                        config,
+                        "PLAIN_SUMMARY_SHEET_NAME",
+                        "Left Out - Summary",
+                    )
+                    ps.to_excel(xw, index=False, sheet_name=name)
+                    _style(xw.sheets[name], ps, _summary_widths(), wrap_all=True)
+                    xw.sheets[name].freeze_panes = "A2"
+
+                if px is not None:
+                    name = getattr(
+                        config,
+                        "PLAIN_EXCLUSIONS_SHEET_NAME",
+                        "Left Out - In Plain English",
+                    )
+                    px.to_excel(xw, index=False, sheet_name=name)
+                    _style(xw.sheets[name], px, _plain_widths(), wrap_all=True)
+                    xw.sheets[name].freeze_panes = "A2"
+
+                if py is not None:
+                    name = getattr(
+                        config,
+                        "PLAIN_YEARS_SHEET_NAME",
+                        "Left Out - Year By Year",
+                    )
+                    py.to_excel(xw, index=False, sheet_name=name)
+                    _style(xw.sheets[name], py, _year_widths(), wrap_all=True)
+                    xw.sheets[name].freeze_panes = "A2"
         except Exception as e:
             log.exception("xlsx write failed")
             xlsx_path = f"(xlsx skipped: {type(e).__name__}: {e})"
