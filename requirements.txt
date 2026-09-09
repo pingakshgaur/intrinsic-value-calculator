@@ -12,7 +12,7 @@ openpyxl>=3.1             # .xlsx writer (report, diagnostics, methods,
                           # excluded-companies sheets)
 
 # --- Machine learning ---
-scikit-learn>=1.4         # Random Forest, preprocessing utilities
+scikit-learn>=1.4         # Random Forest, MLP neural network, StandardScaler
 xgboost>=2.0              # XGBoost regressor
 lightgbm>=4.3             # LightGBM regressor
 

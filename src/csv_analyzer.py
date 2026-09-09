@@ -89,13 +89,19 @@ COL_SECTOR = "Sector Name"
 COL_FY = "Financial Year"
 COL_MARKET = "Market Price"
 
+# Every model the report CAN carry, in spreadsheet order. A model the user
+# switched off simply has no column in the CSV; load_results() fills it with
+# NaN and run_analysis() drops it, so the charts show what was actually run
+# rather than a row of empty slots.
 MODEL_SPECS: list[tuple[str, str]] = [
     ("DCF", "(DCF) Intrinsic Value"),
     ("P/E Relative", "(P/E Relative Valuation) Intrinsic Value"),
     ("EV/EBITDA", "(EV/EBITDA Valuation) Intrinsic Value"),
+    ("Graham Number", "(Graham Number) Intrinsic Value"),
     ("XGBoost", "(XGBoost) Intrinsic Value"),
     ("Random Forest", "(Random Forest) Intrinsic Value"),
     ("LightGBM", "(LightGBM) Intrinsic Value"),
+    ("MLP Neural Network", "(MLP Neural Network) Intrinsic Value"),
 ]
 
 MODEL_NAMES = [m for m, _ in MODEL_SPECS]
@@ -107,6 +113,8 @@ CURRENCY = "Rs"
 COLOURS: dict[str, str] = {
     "Market Price": "#111111",
     "DCF": "#1f77b4",
+    "Graham Number": "#8c564b",
+    "MLP Neural Network": "#e377c2",
     "P/E Relative": "#d62728",
     "EV/EBITDA": "#2ca02c",
     "XGBoost": "#ff7f0e",

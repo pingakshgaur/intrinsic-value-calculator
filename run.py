@@ -29,6 +29,7 @@ import argparse
 import logging
 
 import config
+import model_registry
 import ticker_resolver
 import inputs
 import pipeline
@@ -50,7 +51,40 @@ def setup_logging():
 
 
 def build_parser():
-    ap = argparse.ArgumentParser(description="Intrinsic value engine (FY2021-FY2025)")
+    ap = argparse.ArgumentParser(
+        description=(
+            "Intrinsic value engine. The financial-year window is chosen at "
+            "run time with --start-year / --end-year; it defaults to "
+            f"FY{config.FY_START}-FY{config.FY_END}."
+        )
+    )
+    ap.add_argument(
+        "--start-year",
+        type=int,
+        metavar="FY",
+        help=(
+            "first financial year, by the year it ENDS in - 2021 means 2020-21 "
+            f"(default {config.FY_START})"
+        ),
+    )
+    ap.add_argument(
+        "--end-year",
+        type=int,
+        metavar="FY",
+        help=(
+            "last financial year, by the year it ENDS in - 2025 means 2024-25 "
+            f"(default {config.FY_END})"
+        ),
+    )
+    ap.add_argument(
+        "--models",
+        metavar="LIST",
+        help=(
+            "comma-separated models to run, e.g. 'dcf,graham,mlp'. Anything "
+            "not named is switched off and loses its spreadsheet columns. "
+            "Choose from: " + ", ".join(model_registry.ALL_KEYS)
+        ),
+    )
     ap.add_argument(
         "--gui",
         action="store_true",
@@ -135,6 +169,25 @@ def build_parser():
 def apply_args(args):
     """Push CLI flags onto config. Shared with the GUI, which builds the same
     namespace from its widgets."""
+    # The year window first: the sufficiency thresholds are clamped against
+    # its length, so it has to be settled before anything reads FY_LIST.
+    start = getattr(args, "start_year", None)
+    end = getattr(args, "end_year", None)
+    if start or end:
+        lo, hi = config.set_fy_range(start or config.FY_START, end or config.FY_END)
+        print(f"[input] financial years FY{lo} to FY{hi} ({len(config.FY_LIST)} years)")
+
+    chosen = getattr(args, "models", None)
+    if chosen:
+        wanted = {k.strip().lower() for k in chosen.split(",") if k.strip()}
+        unknown = wanted - set(model_registry.ALL_KEYS)
+        if unknown:
+            sys.exit(
+                f"Unknown model(s): {', '.join(sorted(unknown))}\n"
+                f"Choose from: {', '.join(model_registry.ALL_KEYS)}"
+            )
+        config.MODELS_ENABLED = {k: (k in wanted) for k in model_registry.ALL_KEYS}
+
     if args.mean_basis:
         config.FY_MEAN_BASIS = args.mean_basis
     if args.benchmark_basis:

@@ -42,6 +42,7 @@ import logging
 import pandas as pd
 
 import config
+import model_registry
 import plain_reasons
 import sufficiency
 from result import Result, R
@@ -49,34 +50,36 @@ from fy_utils import fy_label
 
 log = logging.getLogger(__name__)
 
-# (row key, intrinsic-value column, difference column)
-MODEL_COLUMNS = [
-    ("dcf", "(DCF) Intrinsic Value", "Difference (Market - DCF)"),
-    (
-        "pe",
-        "(P/E Relative Valuation) Intrinsic Value",
-        "Difference (Market - P/E Rel. Val.)",
-    ),
-    ("ev", "(EV/EBITDA Valuation) Intrinsic Value", "Difference (Market - EV/EBITDA)"),
-    ("xgboost", "(XGBoost) Intrinsic Value", "Difference (Market - XGBoost)"),
-    (
-        "random_forest",
-        "(Random Forest) Intrinsic Value",
-        "Difference (Market - Random Forest)",
-    ),
-    ("lightgbm", "(LightGBM) Intrinsic Value", "Difference (Market - LightGBM)"),
-]
+# The model set is no longer written down here. model_registry.py owns it, and
+# these are functions rather than constants because the answer changes with the
+# tick-boxes on the Settings page: a model switched off must lose BOTH of its
+# columns, not be exported as an empty one.
+
+
+def model_columns():
+    """[(row key, intrinsic-value header, difference header)] for enabled models."""
+    return [(m.key, m.column, m.diff_column) for m in model_registry.enabled_models()]
+
 
 BASE_COLUMNS = ["Company name", "Sector Name", "Financial Year", "Market Price"]
 
-COLUMNS = BASE_COLUMNS + [
-    c for _, iv_col, diff_col in MODEL_COLUMNS for c in (iv_col, diff_col)
-]
 
-# kept for the diagnostics / methods sheets, which iterate every value cell
-VALUE_KEYS = [("price", COLUMNS[3])] + [
-    (key, iv_col) for key, iv_col, _ in MODEL_COLUMNS
-]
+def columns():
+    return BASE_COLUMNS + [
+        c for _, iv_col, diff_col in model_columns() for c in (iv_col, diff_col)
+    ]
+
+
+def value_keys():
+    """Every cell the diagnostics and methods sheets walk, price included."""
+    return [("price", BASE_COLUMNS[3])] + [
+        (key, iv_col) for key, iv_col, _ in model_columns()
+    ]
+
+
+def data_columns():
+    return columns() + ["FY (internal)", "Benchmark Date", "Valuation Anchor Price"]
+
 
 DIAG_COLUMNS = [
     "Company name",
@@ -94,12 +97,6 @@ METHOD_COLUMNS = [
     "Value",
     "Estimated?",
     "Method",
-]
-
-DATA_COLUMNS = COLUMNS + [
-    "FY (internal)",
-    "Benchmark Date",
-    "Valuation Anchor Price",
 ]
 
 EXCL_COLUMNS = [
@@ -152,25 +149,27 @@ def _diff_text(res: Result) -> str:
 
 
 def build_dataframe(rows):
+    cols = columns()
+    models = model_columns()
     out, prev = [], None
     for r in rows:
         if prev is not None and r["company"] != prev:
-            out.append({c: "" for c in COLUMNS})
+            out.append({c: "" for c in cols})
 
         price = _res(r, "price")
         rec = {
-            COLUMNS[0]: r["company"],
-            COLUMNS[1]: r["sector"],
-            COLUMNS[2]: fy_label(r["fy"]),
-            COLUMNS[3]: price.text(),
+            cols[0]: r["company"],
+            cols[1]: r["sector"],
+            cols[2]: fy_label(r["fy"]),
+            cols[3]: price.text(),
         }
-        for key, iv_col, diff_col in MODEL_COLUMNS:
+        for key, iv_col, diff_col in models:
             model = _res(r, key)
             rec[iv_col] = model.text()
             rec[diff_col] = _diff_text(difference(price, model))
         out.append(rec)
         prev = r["company"]
-    return pd.DataFrame(out, columns=COLUMNS)
+    return pd.DataFrame(out, columns=cols)
 
 
 def build_data_frame(rows):
@@ -178,32 +177,35 @@ def build_data_frame(rows):
     Numeric twin: identical headers, plain floats, no blank separator rows, no
     currency glyphs, no reason codes. The analyzer reads this.
     """
+    cols = columns()
+    models = model_columns()
     out = []
     for r in rows:
         price = _res(r, "price")
         anchor = _res(r, "price_anchor")
         rec = {
-            COLUMNS[0]: r["company"],
-            COLUMNS[1]: r["sector"],
-            COLUMNS[2]: fy_label(r["fy"]),
-            COLUMNS[3]: round(price.value, 4) if price.ok else None,
+            cols[0]: r["company"],
+            cols[1]: r["sector"],
+            cols[2]: fy_label(r["fy"]),
+            cols[3]: round(price.value, 4) if price.ok else None,
             "FY (internal)": r["fy"],
             "Benchmark Date": r.get("price_bench_date") or "",
             "Valuation Anchor Price": round(anchor.value, 4) if anchor.ok else None,
         }
-        for key, iv_col, diff_col in MODEL_COLUMNS:
+        for key, iv_col, diff_col in models:
             model = _res(r, key)
             d = difference(price, model)
             rec[iv_col] = round(model.value, 4) if model.ok else None
             rec[diff_col] = round(d.value, 4) if d.ok else None
         out.append(rec)
-    return pd.DataFrame(out, columns=DATA_COLUMNS)
+    return pd.DataFrame(out, columns=data_columns())
 
 
 def build_diagnostics(rows):
+    keys = value_keys()
     recs = []
     for r in rows:
-        for key, col in VALUE_KEYS:
+        for key, col in keys:
             res = _res(r, key)
             if res.ok:
                 continue
@@ -221,9 +223,10 @@ def build_diagnostics(rows):
 
 
 def build_methods(rows):
+    keys = value_keys()
     recs = []
     for r in rows:
-        for key, col in VALUE_KEYS:
+        for key, col in keys:
             res = _res(r, key)
             if not res.ok:
                 continue
@@ -362,7 +365,7 @@ def _style(ws, df, widths, wrap_last=False, left_cols=3, wrap_all=False):
 
 def _report_widths():
     w = {0: 34, 1: 26, 2: 14, 3: 16}
-    for i in range(4, len(COLUMNS)):
+    for i in range(4, len(columns())):
         # difference columns sit at odd offsets from 5 onwards
         w[i] = 22 if (i - 4) % 2 == 0 else 20
     return w

@@ -21,29 +21,45 @@ Wednesday but a market holiday, so the mock returns 2 May to exercise the
 import config
 from result import R
 
-# growth path -> FCFF CAGR of roughly 12%
-MULT = {2021: 0.70, 2022: 0.82, 2023: 0.92, 2024: 1.00, 2025: 1.12}
+# Growth path -> FCFF CAGR of roughly 12%.
+#
+# This used to be a hard-coded dict keyed 2021..2025, which meant offline mode
+# broke with a KeyError the moment the financial-year window moved. It is now
+# derived from the company's position within config.FY_LIST, so the mock
+# universe follows whatever range the user picked.
+BASE_MULT = 0.70
+YEARLY_GROWTH = 1.12
 
-# Dates the mock reports as the realised benchmark session. Deliberately mixed:
-# some land on 1 May, most do not, exactly as the exchange calendar dictates.
-BENCH_DATES = {
-    2021: "2021-05-03",  # 1 May was a Saturday
-    2022: "2022-05-02",  # 1 May was a Sunday
-    2023: "2023-05-02",  # Maharashtra Day holiday
-    2024: "2024-05-02",  # Maharashtra Day holiday
-    2025: "2025-05-02",  # Maharashtra Day holiday
-}
+
+def _mult(fy):
+    """Compound the growth path from the first year of the chosen window."""
+    years = sorted(config.FY_LIST)
+    first = years[0] if years else fy
+    return BASE_MULT * (YEARLY_GROWTH ** (int(fy) - int(first)))
+
+
+# The realised benchmark session. 1 May is Maharashtra Day and the exchanges
+# are shut, and it lands on a weekend often enough besides, so the mock returns
+# 2 May for every year - which exercises the "nearest session, not the exact
+# date" path through the exporter and the Methods sheet.
+def _bench_date(fy):
+    return f"{int(fy)}-05-02"
 
 
 def _bench(fy, m):
     """Price one month into FY+1: mostly the FY+1 level, slightly early."""
-    nxt = MULT.get(fy + 1, m * 1.12)
+    nxt = _mult(fy + 1)
     return 500.0 * (0.25 * m + 0.75 * nxt)
 
 
 def _y(fy, **kw):
-    m = MULT[fy]
+    m = _mult(fy)
     d = {
+        # revenue and equity were absent here, and both are named in
+        # SUFFICIENCY_REQUIRED_FIELDS - so every mock company failed the gate
+        # and offline mode could never produce a report at all.
+        "revenue": 2.0e10 * m,
+        "equity": 1.8e10 * m,
         "ebit": 3.5e9 * m,
         "ebitda": 4.0e9 * m,
         "eps": 25.0 * m,
@@ -58,10 +74,10 @@ def _y(fy, **kw):
         "tax_rate": 0.25,
         "price": 500.0 * m,
         # mean price of FY+1 -> the ML label
-        "price_fwd": 500.0 * MULT.get(fy + 1, m * 1.12),
+        "price_fwd": 500.0 * _mult(fy + 1),
         # close nearest 1 May following FY end -> the benchmark
         "price_bench": _bench(fy, m),
-        "price_bench_date": BENCH_DATES.get(fy, f"{fy}-05-02"),
+        "price_bench_date": _bench_date(fy),
         "_diag": {},
         "_notes": [],
     }
@@ -71,24 +87,45 @@ def _y(fy, **kw):
 
 def _blank(fy, reason, detail, keep_price=True):
     """A year where the statements are missing but the price may survive."""
-    d = {k: None for k in ("ebit", "ebitda", "eps", "net_income", "da", "capex", "ocf")}
-    m = MULT[fy]
+    d = {
+        k: None
+        for k in (
+            "revenue",
+            "ebit",
+            "ebitda",
+            "eps",
+            "net_income",
+            "da",
+            "capex",
+            "ocf",
+        )
+    }
+    m = _mult(fy)
     d.update(
         {
             "delta_nwc": 0.0,
             "total_debt": 0.0,
             "cash": 0.0,
+            "equity": None,
             "shares": 1.0e8,
             "tax_rate": config.DEFAULT_TAX_RATE,
             "price": 500.0 * m if keep_price else None,
-            "price_fwd": ((500.0 * MULT.get(fy + 1, m * 1.12)) if keep_price else None),
+            "price_fwd": (500.0 * _mult(fy + 1)) if keep_price else None,
             "price_bench": _bench(fy, m) if keep_price else None,
-            "price_bench_date": (
-                BENCH_DATES.get(fy, f"{fy}-05-02") if keep_price else None
-            ),
+            "price_bench_date": _bench_date(fy) if keep_price else None,
             "_diag": {
                 k: (reason, detail)
-                for k in ("ebit", "ebitda", "eps", "net_income", "da", "capex", "ocf")
+                for k in (
+                    "revenue",
+                    "equity",
+                    "ebit",
+                    "ebitda",
+                    "eps",
+                    "net_income",
+                    "da",
+                    "capex",
+                    "ocf",
+                )
             },
             "_notes": [],
         }
@@ -226,7 +263,50 @@ def _build():
     return u
 
 
-REGISTRY = _build()
+# Built lazily and rebuilt whenever the financial-year window moves. It used
+# to be a module-level constant, which froze the mock universe to whatever
+# FY_LIST happened to say at import time - so changing the year range in the
+# interface left offline mode still generating the old years.
+_CACHE = {"fys": None, "registry": None}
+
+
+def _registry():
+    fys = tuple(config.FY_LIST)
+    if _CACHE["fys"] != fys:
+        _CACHE["fys"] = fys
+        _CACHE["registry"] = _build()
+    return _CACHE["registry"]
+
+
+class _RegistryProxy(dict):
+    """Keeps `mock_source.REGISTRY[...]` working for any existing caller."""
+
+    def __getitem__(self, key):
+        return _registry()[key]
+
+    def __iter__(self):
+        return iter(_registry())
+
+    def __len__(self):
+        return len(_registry())
+
+    def __contains__(self, key):
+        return key in _registry()
+
+    def get(self, key, default=None):
+        return _registry().get(key, default)
+
+    def items(self):
+        return _registry().items()
+
+    def keys(self):
+        return _registry().keys()
+
+    def values(self):
+        return _registry().values()
+
+
+REGISTRY = _RegistryProxy()
 
 COMPANIES = [
     {"name": n, "sector": v["sector"], "ticker": "MOCK"} for n, v in REGISTRY.items()

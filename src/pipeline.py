@@ -14,16 +14,32 @@ import estimation
 import model_dcf
 import model_pe
 import model_ev_ebitda
+import model_graham
 import exporter
 import csv_analyzer
 import ml_common
+import model_registry
 import model_xgboost
 import model_random_forest
 import model_lightgbm
+import model_mlp
 from result import Result, R, field_result
 
 log = logging.getLogger("valuation")
-ML_MODULES = [model_xgboost, model_random_forest, model_lightgbm]
+
+# Which module implements which registry key. model_registry decides what runs;
+# this only says where the code for it lives.
+ML_MODULES = {
+    model_xgboost.KEY: model_xgboost,
+    model_random_forest.KEY: model_random_forest,
+    model_lightgbm.KEY: model_lightgbm,
+    model_mlp.KEY: model_mlp,
+}
+
+
+def active_ml_modules():
+    """The learner modules the user has left switched on, in sheet order."""
+    return [ML_MODULES[m.key] for m in model_registry.ml_models() if m.key in ML_MODULES]
 
 
 def build_universe(companies):
@@ -213,17 +229,21 @@ def run(companies, extra_training=None):
         model_ev_ebitda.build_sector_table(peer_universe) if peer_universe else {}
     )
 
+    ml_modules = active_ml_modules()
     ml_store, ml_df = None, None
-    if config.ML_ENABLED and universe:
+    if ml_modules and universe:
         print("\n[ml] building feature matrix ...")
         ml_df, ml_failures = ml_common.build_dataset(ml_universe)
         n_lab = int(ml_df["label"].notna().sum()) if not ml_df.empty else 0
         print(f"[ml] {len(ml_df)} rows, {n_lab} labelled, split='{config.ML_SPLIT}'")
+        print(f"[ml] learners: {', '.join(m.NAME for m in ml_modules)}")
         ml_store = ml_common.run_models(
-            ml_df, [m.SPEC for m in ML_MODULES], ml_failures
+            ml_df, [m.SPEC for m in ml_modules], ml_failures
         )
         for p in ml_common.write_diagnostics(ml_store, ml_df):
             print(f"[ml] wrote {p}")
+    elif not ml_modules:
+        print("\n[ml] no machine-learning models selected - stage skipped")
 
     def guard(fn, *a):
         try:
@@ -231,6 +251,11 @@ def run(companies, extra_training=None):
         except Exception as e:
             log.error("model crashed: %s", traceback.format_exc())
             return Result.bad(R.CALC_ERROR, f"{type(e).__name__}: {e}")
+
+    # Only what the user left ticked. A model switched off is not computed
+    # at all - it does not merely lose its column later on.
+    enabled = set(model_registry.enabled_keys())
+    print(f"\n[models] {model_registry.describe_selection()}")
 
     rows = []
     for c in valued:
@@ -246,12 +271,7 @@ def run(companies, extra_training=None):
                         "price": f,
                         "price_anchor": f,
                         "price_bench_date": "",
-                        "dcf": f,
-                        "pe": f,
-                        "ev": f,
-                        "xgboost": f,
-                        "random_forest": f,
-                        "lightgbm": f,
+                        **{key: f for key in enabled},
                     }
                 )
                 continue
@@ -273,20 +293,27 @@ def run(companies, extra_training=None):
                 # the date the benchmark close was actually taken from - 1 May
                 # is a market holiday, so this is rarely 1 May itself.
                 "price_bench_date": d.get("price_bench_date") or "",
-                "dcf": guard(model_dcf.intrinsic_value, data, fy),
-                "pe": guard(
+            }
+            if "dcf" in enabled:
+                row["dcf"] = guard(model_dcf.intrinsic_value, data, fy)
+            if "pe" in enabled:
+                row["pe"] = guard(
                     model_pe.intrinsic_value, universe, pe_table, name, sector, fy
-                ),
-                "ev": guard(
+                )
+            if "ev" in enabled:
+                row["ev"] = guard(
                     model_ev_ebitda.intrinsic_value,
                     universe,
                     ev_table,
                     name,
                     sector,
                     fy,
-                ),
-            }
-            for m in ML_MODULES:
+                )
+            if "graham" in enabled:
+                row["graham"] = guard(
+                    model_graham.intrinsic_value, universe, name, fy
+                )
+            for m in ml_modules:
                 row[m.KEY] = guard(m.intrinsic_value, ml_store, name, fy)
             rows.append(row)
 
@@ -296,9 +323,7 @@ def run(companies, extra_training=None):
     for p in aux_p:
         print(f"[export]              -> {p}")
 
-    labels = [("dcf", "DCF"), ("pe", "P/E Relative"), ("ev", "EV/EBITDA")] + [
-        (m.KEY, m.NAME) for m in ML_MODULES
-    ]
+    labels = [(m.key, m.name) for m in model_registry.enabled_models()]
 
     print(
         "\n[model coverage]   (est = estimated, marked with "
@@ -390,7 +415,7 @@ def plain_summary(rows, excluded_count):
         return
 
     band = getattr(config, "PLAIN_VERDICT_BAND", 0.10)
-    keys = ["dcf", "pe", "ev", "xgboost", "random_forest", "lightgbm"]
+    keys = model_registry.enabled_keys()
     cheap = dear = fair = unknown = 0
     companies = set()
 

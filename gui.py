@@ -108,6 +108,7 @@ import pandas as pd
 
 import config
 import inputs
+import model_registry
 import pipeline
 import ticker_resolver
 
@@ -142,53 +143,68 @@ FONT_MONO = ("Consolas", 9) if _WIN else ("Menlo", 10)
 PALETTES = {
     "light": {
         "mode": "light",
-        "bg": "#EEF2F7",  # the desk the cards sit on
+        "bg": "#F4F6FA",  # the desk the cards sit on - warm, not clinical
         "surface": "#FFFFFF",  # cards, panels, tables
-        "surface_2": "#E4EAF2",  # inset strips, headers, status bar
-        "border": "#CBD5E1",
-        "text": "#0F172A",
-        "muted": "#4B5A6E",
-        "accent": "#2563EB",
+        "surface_2": "#EDF1F7",  # inset strips, headers, status bar
+        "border": "#DFE5EE",  # barely there: shape comes from spacing
+        "outline": "#C3CEDF",  # button edges, which need a touch more
+        "text": "#1E2733",  # softened off pure black
+        "muted": "#5B6B7F",
+        "accent": "#4C7DF0",  # gentler than a saturated blue
         "accent_fg": "#FFFFFF",
-        "success": "#0E9F6E",
+        "success": "#1FA97C",
         "success_fg": "#FFFFFF",
-        "danger": "#DC2626",
-        "warning": "#B45309",
-        "info": "#0E7490",
-        "sel_bg": "#DBE9FE",
-        "sel_fg": "#0B2C6B",
-        "row_alt": "#F6F8FC",
-        "console_bg": "#0F1724",
-        "console_fg": "#D6E2F5",
-        "tip_bg": "#111C2E",
-        "tip_fg": "#EAF1FB",
-        "shade": -0.13,  # hover direction: darken
+        "danger": "#E15B5B",
+        "warning": "#C0803A",
+        "info": "#2E7D91",
+        "sel_bg": "#E3EDFE",
+        "sel_fg": "#1B3A73",
+        "row_alt": "#F8FAFD",
+        "console_bg": "#1B2330",
+        "console_fg": "#D3DDEC",
+        "tip_bg": "#232E3D",
+        "tip_fg": "#EDF2F9",
+        "shade": -0.10,  # hover direction: darken, lightly
     },
     "dark": {
         "mode": "dark",
-        "bg": "#0D131E",
-        "surface": "#161F2D",
-        "surface_2": "#1E2938",
-        "border": "#314054",
-        "text": "#E9EFF8",
-        "muted": "#A6B5CA",
-        "accent": "#5B9CFF",
-        "accent_fg": "#06101F",
-        "success": "#34D399",
-        "success_fg": "#062018",
-        "danger": "#F87171",
-        "warning": "#FBBF24",
-        "info": "#5EEAD4",
-        "sel_bg": "#27425F",
+        "bg": "#141A23",  # lifted off black; pure black reads as a hole
+        "surface": "#1C2432",
+        "surface_2": "#232D3D",
+        "border": "#334052",
+        "outline": "#465873",
+        "text": "#E4EAF3",
+        "muted": "#9FAEC3",
+        "accent": "#6E9EF5",
+        "accent_fg": "#0B1422",
+        "success": "#3DBF95",
+        "success_fg": "#07211A",
+        "danger": "#E98080",
+        "warning": "#E0B057",
+        "info": "#5FC9C0",
+        "sel_bg": "#2C4460",
         "sel_fg": "#FFFFFF",
-        "row_alt": "#1A2534",
-        "console_bg": "#080D16",
-        "console_fg": "#CBD9EE",
-        "tip_bg": "#22303F",
-        "tip_fg": "#EAF1FB",
-        "shade": 0.16,  # hover direction: lighten
+        "row_alt": "#202939",
+        "console_bg": "#111823",
+        "console_fg": "#C6D3E6",
+        "tip_bg": "#293446",
+        "tip_fg": "#EDF2F9",
+        "shade": 0.13,  # hover direction: lighten, lightly
     },
 }
+
+# A NOTE ON ROUNDED CORNERS
+#
+# ttk has no border-radius. The usual workaround - handing ttk a picture of a
+# rounded rectangle as a nine-slice 'image' element - was built, measured and
+# then removed. Making the artwork is free (13ms for the whole window), but
+# once a style's layout IS an image element, Tk rescales that nine-slice on
+# every redraw of every widget using it. Building this window went from 1.7
+# seconds to somewhere between 29 and 90, and hovering turned visibly laggy.
+#
+# Softness here therefore comes from colour and space instead: low-contrast
+# borders, generous padding, muted fills and a warm grey ground. Those cost
+# nothing per frame.
 
 ICON_GEAR = "⚙"  # gear
 ICON_INFO = "ℹ"  # information source
@@ -946,6 +962,54 @@ class SettingsDialog(tk.Toplevel):
         builder(holder)
         return card
 
+    def _model_group(self, parent, heading, is_ml):
+        """A titled block of model tick-boxes, each with its own explanation."""
+        models = [m for m in model_registry.ALL_MODELS if m.is_ml == is_ml]
+        if not models:
+            return
+
+        card = ttk.Frame(parent, style="Card.TFrame", padding=(20, 16))
+        card.pack(fill="x", pady=(0, 10))
+        ttk.Label(card, text=heading, style="CardTitle.TLabel").pack(anchor="w")
+
+        for spec in models:
+            block = ttk.Frame(card, style="Card.TFrame")
+            block.pack(fill="x", pady=(12, 0))
+            ttk.Checkbutton(
+                block,
+                text=spec.name,
+                variable=self.app.v_models[spec.key],
+                style="Card.TCheckbutton",
+                command=self._check_any_model,
+            ).pack(anchor="w")
+            ttk.Label(
+                block,
+                text=spec.blurb,
+                style="CardMuted.TLabel",
+                wraplength=740,
+                justify="left",
+            ).pack(anchor="w", padx=(24, 0), pady=(2, 0))
+
+    def _check_any_model(self):
+        """
+        Refuse to leave every box unticked.
+
+        A run with no models writes a spreadsheet of company names and market
+        prices and nothing else, which looks like a crash rather than a
+        choice. The last box switched off is put straight back.
+        """
+        if any(v.get() for v in self.app.v_models.values()):
+            return
+        messagebox.showinfo(
+            "At least one model",
+            "There has to be something to calculate.\n\n"
+            "Switching every model off would produce a spreadsheet with company "
+            "names and share prices and no valuations at all, so the last one "
+            "has been left on.",
+            parent=self,
+        )
+        self.app.v_models["dcf"].set(True)
+
     def _section(self, parent, text):
         ttk.Label(parent, text=text, style="Section.TLabel").pack(
             anchor="w", pady=(6, 8)
@@ -1139,15 +1203,39 @@ class SettingsDialog(tk.Toplevel):
 
     # ------------------------------------------------------------- category 3
     def _page_models(self, body):
+        """
+        One tick-box per valuation model.
+
+        Unticking a model does not merely hide it: it is not calculated, and
+        BOTH of its spreadsheet columns - the intrinsic value and the
+        difference against the market price - are absent from the export
+        rather than exported empty. The charts follow the same list, so what
+        you see plotted is what actually ran.
+        """
         a = self.app
-        self._section(body, "Which methods run, and how hard they try")
+        self._section(body, "Which models to run")
+
+        ttk.Label(
+            body,
+            text="Every model on by default. Six or eight opinions disagreeing "
+            "with each other is the useful output here - switch one off when "
+            "you have a reason, not to tidy the sheet up.",
+            style="PageHint.TLabel",
+            wraplength=800,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 12))
+
+        self._model_group(body, "Worked out from the accounts", is_ml=False)
+        self._model_group(body, "Learned from the whole panel", is_ml=True)
+
+        self._section(body, "How the learning models are handled")
 
         self._row(
             body,
-            "Run the three AI models",
-            "XGBoost, Random Forest and LightGBM learn from every company at "
-            "once instead of valuing each from first principles. They add a few "
-            "minutes. Untick for the three classical methods only.",
+            "Run the learning models at all",
+            "The master switch for that whole stage. Untick it and none of the "
+            "learners run whatever their own boxes say above, which saves the "
+            "few minutes they take.",
             lambda h: ttk.Checkbutton(
                 h,
                 text="Include AI valuations",
@@ -1351,6 +1439,7 @@ class App(tb.Window):
         if config.DEFAULT_INPUT.exists():
             self._load_companies(config.DEFAULT_INPUT)
         self._update_gate_hint()
+        self._update_fy_summary()
         self.show_page("upload")
 
     # ------------------------------------------------------------------ vars
@@ -1358,6 +1447,24 @@ class App(tb.Window):
         g = getattr
         self.v_input = tk.StringVar(value=str(config.DEFAULT_INPUT))
         self.v_dark = tk.BooleanVar(value=g(config, "GUI_START_IN_DARK", False))
+
+        # The financial-year window, chosen on the Upload page rather than
+        # frozen in config.py. Stored as the year each FY ENDS in, which is
+        # the internal convention everywhere else.
+        self.v_fy_start = tk.IntVar(value=g(config, "FY_START", 2021))
+        self.v_fy_end = tk.IntVar(value=g(config, "FY_END", 2025))
+        self.v_fy_summary = tk.StringVar(value="")
+
+        # One tick-box per valuation model. Unticking one removes it from the
+        # calculation and from both of its spreadsheet columns.
+        self.v_models = {
+            m.key: tk.BooleanVar(
+                value=bool(
+                    (g(config, "MODELS_ENABLED", None) or {}).get(m.key, True)
+                )
+            )
+            for m in model_registry.ALL_MODELS
+        }
 
         self.v_screening = tk.StringVar(
             value=(
@@ -1418,6 +1525,11 @@ class App(tb.Window):
         for var in (self.v_min_fy, self.v_min_bench):
             var.trace_add("write", lambda *_: self._update_gate_hint())
 
+        # The year range describes itself as it is typed, so nobody has to
+        # remember that "2025" means the year ending March 2025.
+        for var in (self.v_fy_start, self.v_fy_end):
+            var.trace_add("write", lambda *_: self._update_fy_summary())
+
     def _iget(self, var, fallback):
         """IntVar.get() raises on empty or non-numeric spinbox text. See note 6."""
         try:
@@ -1463,6 +1575,10 @@ class App(tb.Window):
         )
         self.v_overrides.set(g(config, "USE_OVERRIDES", True))
         self.v_offline.set(g(config, "OFFLINE", False))
+        self.v_fy_start.set(g(config, "FY_START", 2021))
+        self.v_fy_end.set(g(config, "FY_END", 2025))
+        for key, var in self.v_models.items():
+            var.set(True)
 
     # ----------------------------------------------------------------- theme
     def register_tk(self, widget, role):
@@ -1571,6 +1687,7 @@ class App(tb.Window):
         st.configure("Bar.TFrame", background=p["surface_2"])
         st.configure("TSeparator", background=p["border"])
 
+
         # ---- labels on the app background
         st.configure("TLabel", background=p["bg"], foreground=p["text"], font=FONT_BODY)
         st.configure(
@@ -1639,6 +1756,12 @@ class App(tb.Window):
             font=FONT_SMALL,
         )
         st.configure(
+            "CardAccent.TLabel",
+            background=p["surface"],
+            foreground=p["accent"],
+            font=FONT_BODY,
+        )
+        st.configure(
             "Status.TLabel",
             background=p["surface_2"],
             foreground=p["muted"],
@@ -1646,14 +1769,16 @@ class App(tb.Window):
         )
 
         # ---- buttons
-        def button(name, bg, fg, outline=False, pad=(16, 9), font=FONT_BTN):
+        #
+        # Soft rather than sharp: gentle fills, hover states derived from the
+        # base colour rather than hand-picked, and roomy padding.
+        def button(name, bg, fg, outline=False, pad=(18, 11), font=FONT_BTN):
             base_bg = p["surface"] if outline else bg
-            border = bg if outline else bg
             st.configure(
                 name,
                 background=base_bg,
                 foreground=bg if outline else fg,
-                bordercolor=border,
+                bordercolor=bg,
                 lightcolor=base_bg,
                 darkcolor=base_bg,
                 borderwidth=1,
@@ -1667,12 +1792,12 @@ class App(tb.Window):
             on = (
                 shade(base_bg, hover)
                 if not outline
-                else shade(bg, 0.82 if p["mode"] == "light" else -0.62)
+                else shade(bg, 0.88 if p["mode"] == "light" else -0.68)
             )
             down = (
                 shade(base_bg, press)
                 if not outline
-                else shade(bg, 0.72 if p["mode"] == "light" else -0.5)
+                else shade(bg, 0.80 if p["mode"] == "light" else -0.58)
             )
             st.map(
                 name,
@@ -1689,14 +1814,14 @@ class App(tb.Window):
             )
 
         button("Accent.TButton", p["accent"], p["accent_fg"])
-        button("Success.TButton", p["success"], p["success_fg"], pad=(20, 11))
-        button("Danger.TButton", p["danger"], "#FFFFFF", outline=True, pad=(14, 8))
+        button("Success.TButton", p["success"], p["success_fg"], pad=(22, 13))
+        button("Danger.TButton", p["danger"], "#FFFFFF", outline=True, pad=(16, 10))
         button(
             "Ghost.TButton",
-            p["muted"],
+            p["outline"],
             p["text"],
             outline=True,
-            pad=(13, 8),
+            pad=(15, 10),
             font=FONT_BODY,
         )
         button(
@@ -1704,13 +1829,13 @@ class App(tb.Window):
             p["accent"],
             p["accent"],
             outline=True,
-            pad=(10, 6),
+            pad=(12, 8),
             font=FONT_SMALL,
         )
 
-        # Ghost buttons read better with the normal text colour than with the
-        # muted one they borrow their border from.
-        st.configure("Ghost.TButton", foreground=p["text"], bordercolor=p["border"])
+        # A ghost button borrows its outline from the border colour but should
+        # print in ordinary text, not in that grey.
+        st.configure("Ghost.TButton", foreground=p["text"])
         st.map("Ghost.TButton", foreground=[("disabled", p["muted"])])
 
         # ---- header icon buttons: square, quiet, unmistakably clickable
@@ -1725,7 +1850,7 @@ class App(tb.Window):
             relief="flat",
             focusthickness=0,
             focuscolor="",
-            padding=(10, 6),
+            padding=(12, 8),
             font=FONT_ICON,
         )
         st.map(
@@ -1738,32 +1863,35 @@ class App(tb.Window):
         )
 
         # ---- the three-step navigation pills
+        # The selected one is a soft filled pill; the others stay invisible
+        # until hovered, which is quieter than three competing outlines.
+        nav_hover = shade(p["bg"], hover * 0.5)
         for name, bg, fg in (
             ("Nav.TButton", p["bg"], p["muted"]),
             ("NavOn.TButton", p["surface"], p["text"]),
         ):
+            over = p["surface"] if name.startswith("NavOn") else nav_hover
             st.configure(
                 name,
                 background=bg,
                 foreground=fg,
-                bordercolor=p["border"] if name.startswith("NavOn") else p["bg"],
+                bordercolor=bg,
                 lightcolor=bg,
                 darkcolor=bg,
-                borderwidth=1,
+                borderwidth=0,
                 relief="flat",
                 focusthickness=0,
                 focuscolor="",
-                padding=(22, 11),
+                padding=(24, 13),
                 font=FONT_BTN,
                 anchor="center",
             )
             st.map(
                 name,
-                background=[("active", p["surface"])],
+                background=[("active", over)],
                 foreground=[("active", p["text"])],
-                bordercolor=[("active", p["border"])],
-                lightcolor=[("active", p["surface"])],
-                darkcolor=[("active", p["surface"])],
+                lightcolor=[("active", over)],
+                darkcolor=[("active", over)],
             )
 
         # ---- inputs
@@ -1780,7 +1908,7 @@ class App(tb.Window):
                 arrowcolor=p["muted"],
                 selectbackground=p["sel_bg"],
                 selectforeground=p["sel_fg"],
-                padding=(8, 6),
+                padding=(10, 8),
             )
             st.map(
                 name,
@@ -1810,7 +1938,7 @@ class App(tb.Window):
                 foreground=p["text"],
                 font=FONT_BODY,
                 focuscolor="",
-                padding=(2, 3),
+                padding=(3, 5),
             )
             st.map(
                 name,
@@ -1830,7 +1958,7 @@ class App(tb.Window):
             "TNotebook.Tab",
             background=p["bg"],
             foreground=p["muted"],
-            padding=(14, 10),
+            padding=(18, 12),
             font=FONT_H3,
             borderwidth=0,
         )
@@ -1850,7 +1978,7 @@ class App(tb.Window):
             lightcolor=p["surface"],
             darkcolor=p["surface"],
             borderwidth=0,
-            rowheight=27,
+            rowheight=32,
             font=FONT_BODY,
         )
         st.map(
@@ -1864,7 +1992,7 @@ class App(tb.Window):
             foreground=p["text"],
             relief="flat",
             borderwidth=0,
-            padding=(9, 8),
+            padding=(11, 11),
             font=FONT_H3,
         )
         st.map(
@@ -2048,11 +2176,11 @@ class App(tb.Window):
 
     # ---------------------------------------------------------- page: upload
     def _build_upload(self, parent):
-        parent.rowconfigure(1, weight=1)
+        parent.rowconfigure(2, weight=1)
         parent.columnconfigure(0, weight=1)
 
-        card = ttk.Frame(parent, style="Card.TFrame", padding=(18, 16))
-        card.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        card = ttk.Frame(parent, style="Card.TFrame", padding=(20, 18))
+        card.grid(row=0, column=0, sticky="ew", pady=(0, 14))
         ttk.Label(card, text="Your company list", style="CardHead.TLabel").pack(
             anchor="w"
         )
@@ -2078,8 +2206,67 @@ class App(tb.Window):
             row, text="Reload", style="Ghost.TButton", command=self._reload
         ).pack(side="left", padx=(8, 0))
 
+        # ---- which financial years to work over ----
+        years = ttk.Frame(parent, style="Card.TFrame", padding=(20, 18))
+        years.grid(row=1, column=0, sticky="ew", pady=(0, 14))
+        ttk.Label(years, text="Which years to value", style="CardHead.TLabel").pack(
+            anchor="w"
+        )
+        ttk.Label(
+            years,
+            text="Enter the first and last financial year you want. Indian "
+            "financial years run April to March and are named by the year they "
+            "END in, so 2025 means April 2024 to March 2025.",
+            style="CardMuted.TLabel",
+            wraplength=900,
+            justify="left",
+        ).pack(anchor="w", pady=(5, 14))
+
+        pick = ttk.Frame(years, style="Card.TFrame")
+        pick.pack(fill="x")
+
+        ceiling = config.latest_complete_fy()
+        floor = getattr(config, "FY_MIN_ALLOWED", 2000)
+
+        ttk.Label(pick, text="From", style="CardBody.TLabel").pack(side="left")
+        ttk.Spinbox(
+            pick,
+            from_=floor,
+            to=ceiling,
+            textvariable=self.v_fy_start,
+            width=8,
+            increment=1,
+        ).pack(side="left", padx=(10, 18))
+        ttk.Label(pick, text="to", style="CardBody.TLabel").pack(side="left")
+        ttk.Spinbox(
+            pick,
+            from_=floor,
+            to=ceiling,
+            textvariable=self.v_fy_end,
+            width=8,
+            increment=1,
+        ).pack(side="left", padx=(10, 22))
+
+        # Shortcuts for the two spans people actually ask for, so the common
+        # case is one click rather than two pieces of mental arithmetic.
+        for label, span in (("Last 5 years", 5), ("Last 10 years", 10)):
+            ttk.Button(
+                pick,
+                text=label,
+                style="Ghost.TButton",
+                command=lambda n=span: self._set_year_span(n),
+            ).pack(side="left", padx=(0, 8))
+
+        ttk.Label(
+            years,
+            textvariable=self.v_fy_summary,
+            style="CardAccent.TLabel",
+            wraplength=900,
+            justify="left",
+        ).pack(anchor="w", pady=(14, 0))
+
         table = ttk.Frame(parent, style="Card.TFrame", padding=(2, 2))
-        table.grid(row=1, column=0, sticky="nsew")
+        table.grid(row=2, column=0, sticky="nsew")
         table.rowconfigure(0, weight=1)
         table.columnconfigure(0, weight=1)
 
@@ -2107,7 +2294,7 @@ class App(tb.Window):
         self._trees.append(self.tree_c)
 
         foot = ttk.Frame(parent, style="App.TFrame")
-        foot.grid(row=2, column=0, sticky="ew", pady=(12, 0))
+        foot.grid(row=3, column=0, sticky="ew", pady=(14, 0))
         for text, fn in (
             ("Include all", lambda: self._set_all(True)),
             ("Include none", lambda: self._set_all(False)),
@@ -2126,6 +2313,46 @@ class App(tb.Window):
             side="right", padx=(0, 14)
         )
         self._paint_trees()
+
+    def _set_year_span(self, n):
+        """'Last 5 years' -> the n most recent financial years that have ended."""
+        end = config.latest_complete_fy()
+        self.v_fy_end.set(end)
+        self.v_fy_start.set(max(getattr(config, "FY_MIN_ALLOWED", 2000), end - n + 1))
+
+    def _update_fy_summary(self):
+        """Say the range back in words, and warn about the two real traps."""
+        lo = self._iget(self.v_fy_start, getattr(config, "FY_START", 2021))
+        hi = self._iget(self.v_fy_end, getattr(config, "FY_END", 2025))
+        if lo > hi:
+            lo, hi = hi, lo
+        span = hi - lo + 1
+
+        label_lo = f"{lo - 1}-{str(lo)[-2:]}"
+        label_hi = f"{hi - 1}-{str(hi)[-2:]}"
+        if span == 1:
+            text = f"One financial year: {label_lo}."
+        else:
+            text = f"{span} financial years: {label_lo} through {label_hi}."
+
+        ceiling = config.latest_complete_fy()
+        if hi > ceiling:
+            text += (
+                f"  {label_hi} has not finished yet - it will be trimmed back "
+                f"to {ceiling - 1}-{str(ceiling)[-2:]} when you run."
+            )
+        if span < 3:
+            text += (
+                "  A window this short leaves the AI models very little to "
+                "learn from, and the sector averages get shaky."
+            )
+        elif lo < ceiling - 8:
+            text += (
+                "  Going back this far is fine, but the data service publishes "
+                "only about four years of accounts for most companies, so the "
+                "earliest years will mostly come back empty."
+            )
+        self.v_fy_summary.set(text)
 
     def _browse(self):
         p = filedialog.askopenfilename(
@@ -2660,6 +2887,28 @@ class App(tb.Window):
     # ----------------------------------------------------------- run control
     def _apply_settings(self):
         """Push widget state onto config. Every read guarded - see note 6."""
+        # The year window goes first. config.set_fy_range() swaps the ends if
+        # they are backwards and clamps them to something fetchable, and the
+        # sufficiency thresholds below are measured against its length.
+        lo, hi = config.set_fy_range(
+            self._iget(self.v_fy_start, getattr(config, "FY_START", 2021)),
+            self._iget(self.v_fy_end, getattr(config, "FY_END", 2025)),
+        )
+        # Write the corrected values back, so a clamped entry is visible to
+        # the user rather than silently overridden behind their back.
+        self.v_fy_start.set(lo)
+        self.v_fy_end.set(hi)
+
+        # One switch per model. At least one has to survive, or the run would
+        # produce a spreadsheet of company names and nothing else.
+        chosen = {k: bool(v.get()) for k, v in self.v_models.items()}
+        if not any(chosen.values()):
+            raise ValueError(
+                "Every valuation model is switched off, so there would be "
+                "nothing to calculate. Open Settings and tick at least one."
+            )
+        config.MODELS_ENABLED = chosen
+
         mode = self.v_screening.get()
         config.SUFFICIENCY_ENABLED = mode != "off"
         if mode != "off":

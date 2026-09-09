@@ -68,6 +68,17 @@ def assess(name, meta, rec, failure=None):
     fy_list = sorted(config.FY_LIST)
     fields = required_fields()
 
+    # The thresholds cannot exceed the window the user actually asked for.
+    # Someone who picks a two-year range and leaves the default of three
+    # complete years would otherwise see every company rejected, with the
+    # gate blaming the data rather than the arithmetic.
+    span = max(1, len(fy_list))
+    need_complete = min(int(getattr(config, "MIN_COMPLETE_FY", 4)), span)
+    need_benchmark = min(
+        int(getattr(config, "MIN_BENCHMARK_FY", getattr(config, "MIN_COMPLETE_FY", 4))),
+        span,
+    )
+
     record = {
         "company": name,
         "sector": meta.get("sector", "") if meta else "",
@@ -75,10 +86,8 @@ def assess(name, meta, rec, failure=None):
         "ticker": "",
         "complete_fy": 0,
         "benchmark_fy": 0,
-        "need_complete": int(getattr(config, "MIN_COMPLETE_FY", 4)),
-        "need_benchmark": int(
-            getattr(config, "MIN_BENCHMARK_FY", getattr(config, "MIN_COMPLETE_FY", 4))
-        ),
+        "need_complete": need_complete,
+        "need_benchmark": need_benchmark,
         "total_fy": len(fy_list),
         "missing_by_fy": {},
         "overrides": [],
@@ -189,8 +198,9 @@ def print_summary(records):
         return
 
     mode = getattr(config, "SUFFICIENCY_MODE", "enforce")
-    need = int(getattr(config, "MIN_COMPLETE_FY", 4))
-    need_b = int(getattr(config, "MIN_BENCHMARK_FY", need))
+    span = max(1, len(config.FY_LIST))
+    need = min(int(getattr(config, "MIN_COMPLETE_FY", 4)), span)
+    need_b = min(int(getattr(config, "MIN_BENCHMARK_FY", need)), span)
     total = len(records)
     failing = [r for r in records if not r["passes"]]
     passing = total - len(failing)

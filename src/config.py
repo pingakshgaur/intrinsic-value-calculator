@@ -12,9 +12,68 @@ DEFAULT_INPUT = DATA_DIR / "companies.csv"
 OVERRIDE_FILE = DATA_DIR / "fundamentals_override.csv"
 
 # ---------------- Financial year ----------------
-FY_LIST = [2021, 2022, 2023, 2024, 2025]
+# The span the whole program works over, chosen by the user rather than baked
+# in. FY_n is the Indian financial year ENDING in March of year n, so
+# FY_START = 2021 and FY_END = 2025 means 2020-21 through 2024-25.
+#
+# FY_LIST is derived, never edited by hand. Call set_fy_range() to move the
+# window - it keeps the three in step. Everything downstream reads FY_LIST, so
+# changing it changes the fetch window, the valuation loop, the ML folds, the
+# sufficiency gate and the spreadsheet together.
+FY_START = 2021
+FY_END = 2025
+FY_LIST = list(range(FY_START, FY_END + 1))
+
+# Bounds offered in the interface. Yahoo Finance publishes roughly four annual
+# statement periods for most Indian scrips, so anything earlier than about 2015
+# will fetch prices but very few fundamentals. The floor is deliberately looser
+# than that: a user with a populated fundamentals_override.csv can legitimately
+# go back further, and the sufficiency gate will tell them the truth either way.
+FY_MIN_ALLOWED = 2000
+FY_MAX_SPAN = 30
+
 FY_START_MONTH, FY_START_DAY = 4, 1
 FY_END_MONTH, FY_END_DAY = 3, 31
+
+
+def latest_complete_fy(today=None):
+    """
+    The most recent financial year that has actually finished.
+
+    An FY ending 31 March 2026 is not a valid upper bound until April 2026 -
+    before that the accounts do not exist and the run would spend its time
+    downloading nothing.
+    """
+    import datetime as _dt
+
+    today = today or _dt.date.today()
+    return today.year if today.month > FY_END_MONTH else today.year - 1
+
+
+def set_fy_range(start, end):
+    """
+    Move the financial-year window. -> (start, end) actually applied.
+
+    Guards the obvious mistakes rather than trusting the caller: the two ends
+    are swapped if given backwards, clamped into the allowed range, and capped
+    at FY_MAX_SPAN years so a typo of 1021 does not launch a thousand-year
+    download.
+    """
+    global FY_START, FY_END, FY_LIST
+
+    start, end = int(start), int(end)
+    if start > end:
+        start, end = end, start
+
+    ceiling = latest_complete_fy()
+    start = max(FY_MIN_ALLOWED, min(start, ceiling))
+    end = max(FY_MIN_ALLOWED, min(end, ceiling))
+    if end - start + 1 > FY_MAX_SPAN:
+        start = end - FY_MAX_SPAN + 1
+
+    FY_START, FY_END = start, end
+    FY_LIST = list(range(start, end + 1))
+    return FY_START, FY_END
 
 # ---------------- Market price (VALUATION ANCHOR) ----------------
 # This is the price the models CONSUME: it sets the equity weight in WACC, the
@@ -85,6 +144,39 @@ WACC_SPREAD_OVER_G = 0.0200
 PE_BOUNDS = (2.0, 120.0)
 EV_EBITDA_BOUNDS = (1.0, 60.0)
 MIN_PEERS_FOR_MEDIAN = 2
+
+# ---------------- Graham Number ----------------
+# 22.5 is Graham's own figure: a P/E ceiling of 15 multiplied by a
+# price-to-book ceiling of 1.5, so a company can breach one limit provided it
+# compensates on the other. Raising it does not make the method less
+# conservative in any principled way - it just moves the goalposts, so leave
+# it alone unless the thesis says why.
+GRAHAM_MULTIPLIER = 22.5
+
+# A very large EPS against a very thin book value can push the square root
+# somewhere implausible. Above this multiple of book value per share the
+# result is still reported, but flagged on the Methods sheet rather than
+# presented as though it were ordinary. Set to 0 to switch the note off.
+GRAHAM_MAX_MULTIPLE_OF_BVPS = 8.0
+
+# ---------------- Which models run ----------------
+# Every model on by default. The Settings page writes this dictionary, and
+# model_registry.py is what the rest of the program asks - so unticking a
+# model here removes it from the calculation AND from both of its spreadsheet
+# columns AND from the charts, rather than leaving an empty column behind.
+#
+# The machine-learning entries are additionally subject to ML_ENABLED, which
+# is the master switch for that whole stage.
+MODELS_ENABLED = {
+    "dcf": True,
+    "pe": True,
+    "ev": True,
+    "graham": True,
+    "xgboost": True,
+    "random_forest": True,
+    "lightgbm": True,
+    "mlp": True,
+}
 
 # ---------------- Market / IO ----------------
 EXCHANGE_SUFFIX = ".NS"
