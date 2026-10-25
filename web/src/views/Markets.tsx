@@ -39,6 +39,8 @@ function presetRows(rows: ScanRow[], p: Preset): ScanRow[] {
   }
 }
 
+const EXPORT_TITLE = "Market scanner";
+
 export function Markets() {
   const [params, setParams] = useSearchParams();
   const ticker = params.get("t") || "^NSEI";
@@ -167,16 +169,16 @@ function Scanner({ selected, onPick }: { selected: string; onPick: (t: string) =
     { key: "company", header: "Company", sticky: true, fixed: true, sort: (r) => r.name, render: (r) => <div className="co"><b>{shortName(r.name)}</b><small>{r.ticker}{r.lists.includes("coverage") ? " · covered" : ""}</small></div> },
     { key: "spark", header: "3 months", render: (r) => <Spark values={r.spark} width={84} height={24} /> },
     { key: "last", header: "Last", align: "r", sort: (r) => r.last, render: (r) => <span className="mono">{num(r.last)}</span> },
-    { key: "chg", header: "Change", align: "r", sort: (r) => r.chg_pct, render: (r) => <span className={`mono ${(r.chg_pct ?? 0) >= 0 ? "up" : "down"}`}>{pct(r.chg_pct, 2, true)}</span> },
-    { key: "vol", header: "Vol × avg", align: "r", sort: (r) => r.vol_ratio, render: (r) => <span className={`mono ${(r.vol_ratio ?? 0) >= 2 ? "warn" : "muted"}`}>{isNum(r.vol_ratio) ? r.vol_ratio.toFixed(1) + "×" : "—"}</span> },
-    { key: "turnover", header: "Turnover", align: "r", sort: (r) => r.turnover, render: (r) => <span className="mono muted">{isNum(r.turnover) ? "₹" + (r.turnover / 1e7).toLocaleString("en-IN", { maximumFractionDigits: 0 }) + " Cr" : "—"}</span> },
-    { key: "w52", header: "52-week range", sort: (r) => r.from_hi, render: (r) => <Position lo={r.lo_52} hi={r.hi_52} value={r.last} width={80} /> },
+    { key: "chg", header: "Change", align: "r", sort: (r) => r.chg_pct, exportValue: (r) => pct(r.chg_pct, 2, true), render: (r) => <span className={`mono ${(r.chg_pct ?? 0) >= 0 ? "up" : "down"}`}>{pct(r.chg_pct, 2, true)}</span> },
+    { key: "vol", header: "Vol × avg", align: "r", sort: (r) => r.vol_ratio, exportValue: (r) => (isNum(r.vol_ratio) ? r.vol_ratio.toFixed(1) + "x" : ""), render: (r) => <span className={`mono ${(r.vol_ratio ?? 0) >= 2 ? "warn" : "muted"}`}>{isNum(r.vol_ratio) ? r.vol_ratio.toFixed(1) + "×" : "—"}</span> },
+    { key: "turnover", header: "Turnover", align: "r", sort: (r) => r.turnover, exportValue: (r) => (isNum(r.turnover) ? (r.turnover / 1e7).toFixed(0) + " Cr" : ""), render: (r) => <span className="mono muted">{isNum(r.turnover) ? "₹" + (r.turnover / 1e7).toLocaleString("en-IN", { maximumFractionDigits: 0 }) + " Cr" : "—"}</span> },
+    { key: "w52", header: "52-week range", sort: (r) => r.from_hi, exportValue: (r) => pct(r.from_hi, 1, true) + " from high", render: (r) => <Position lo={r.lo_52} hi={r.hi_52} value={r.last} width={80} /> },
     { key: "rsi", header: "RSI", align: "r", sort: (r) => r.rsi, render: (r) => <span className={`mono ${(r.rsi ?? 50) < 30 ? "up" : (r.rsi ?? 50) > 70 ? "down" : "muted"}`}>{isNum(r.rsi) ? r.rsi.toFixed(0) : "—"}</span> },
-    { key: "r1m", header: "1M", align: "r", sort: (r) => r.ret_1m, render: (r) => <span className={`mono ${(r.ret_1m ?? 0) >= 0 ? "up" : "down"}`}>{pct(r.ret_1m, 1, true)}</span> },
-    { key: "r3m", header: "3M", align: "r", visible: false, sort: (r) => r.ret_3m, render: (r) => <span className={`mono ${(r.ret_3m ?? 0) >= 0 ? "up" : "down"}`}>{pct(r.ret_3m, 1, true)}</span> },
-    { key: "r1y", header: "1Y", align: "r", sort: (r) => r.ret_1y, render: (r) => <span className={`mono ${(r.ret_1y ?? 0) >= 0 ? "up" : "down"}`}>{pct(r.ret_1y, 1, true)}</span> },
+    { key: "r1m", header: "1M", align: "r", sort: (r) => r.ret_1m, exportValue: (r) => pct(r.ret_1m, 1, true), render: (r) => <span className={`mono ${(r.ret_1m ?? 0) >= 0 ? "up" : "down"}`}>{pct(r.ret_1m, 1, true)}</span> },
+    { key: "r3m", header: "3M", align: "r", visible: false, sort: (r) => r.ret_3m, exportValue: (r) => pct(r.ret_3m, 1, true), render: (r) => <span className={`mono ${(r.ret_3m ?? 0) >= 0 ? "up" : "down"}`}>{pct(r.ret_3m, 1, true)}</span> },
+    { key: "r1y", header: "1Y", align: "r", sort: (r) => r.ret_1y, exportValue: (r) => pct(r.ret_1y, 1, true), render: (r) => <span className={`mono ${(r.ret_1y ?? 0) >= 0 ? "up" : "down"}`}>{pct(r.ret_1y, 1, true)}</span> },
     { key: "hm", header: "HYBRID MODEL", align: "r", sort: (r) => r.hm?.value, render: (r) => r.hm ? <span className="mono" style={{ color: HM_COLOR }}>{money(r.hm.value, 0)}</span> : <span className="faint">—</span> },
-    { key: "up", header: "Live upside", align: "r", sort: (r) => r.hm?.upside, render: (r) => r.hm ? <span className={`mono ${(r.hm.upside ?? 0) >= 0 ? "up" : "down"}`}>{pct(r.hm.upside, 1, true)}</span> : <span className="faint">—</span> },
+    { key: "up", header: "Live upside", align: "r", sort: (r) => r.hm?.upside, exportValue: (r) => pct(r.hm?.upside, 1, true), render: (r) => r.hm ? <span className={`mono ${(r.hm.upside ?? 0) >= 0 ? "up" : "down"}`}>{pct(r.hm.upside, 1, true)}</span> : <span className="faint">—</span> },
     { key: "label", header: "Label", visible: false, sort: (r) => r.hm?.label ?? "", render: (r) => r.hm ? <LabelBadge label={r.hm.label} /> : <span className="faint">—</span> },
     { key: "sector", header: "Sector", visible: false, sort: (r) => r.sector, render: (r) => <span className="muted">{r.sector || "—"}</span> },
   ];
@@ -191,7 +193,7 @@ function Scanner({ selected, onPick }: { selected: string; onPick: (t: string) =
           {q.data?.scanning ? <span className="xs faint row"><Icon name="loading" className="xs spin" />scanning…</span>
             : <span className="xs faint" title={q.data?.seconds ? `last scan took ${q.data.seconds}s` : ""}>{q.data?.as_of ? `as of ${ago(q.data.as_of)}` : ""}</span>}
           <button className="ibtn" title="Scan again" onClick={() => fetch("/api/live/scan?refresh=true").then(() => q.refetch())}><Icon name="refresh" /></button>
-          <GridTools columns={columns} state={state} />
+          <GridTools columns={columns} state={state} exportRows={rows} exportTitle={EXPORT_TITLE} />
         </div>
       </div>
       <div className="presets">

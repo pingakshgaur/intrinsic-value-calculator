@@ -9,6 +9,7 @@ the specialists concluded.
 
 import threading
 
+from agents import comms
 from agents.base import Evidence
 
 
@@ -28,16 +29,33 @@ class CompanyContext:
         self.findings = {}
         self.leads = {}
         self._memo = {}
+        self._origin = {}  # memo key -> callsign of the agent that fetched it
         self._lock = threading.Lock()
+        self.bus = None  # agents.comms.Bus during a run
 
     # ---------------------------------------------------------- memo
     def _get(self, key, fn):
+        """Fetch once, share with everyone. The bus is told about the first
+        fetch and about every reuse by another agent (a request saved)."""
+        who = comms.current()
+        bus = getattr(self, "bus", None)
         with self._lock:
             if key in self._memo:
-                return self._memo[key]
+                origin = self._origin.get(key)
+                val = self._memo[key]
+                hit = True
+            else:
+                hit = False
+        if hit:
+            if bus and who and origin and origin != who:
+                bus.shared(origin, who, key, self.name)
+            return val
         val = fn()
         with self._lock:
             self._memo[key] = val
+            self._origin[key] = who
+        if bus and who:
+            bus.fetched(who, key, self.name, len(val) if isinstance(val, list) else None)
         return val
 
     @property

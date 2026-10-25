@@ -695,3 +695,20 @@ def mark_alerts_seen():
     with _db() as con:
         con.execute("UPDATE alerts SET seen=1 WHERE seen=0")
     return True
+
+
+def delete_alert(alert_id):
+    """Remove one alert. The tracker never re-raises it in the same session:
+    it only fires when a condition becomes true again after being false."""
+    _init_db()
+    with _db() as con:
+        n = con.execute("DELETE FROM alerts WHERE id=?", (int(alert_id),)).rowcount
+    if not n:
+        raise LookupError(f"no alert {alert_id}")
+    return True
+
+
+def clear_alerts():
+    _init_db()
+    with _db() as con:
+        return con.execute("DELETE FROM alerts").rowcount

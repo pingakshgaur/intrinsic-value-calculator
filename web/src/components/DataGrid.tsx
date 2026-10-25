@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Icon, Popover } from "./ui";
+import { ExportButton } from "./ExportButton";
 
 export interface Column<T> {
   key: string;
@@ -13,7 +14,28 @@ export interface Column<T> {
   visible?: boolean;
   /** cannot be hidden */
   fixed?: boolean;
+  /** the value written to a PDF export; defaults to the sort value */
+  exportValue?: (row: T) => string | number | null | undefined;
 }
+
+/** Rows in the grid's current order. */
+export function sortRows<T>(rows: T[], columns: Column<T>[], s: { key: string; asc: boolean } | null) {
+  const col = s && columns.find((c) => c.key === s.key);
+  if (!s || !col?.sort) return rows;
+  const out = [...rows];
+  out.sort((a, b) => {
+    const x = col.sort!(a);
+    const y = col.sort!(b);
+    if (x == null && y == null) return 0;
+    if (x == null) return 1;
+    if (y == null) return -1;
+    const c = typeof x === "string" ? x.localeCompare(String(y)) : (x as number) - (y as number);
+    return s.asc ? c : -c;
+  });
+  return out;
+}
+
+const fmtCell = (v: unknown) => (typeof v === "number" ? (Number.isInteger(v) ? String(v) : Math.abs(v) < 10 ? v.toFixed(3) : v.toFixed(2)) : v == null ? "" : String(v));
 
 function readPref<T>(key: string, dflt: T): T {
   try {
@@ -38,9 +60,15 @@ export function useGridState<T>(id: string, columns: Column<T>[], initialSort?: 
   return { sort, setSort, hidden, setHidden, dense, setDense };
 }
 
-export function GridTools<T>({ columns, state }: { columns: Column<T>[]; state: ReturnType<typeof useGridState<T>> }) {
+export function GridTools<T>({ columns, state, exportRows, exportTitle }: { columns: Column<T>[]; state: ReturnType<typeof useGridState<T>>; exportRows?: T[]; exportTitle?: string }) {
+  const table = () => {
+    const cols = columns.filter((c) => (c.fixed || !state.hidden.includes(c.key)) && (c.exportValue || c.sort) && c.header);
+    const rows = sortRows(exportRows ?? [], columns, state.sort);
+    return { head: cols.map((c) => c.header), rows: rows.map((r) => cols.map((c) => fmtCell((c.exportValue ?? c.sort)!(r)))) };
+  };
   return (
     <>
+      {exportRows && <ExportButton title={exportTitle ?? "Table"} table={table} />}
       <button className={`ibtn ${state.dense ? "on" : ""}`} title={state.dense ? "Comfortable rows" : "Compact rows"} onClick={() => state.setDense(!state.dense)}>
         <Icon name="list-flat" />
       </button>
@@ -74,22 +102,7 @@ export function DataGrid<T>({ rows, columns, rowKey, state, selected, onSelect, 
   maxHeight?: string;
 }) {
   const cols = columns.filter((c) => c.fixed || !state.hidden.includes(c.key));
-  const sorted = useMemo(() => {
-    const s = state.sort;
-    const col = s && columns.find((c) => c.key === s.key);
-    if (!s || !col?.sort) return rows;
-    const out = [...rows];
-    out.sort((a, b) => {
-      const x = col.sort!(a);
-      const y = col.sort!(b);
-      if (x == null && y == null) return 0;
-      if (x == null) return 1;
-      if (y == null) return -1;
-      const c = typeof x === "string" ? x.localeCompare(String(y)) : (x as number) - (y as number);
-      return s.asc ? c : -c;
-    });
-    return out;
-  }, [rows, columns, state.sort]);
+  const sorted = useMemo(() => sortRows(rows, columns, state.sort), [rows, columns, state.sort]);
 
   const body = useRef<HTMLDivElement>(null);
   const onKey = (e: React.KeyboardEvent) => {

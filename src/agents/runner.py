@@ -27,7 +27,7 @@ import time
 
 import config
 
-from agents import chief
+from agents import chief, comms, protocol
 from agents import settings as S
 from agents.base import Finding
 from agents.blackboard import Blackboard
@@ -161,37 +161,83 @@ def base_valuation(companies, feeds, offline=False, ml=False):
 
 
 # ======================================================== one company
-def research_company(company, base, rec, feeds, board, llm, run_id, shared, quick, account_signals=None):
+def _run_analyst(cls, llm, ctx, bus):
+    """One analyst, with its live status and its finding filed on the bus."""
+    cs = comms.BY_KEY.get(cls.KEY)
+    if bus and cs:
+        bus.start(cs, ctx.name, f"Analysing {ctx.name}")
+    comms.set_current(cs)
+    try:
+        f = cls(llm).run(ctx)
+    finally:
+        comms.set_current(None)
+    if bus and cs:
+        bus.end(cs, ctx.name, ok=f.status != "error", llm=f.used_llm)
+    return f
+
+
+def research_company(company, base, rec, feeds, board, llm, run_id, shared, quick, account_signals=None, bus=None):
     ctx = CompanyContext(company, base, rec, feeds, board, run_id, shared)
     ctx.account_signals = account_signals or {}
+    ctx.bus = bus
     reuse = board.last_findings(ctx.name, SLOW_AGENTS) if quick else {}
+    mids = {}  # agent key -> its finding's message id (a lead's report refers to them)
+    if bus:
+        protocol.open_company(bus, ctx)
 
     for lead, team in TEAMS:
-        for cls in team:
-            if chief.analyst_weight(lead, cls.KEY) <= 0:
-                continue
+        active = [c for c in team if chief.analyst_weight(lead, c.KEY) > 0]
+        if bus:
+            protocol.assign(bus, lead, [c.KEY for c in active], ctx, SLOW_AGENTS & set(reuse) if quick else ())
+        for cls in active:
+            cs = comms.BY_KEY.get(cls.KEY)
             if quick and cls.KEY in SLOW_AGENTS:
                 if cls.KEY in reuse:
                     f = Finding.from_dict(reuse[cls.KEY])
                     f.notes.append("re-used from the last full run")
                     ctx.findings[cls.KEY] = f
+                    if bus and cs:
+                        mids[cls.KEY] = protocol.analyst_done(bus, cs, f, ctx, reused=True)
                 continue
-            ctx.findings[cls.KEY] = cls(llm).run(ctx)
+            if bus and cs:
+                protocol.consult(bus, cs, ctx)
+            ctx.findings[cls.KEY] = _run_analyst(cls, llm, ctx, bus)
+            if bus and cs:
+                mids[cls.KEY] = protocol.analyst_done(bus, cs, ctx.findings[cls.KEY], ctx)
+                protocol.exchanges(bus, cs, ctx)
         chief.lead_report(ctx, lead)
 
     lead, team = REVIEW
     for cls in team:
         if chief.analyst_weight(lead, cls.KEY) <= 0 and cls.KEY != "research_validation_analyst":
             continue
-        ctx.findings[cls.KEY] = cls(llm).run(ctx)
+        if bus and cls.KEY == "bull_case_analyst":
+            protocol.cases(bus, ctx)  # bull and bear both ask the leads before writing
+        ctx.findings[cls.KEY] = _run_analyst(cls, llm, ctx, bus)
+        cs = comms.BY_KEY.get(cls.KEY)
+        if bus and cs:
+            mids[cls.KEY] = protocol.analyst_done(bus, cs, ctx.findings[cls.KEY], ctx)
+            if cls.KEY == "research_validation_analyst":
+                protocol.review(bus, ctx)
     # validation changed which findings count, so every lead re-scores
     for lead_key, _ in TEAMS + [REVIEW]:
         chief.lead_report(ctx, lead_key)
+    reports = protocol.team_reports(bus, ctx, mids) if bus else {}
 
     def ask(tier, system, user, max_tokens=600):
         return llm.complete(tier, system, user, max_tokens=max_tokens, agent="chief") if llm else None
 
-    verdict = chief.decide(ctx, ask)
+    if bus:
+        bus.start("CMD-00", ctx.name, f"Deciding {ctx.name}")
+    comms.set_current("CMD-00")
+    try:
+        verdict = chief.decide(ctx, ask)
+    finally:
+        comms.set_current(None)
+    if bus:
+        bus.end("CMD-00", ctx.name, ok=True, llm=(verdict.get("summary") or {}).get("by") == "llm")
+        protocol.chief(bus, ctx, verdict, reports)
+        bus.company_done()
     # dicts too: lens_calibration is one, and a base without it re-evaluates
     # uncalibrated (quick sweeps, the Studio, live prices)
     verdict["base"] = {k: v for k, v in base.items() if isinstance(v, (int, float, str, list, dict, type(None)))}
@@ -252,6 +298,10 @@ def run_agents(companies, offline=False, use_llm=True, quick=False, only=None, m
     mode = "quick" if quick else "full"
     run_id = board.start_run(mode, len(companies))
     print(f"[agents] run #{run_id} ({mode}) - {len(companies)} companies - {llm.describe()}")
+    bus = comms.Bus(board, run_id, mode, len(companies))
+    bus.post("OPS-00", "ops", f"Run #{run_id} started: {mode} research on {len(companies)} companies. "
+             f"LLM: {llm.describe()}. Feeds are shared per company, so each source is called once.",
+             kind="system", data={"mode": mode, "companies": len(companies), "llm": llm.describe()})
 
     bases, acc_sigs, universe = {}, {}, {}
     if quick:
@@ -291,9 +341,11 @@ def run_agents(companies, offline=False, use_llm=True, quick=False, only=None, m
     with cf.ThreadPoolExecutor(max_workers=workers) as pool:
         futs = {
             pool.submit(research_company, c, bases.get(c["name"], {}), universe.get(c["name"]),
-                        feeds, board, llm, run_id, shared, quick, acc_sigs.get(c["name"])): c
+                        feeds, board, llm, run_id, shared, quick, acc_sigs.get(c["name"]), bus): c
             for c in companies
         }
+        bus.post("OPS-00", "ops", f"Base valuation ready for {len(bases)} companies; researching {workers} at a time.",
+                 kind="system", data={"workers": workers})
         for fut in cf.as_completed(futs):
             c = futs[fut]
             try:
@@ -305,6 +357,9 @@ def run_agents(companies, offline=False, use_llm=True, quick=False, only=None, m
             except Exception as e:
                 log.exception("research failed for %s", c["name"])
                 print(f"[agents] {c['name']}: FAILED {type(e).__name__}: {e}")
+                bus.post("OPS-00", "ops", f"{c['name']}: research failed - {type(e).__name__}: {str(e)[:200]}",
+                         kind="system", company=c["name"], data={"error": True})
+                bus.company_done()
 
     order = {c["name"]: i for i, c in enumerate(companies)}
     verdicts.sort(key=lambda v: order.get(v["company"], 0))
@@ -318,6 +373,23 @@ def run_agents(companies, offline=False, use_llm=True, quick=False, only=None, m
     }
     paths = report.write_all(verdicts, meta, state)
     sent = notify.send_changes(verdicts, meta)
+
+    labels = {}
+    for v in verdicts:
+        labels[v.get("label")] = labels.get(v.get("label"), 0) + 1
+    mix = ", ".join(f"{n} {k.lower()}" for k, n in sorted(labels.items(), key=lambda kv: -kv[1]) if k)
+    movers = sorted((v for v in verdicts if isinstance(v.get("upside"), (int, float))), key=lambda v: -v["upside"])
+    bus.post("CMD-00", "command", f"Run #{run_id} closed: {len(verdicts)} verdicts - {mix}."
+             + (f" Widest gap: {movers[0]['company']} ({movers[0]['upside']:+.0%})." if movers else ""),
+             kind="verdict", data={"labels": labels, "run": run_id})
+    for p in feeds.problems[:5]:
+        bus.post("OPS-00", "ops", f"Data source problem: {str(p)[:220]}", kind="system", data={"problem": True})
+    st = llm.stats() if hasattr(llm, "stats") else {}
+    bus.post("OPS-00", "ops", f"Run #{run_id} finished in {meta['seconds']}s. LLM calls {llm.calls} "
+             f"(cache hits {llm.cache_hits}); {bus.progress['saved']} feed requests saved by sharing between agents.",
+             kind="system", data={"seconds": meta["seconds"], "llm_calls": llm.calls, "cache_hits": llm.cache_hits,
+                                  "saved": bus.progress["saved"], "llm": st})
+    bus.finish()
     board.finish_run(run_id, llm.calls, note=f"{len(verdicts)} verdicts")
     board.prune()
     board.close()

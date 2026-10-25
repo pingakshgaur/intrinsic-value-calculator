@@ -11,6 +11,7 @@ import { Column, DataGrid, GridTools, useGridState } from "../components/DataGri
 import { ChartPanel } from "../components/ChartPanel";
 import { Position, Spark } from "../components/Spark";
 import { useApp } from "../components/workbenchContext";
+import { chime } from "../lib/notify";
 
 type Sort = "change" | "name" | "upside" | "since";
 
@@ -138,20 +139,20 @@ function WatchTable({ items, sel, pick }: { items: WatchItem[]; sel: string | nu
     { key: "company", header: "Company", sticky: true, fixed: true, sort: (w) => w.name, render: (w) => <div className="co"><b>{shortName(w.name)}</b><small>{w.ticker}</small></div> },
     { key: "spark", header: "Today", render: (w) => <Spark values={w.quote?.spark ?? []} base={w.quote?.prev_close} width={90} height={24} /> },
     { key: "last", header: "Last", align: "r", sort: (w) => w.quote?.last, render: (w) => <span className="mono">{num(w.quote?.last)}</span> },
-    { key: "chg", header: "Change", align: "r", sort: (w) => w.quote?.chg_pct, render: (w) => <span className={`mono ${(w.quote?.chg_pct ?? 0) >= 0 ? "up" : "down"}`}>{pct(w.quote?.chg_pct, 2, true)}</span> },
+    { key: "chg", header: "Change", align: "r", sort: (w) => w.quote?.chg_pct, exportValue: (w) => pct(w.quote?.chg_pct, 2, true), render: (w) => <span className={`mono ${(w.quote?.chg_pct ?? 0) >= 0 ? "up" : "down"}`}>{pct(w.quote?.chg_pct, 2, true)}</span> },
     { key: "day", header: "Day range", render: (w) => <Position lo={w.quote?.low} hi={w.quote?.high} value={w.quote?.last} width={80} /> },
     { key: "volume", header: "Volume", align: "r", sort: (w) => w.quote?.volume, render: (w) => <span className="mono muted">{w.quote?.volume?.toLocaleString("en-IN") ?? "—"}</span> },
     { key: "hm", header: "HYBRID MODEL", align: "r", sort: (w) => w.quote?.hm?.value, render: (w) => <span className="mono" style={{ color: HM_COLOR }}>{money(w.quote?.hm?.value, 0)}</span> },
-    { key: "upside", header: "Live upside", align: "r", sort: (w) => w.quote?.hm?.upside, render: (w) => <span className={`mono ${(w.quote?.hm?.upside ?? 0) >= 0 ? "up" : "down"}`}>{pct(w.quote?.hm?.upside, 1, true)}</span> },
+    { key: "upside", header: "Live upside", align: "r", sort: (w) => w.quote?.hm?.upside, exportValue: (w) => pct(w.quote?.hm?.upside, 1, true), render: (w) => <span className={`mono ${(w.quote?.hm?.upside ?? 0) >= 0 ? "up" : "down"}`}>{pct(w.quote?.hm?.upside, 1, true)}</span> },
     { key: "label", header: "Label", sort: (w) => w.quote?.hm?.label ?? "", render: (w) => w.quote?.hm ? <LabelBadge label={w.quote.hm.label} /> : <span className="faint">—</span> },
-    { key: "since", header: "Since added", align: "r", sort: (w) => w.since_added, render: (w) => <span className={`mono ${(w.since_added ?? 0) >= 0 ? "up" : "down"}`}>{pct(w.since_added, 1, true)}</span> },
+    { key: "since", header: "Since added", align: "r", sort: (w) => w.since_added, exportValue: (w) => pct(w.since_added, 1, true), render: (w) => <span className={`mono ${(w.since_added ?? 0) >= 0 ? "up" : "down"}`}>{pct(w.since_added, 1, true)}</span> },
     { key: "alerts", header: "Alerts", render: (w) => <span className="mono xs muted">{w.alert_below ? `↓${num(w.alert_below, 0)}` : ""} {w.alert_above ? `↑${num(w.alert_above, 0)}` : ""}</span> },
     { key: "sector", header: "Sector", visible: false, sort: (w) => w.sector, render: (w) => <span className="muted">{w.sector}</span> },
   ];
   const state = useGridState<WatchItem>("watch", columns, { key: "chg", asc: false });
   return (
     <>
-      <div className="toolbar" style={{ borderTop: 0, paddingTop: 0 }}><span className="spacer" /><GridTools columns={columns} state={state} /></div>
+      <div className="toolbar" style={{ borderTop: 0, paddingTop: 0 }}><span className="spacer" /><GridTools columns={columns} state={state} exportRows={items} exportTitle="Watchlist" /></div>
       <DataGrid rows={items} columns={columns} rowKey={(w) => w.ticker} state={state} selected={sel} onSelect={pick} onOpen={pick} />
     </>
   );
@@ -285,17 +286,24 @@ function AlertsPanel() {
   const qc = useQueryClient();
   const unseen = (q.data ?? []).filter((a) => !a.seen).length;
   const ICON: Record<string, string> = { below: "arrow-down", above: "arrow-up", buy_below: "tag", move: "pulse" };
+  const refresh = () => qc.invalidateQueries({ queryKey: ["live-alerts"] });
+  const del = (id: number) => { chime("ui"); api.del(`/api/live/alerts/${id}`).then(refresh).catch(refresh); };
+  const clear = () => { if (confirm(`Delete all ${q.data?.length ?? 0} alerts?`)) { chime("ui"); api.del("/api/live/alerts").then(refresh).catch(refresh); } };
   return (
     <Panel title="Live alerts" meta={unseen ? `${unseen} new` : "price levels, buy-below crossings and big daily moves"}
-      tools={unseen > 0 && <button className="btn xs ghost" onClick={() => api.post("/api/live/alerts/seen").then(() => qc.invalidateQueries({ queryKey: ["live-alerts"] }))}>Mark all read</button>} flush>
+      tools={<>
+        {unseen > 0 && <button className="btn xs ghost" onClick={() => api.post("/api/live/alerts/seen").then(refresh)}>Mark all read</button>}
+        {(q.data?.length ?? 0) > 0 && <button className="btn xs ghost" onClick={clear}><Icon name="clear-all" className="xs" />Clear all</button>}
+      </>} flush>
       {q.isError ? <div style={{ padding: 12 }}><ErrorNote error={q.error} /></div> : !(q.data ?? []).length ? (
         <div className="empty" style={{ padding: 24 }}><Icon name="bell" /><span className="small">No alerts yet.</span></div>
       ) : (
         <div className="feed" style={{ maxHeight: 260 }}>
           {q.data!.slice(0, 50).map((a) => (
-            <div key={a.id} className={`ev ${a.seen ? "" : "new"}`}>
+            <div key={a.id} className={`ev ev-x ${a.seen ? "" : "new"}`}>
               <span className="ic"><Icon name={ICON[a.kind] ?? "bell"} className={`sm ${a.kind === "below" || a.kind === "buy_below" ? "up" : a.kind === "above" ? "warn" : "info"}`} /></span>
               <div className="grow"><div className="t">{a.message}</div><div className="d">{when(a.t)} · session {a.session}</div></div>
+              <button className="ibtn sm" title="Delete this alert" onClick={() => del(a.id)}><Icon name="close" className="xs" /></button>
             </div>
           ))}
         </div>

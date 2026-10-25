@@ -23,6 +23,8 @@ An analyst workspace:
 | **Command Center** | Metric band; coverage treemap (tile size = market cap, colour = upside); signals feed; upside vs confidence; label mix and extremes; model leaderboard |
 | **Markets** | Live index cards (Nifty 50, Sensex, Bank, IT, Midcap 50, Financial Services, VIX) with intraday sparklines and a sector heat strip. A scanner over every company the app knows (about 425): top gainers and losers, most active, volume spikes, near 52-week high or low, RSI extremes, and covered companies below their buy-below price. Candlestick or line charts from 1 day to the full history, with the HYBRID MODEL value and buy-below drawn on the chart. Look up any NSE or BSE symbol |
 | **Watchlist** | The companies you track, as tiles or a table: live price, change, intraday sparkline, day range, the HYBRID MODEL re-valued at the live price, and change since you added it. Each company has a live chart (including every minute bar the tracker stored), price alerts and a note. An alerts feed lists level crossings, buy-below crossings and big daily moves |
+| **Agent Network** | The 23 research agents as a live 2.5D node graph: info-bits travel the edges as they exchange work; replay any run; inspect, filter and message any agent |
+| **Research Room** | The agents' chat: team channels, direct exchanges between agents, live status, and commands you can type to ask any agent |
 | **Learning** | How many extra companies train the ML models, how many are cached, the switches for daily feeding and retraining, and a record of every valuation run (training rows, HYBRID MODEL confidence and error), so you can see whether more data helped |
 | **Coverage** | Sortable data grid with a column chooser and density toggle, inline range bars and CSV export. Selecting a row opens an inspector; `↑ ↓` move between rows and `Enter` opens the profile |
 | **Equity profile** | Sticky figures bar and a section index that follows your scrolling. Sections: summary, valuation (lens contribution, bridge, build-up), drivers and risk, agents and evidence, bull vs bear, history |
@@ -67,6 +69,83 @@ TradingView's Lightweight Charts:
   or go fullscreen.
 - The HYBRID MODEL value, buy-below price, previous close and your alert
   levels are drawn as labelled lines.
+
+## Notifications
+
+The bell collects live price alerts (from the Watchlist tracker) and research
+alerts (red flags and changes from the latest research run), in All, Live
+prices and Research tabs.
+
+- **Delete:** the × on a row deletes a live alert, or hides a research alert in
+  this browser. **Clear all** empties the current tab.
+- **On / off:** the switch in the panel turns the badge, sounds and pop-ups
+  off. Alerts are still recorded.
+- **Sounds:** short, quiet synthesised cues: Glass, Rise, Fall, Pulse, Bloom,
+  Chord, Low, Tick, Marimba or silent. Eight events each have their own cue,
+  volume and on/off switch: below buy-below, fell to your alert, rose to your
+  alert, big daily move, run finished, run failed, an agent replies, and
+  interface clicks. There is a master volume and optional quiet hours (they can
+  cross midnight). Settings are in the panel (gear) and in **Configuration →
+  Notifications & sounds**. Browsers only play sound after you have clicked
+  somewhere on the page.
+- **Desktop pop-ups** (optional) appear when the tab is in the background.
+
+## Research workforce
+
+The 23 research agents (see [AGENTS.md](AGENTS.md) for who is who) have two pages:
+
+The workforce **starts working as soon as the web app starts** (a quick,
+rule-based sweep that makes no LLM calls). The **Workforce** button on the
+Agent Network page controls this and starts a run on demand.
+
+- **Agent Network:** a live node graph.
+  - **Layout:** data sources feed the five team frames (analysts, then their
+    lead); the leads report to the chief, who feeds the outputs.
+  - **Motion:** everything on the graph reacts to the backend.
+    - A node recoils when it sends and is knocked when an info-bit lands, then
+      springs back.
+    - Busy nodes glow, and the glow fades as they go quiet.
+    - Edges brighten and their dashes flow while traffic crosses them; busier
+      edges are thicker.
+    - Labels float up from the receiver: a finding's score, a team summary,
+      a red flag, or the verdict at the chief.
+    - Counters bump as they change: sent and received on every agent, team
+      progress bars, fetches per data source, outputs, and a progress ring on
+      the chief. A ticker shows the last three messages.
+    - When a live run ends, the graph stays at its final state instead of
+      restarting.
+  - **Info-bits:** these travel the edges as the agents exchange work. Their
+    colour shows what they carry (fetch, shared data, finding, red flag,
+    request, reply, review, team report, verdict), so you can see evidence
+    become findings, team reports and verdicts.
+  - **Live and replay:** live during a run. Afterwards, any run replays with a
+    scrubber and speed control; silent stretches are compressed.
+  - **Navigation:** drag the canvas to pan, scroll to zoom, drag nodes to
+    rearrange (remembered), `F` to fit, `Space` to play or pause. The 2.5D
+    button tilts the whole network into perspective.
+  - **Interaction:** hover a node or edge for details; click to inspect (status,
+    stats, who it reads and who reads it, latest messages); double-click for
+    its channel; right-click for actions (centre, highlight connections,
+    message, filter, copy callsign). Edges show the messages that travelled
+    them.
+  - **Filters and minimap:** filter by team and by info-bit kind; a minimap
+    shows where you are.
+- **Research Room:** the agents' chat.
+  - **Sidebar:** team channels, direct exchanges between agents, the data
+    trace, and every agent with live status.
+  - **Messages:** findings show score, confidence, signals and evidence links;
+    team reports show how many findings they combine; verdicts show value
+    against price.
+  - **Tools:** filter by company or kind, search, and see who is working.
+  - **Composer:** commands and @mentions autocomplete. The agents answer from
+    the latest research without LLM calls.
+
+## Export to PDF
+
+Every titled panel, every page header, every data grid, each price chart, the
+agent graph, the chat and the notifications panel has a PDF button. One click
+downloads the file: lists become real text tables across as many pages as
+needed; charts, graphs and panels become images exactly as they look.
 
 ## Light and dark
 

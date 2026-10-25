@@ -353,3 +353,80 @@ def test_full_offline_run_then_quick_run():
     finally:
         config.set_fy_range(saved[0], saved[1])
         config.OFFLINE = saved[2]
+
+
+def test_agents_talk_on_the_bus():
+    """A run leaves a full conversation: every team channel, one verdict per
+    company, lead reports that cite their analysts, shared feeds counted."""
+    import json as _json
+    import sqlite3
+
+    import config
+    import mock_source
+    from agents import comms
+    from agents.runner import run_agents
+
+    saved = (config.FY_START, config.FY_END, config.OFFLINE)
+    try:
+        companies = mock_source.COMPANIES[:2]
+        out = run_agents(companies, offline=True, use_llm=False)
+        run_id = out["meta"]["run_id"]
+        con = sqlite3.connect(S.state_dir() / "blackboard.sqlite")
+        rows = con.execute("SELECT mid, channel, sender, recipient, kind, company, refs FROM messages WHERE run_id=?",
+                           (run_id,)).fetchall()
+        prog = _json.loads(con.execute("SELECT payload FROM run_progress WHERE run_id=?", (run_id,)).fetchone()[0])
+        status = {a: _json.loads(p) for a, p in con.execute("SELECT agent, payload FROM agent_status WHERE run_id=?", (run_id,))}
+        con.close()
+    finally:
+        config.set_fy_range(saved[0], saved[1])
+        config.OFFLINE = saved[2]
+
+    channels = {r[1] for r in rows}
+    assert {"command", "nws", "eqr", "igr", "mao", "irv", "ops", "trace"} <= channels
+    assert all(r[2] in comms.ROSTER for r in rows)
+    kinds = [r[4] for r in rows]
+    for k in ("task", "finding", "summary", "verdict", "system", "fetch", "share"):
+        assert k in kinds, k
+    per_company = [r for r in rows if r[4] == "verdict" and r[5]]
+    assert sorted(r[5] for r in per_company) == sorted(c["name"] for c in companies)
+    # a lead's report refers to its own analysts' findings
+    mids = {r[0]: r for r in rows}
+    rep = next(r for r in rows if r[4] == "summary" and r[2] == "EQR-00")
+    cited = [mids[m] for m in _json.loads(rep[6]) if m in mids]
+    assert cited and all(c[2].startswith("EQR-") and c[4] == "finding" for c in cited)
+    # direct exchanges are addressed to someone
+    assert all(r[3] for r in rows if r[1].startswith("dm:"))
+    assert prog["done"] == len(companies) and prog["saved"] > 0 and prog["finished"]
+    assert not any(s["state"] == "working" for s in status.values())
+
+
+def test_chat_api_answers_commands(monkeypatch):
+    import config
+    import mock_source
+    from agents.runner import run_agents
+    from server import agents_api as A
+
+    saved = (config.FY_START, config.FY_END, config.OFFLINE)
+    try:
+        run_agents(mock_source.COMPANIES[:1], offline=True, use_llm=False)
+    finally:
+        config.set_fy_range(saved[0], saved[1])
+        config.OFFLINE = saved[2]
+    monkeypatch.setenv("AGENT_STATE_DIR", str(S.state_dir()))
+
+    assert len(A.roster()["agents"]) == 24
+    live = A.live()
+    assert live["progress"]["done"] == 1 and live["status"]["CMD-00"]["done"] == 1
+    assert all(m["channel"] != "trace" for m in A.messages()["messages"])
+
+    def ask(channel, text):
+        A.post(channel, text)
+        return A.messages(channel=channel)["messages"][-1]
+
+    assert ask("command", "/verdict MOCK")["sender"] == "CMD-00"
+    r = ask("eqr", "@EQR-02 MOCK")
+    assert r["sender"] == "EQR-02" and r["kind"] == "finding" and r["to"] == "YOU"
+    assert ask("dm:EQR-01|YOU", "hello")["sender"] == "EQR-01"
+    assert ask("ops", "/nonsense")["sender"] == "OPS-00"
+    with pytest.raises(ValueError):
+        A.post("not-a-channel", "hi")

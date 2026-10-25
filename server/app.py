@@ -13,8 +13,17 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 
 import server  # noqa: F401  (puts src/ on sys.path)
+from server import (
+    agents_api,
+    autostart,
+    hybrid_api,
+    learning_api,
+    live,
+    llm_api,
+    prefs,
+    yaml_patch,
+)
 from server import data as D
-from server import hybrid_api, learning_api, live, llm_api, prefs, yaml_patch
 from server.jobs import JobManager
 
 SETTINGS = D.ROOT / "agent_settings.yaml"
@@ -495,6 +504,7 @@ def _start_background():
     live.TRACKER.start()
     jobs.on_done.append(lambda j: learning_api.after_job(j, jobs))
     learning_api.start_scheduler(jobs)
+    autostart.schedule(jobs)  # the research workforce gets to work at once
 
 
 def _live(fn, *a):
@@ -585,6 +595,83 @@ def live_alerts():
 @app.post("/api/live/alerts/seen")
 def live_alerts_seen():
     return {"ok": _live(live.mark_alerts_seen)}
+
+
+@app.delete("/api/live/alerts/{alert_id}")
+def live_alert_delete(alert_id: int):
+    return {"ok": _live(live.delete_alert, alert_id)}
+
+
+@app.delete("/api/live/alerts")
+def live_alerts_clear():
+    return {"deleted": _live(live.clear_alerts)}
+
+
+# ================================================================ research workforce
+@app.get("/api/agents/roster")
+def agents_roster():
+    return agents_api.roster()
+
+
+@app.get("/api/agents/runs")
+def agents_runs():
+    return agents_api.runs()
+
+
+@app.get("/api/agents/messages")
+def agents_messages(run: int | None = None, channel: str | None = None, after: int = 0, before: int | None = None,
+                    limit: int = 400, company: str | None = None, kinds: str | None = None, trace: bool = False):
+    return agents_api.messages(run, channel, after, before, limit, company, kinds, trace)
+
+
+@app.get("/api/agents/channels")
+def agents_channels(run: int | None = None):
+    return agents_api.channel_stats(run)
+
+
+@app.get("/api/agents/live")
+def agents_live(after: int = 0, run: int | None = None):
+    return agents_api.live(after, run, jobs.active())
+
+
+class AgentPost(BaseModel):
+    channel: str
+    text: str
+
+
+@app.post("/api/agents/messages")
+def agents_post(body: AgentPost):
+    try:
+        return agents_api.post(body.channel, body.text, jobs)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except LookupError as e:
+        raise HTTPException(409, str(e))
+
+
+@app.get("/api/agents/autostart")
+def get_autostart():
+    return {"settings": autostart.settings(), "state": autostart.state}
+
+
+@app.put("/api/agents/autostart")
+def put_autostart(body: dict):
+    try:
+        return {"settings": autostart.save(body), "state": autostart.state}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/agents/autostart/run")
+def run_autostart():
+    _start_background()
+    try:
+        job, reason = autostart.start_now(jobs, "request")
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(409, str(e))
+    if job is None:
+        raise HTTPException(409, reason)
+    return job.summary()
 
 
 @app.get("/api/learning")

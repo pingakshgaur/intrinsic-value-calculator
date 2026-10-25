@@ -40,6 +40,79 @@ Chief Market Intelligence Officer      HYBRID MODEL + verdict + executive summar
 
 All the code is in `src/agents/`, one file per team.
 
+## Nomenclature
+
+Every agent has a callsign, `TEAM-NN`. TEAM is a three-letter team code, `00` is
+the team's lead (`CMD-00` is the chief), and `01`, `02`, … are its analysts in
+the order they run. Each team has a colour, used everywhere in the web app.
+
+| Team | Code | Colour | Lead | Analysts |
+|---|---|---|---|---|
+| Command | CMD | gold | CMD-00 Chief Market Intelligence Officer | — |
+| Market News Research | NWS | blue | NWS-00 | 01 Research · 02 News Credibility · 03 Sentiment · 04 Stock Movement · 05 Market Impact |
+| Equity Research | EQR | green | EQR-00 | 01 Fundamental · 02 Financial Forensics · 03 Pre-Earnings |
+| Industry & Geopolitical | IGR | orange | IGR-00 | 01 Industry · 02 Geopolitical Risk |
+| Market Activity & Ownership | MAO | teal | MAO-00 | 01 Market Volume · 02 Insider Activity · 03 Fund Holdings · 04 Short-Seller |
+| Independent Review | IRV | purple | IRV-00 | 01 Research Validation · 02 Bull Case · 03 Bear Case |
+| Operations | OPS | grey | OPS-00 Run Orchestrator | — |
+
+## How the agents talk
+
+For each company the agents share one blackboard (`CompanyContext`). A feed one
+analyst downloads is reused by the next, findings are filed there for the
+leads, the review team and the chief, and run-wide facts live in one shared
+dict. That is the cheapest exchange possible: no extra requests and no extra
+LLM calls. In a full run of 43 companies, about 400 feed requests are saved
+this way.
+
+`src/agents/comms.py` and `src/agents/protocol.py` make the exchange visible as
+chat. Every message is written from data the agents already produced, so the
+conversation itself costs **no API calls**. Writes are batched into the
+blackboard: one commit per ~25 messages or per second.
+
+| Channel | Who | What |
+|---|---|---|
+| `#command` | chief + 5 leads | the chief opens coverage; leads file team reports; the chief signs verdicts |
+| `#nws-market-news`, `#eqr-equity-research`, `#igr-industry-geo`, `#mao-market-activity`, `#irv-review` | a team | the lead assigns the company; analysts file findings and red flags |
+| `#ops-run-control` | orchestrator | run start and finish, data-source problems, LLM usage |
+| trace | everyone | every feed fetched, and every reuse by another agent |
+| `dm:A\|B` | two agents | cross-team exchanges |
+
+Direct exchanges follow the real data dependencies in the code; nobody talks
+for the sake of it:
+
+- MAO-04 (short-seller) asks MAO-01 for accumulation and liquidity, and NWS-04
+  for relative strength, before it works: it reads both.
+- NWS-02 tells NWS-03 and NWS-05 when its credibility weights are ready; their
+  scores use them.
+- EQR-02 passes forensic red flags to IRV-03 for the bear case. EQR-03 raises a
+  disagreement with EQR-01 when their earnings-momentum reads point in
+  opposite directions.
+- IRV-01 messages only the analysts whose work failed validation (exceptions
+  only), and posts one summary to its team.
+- IRV-02 and IRV-03 ask the lead pushing hardest their way for its strongest
+  validated point.
+- CMD-00 asks the lead whose score is the outlier what is driving it, then
+  posts the verdict. Its message refers to the team reports, and each report
+  refers to its analysts' findings, so you can follow any verdict back to the
+  evidence.
+
+## Talking to the agents
+
+In the web app's **Research Room** you can post in any channel or message an
+agent directly. The agents answer from the latest research, with no LLM call:
+
+| Type | Answer |
+|---|---|
+| `/verdict HAL` | the chief's verdict |
+| `/flags HAL` | validated red flags, from IRV-01 |
+| `/compare HAL BEL` | two verdicts side by side |
+| `/top 5` | the widest gaps to the HYBRID MODEL value |
+| `@EQR-02 HAL` or `/ask EQR-02 HAL` | that analyst's latest finding on HAL |
+| `/status` | the current or last run |
+| `/run quick` or `/run full`, optionally `HAL,BEL` and `no-llm` | starts a research run |
+| `/help` | the list |
+
 ## Hybrid intelligence
 
 Numbers are always computed in Python. An LLM is used only where text has to
@@ -120,6 +193,15 @@ Output goes to `output/intel/latest/`:
 
 History is kept in `output/intel/blackboard.sqlite`, which is how each run
 knows what changed since the last one.
+
+**Auto-start.** `python run.py --web` starts the workforce a few seconds after
+the server comes up: a quick sweep, rule-based, so restarting the app never
+spends LLM quota. It is skipped only when another job is already running.
+The **Workforce** button on the Agent Network page turns this off, switches
+to a full run, lets it use the AI models, sets a "skip if a run finished in
+the last N minutes" window, and starts a run on demand. The settings are
+saved in `data/live/autostart.json`; the API is `GET`/`PUT
+/api/agents/autostart` and `POST /api/agents/autostart/run`.
 
 ## Running it in the cloud (PC can stay off)
 

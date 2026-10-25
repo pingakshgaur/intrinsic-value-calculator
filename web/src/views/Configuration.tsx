@@ -7,11 +7,13 @@ import { ago, titleCase } from "../lib/format";
 import { AGENT_NAME } from "../lib/labels";
 import { ErrorNote, Icon, Loading, PageHeader, Panel, QueryView, Toggle } from "../components/ui";
 import { useApp } from "../components/workbenchContext";
+import { NotifySettings } from "../components/NotifySettings";
 
 const SECTIONS = [
   { id: "run", label: "Run settings", icon: "settings" },
   { id: "ai", label: "AI providers", icon: "sparkle" },
   { id: "agents", label: "Research agents", icon: "organization" },
+  { id: "notify", label: "Notifications & sounds", icon: "bell" },
   { id: "macro", label: "Macro inputs", icon: "globe" },
   { id: "yaml", label: "Settings file", icon: "file-code" },
 ];
@@ -34,6 +36,7 @@ export function Configuration() {
           {section === "ai" && <AiProviders />}
           {section === "agents" && <YamlFields kind="agents" />}
           {section === "macro" && <YamlFields kind="macro" />}
+          {section === "notify" && <Panel title="Notifications & sounds" meta="saved in this browser"><NotifySettings wide /></Panel>}
           {section === "yaml" && <Raw />}
         </div>
       </div>

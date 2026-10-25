@@ -8,6 +8,8 @@ import { Diverge, Empty, Icon, LabelBadge, Meter, PageHeader, Panel, QueryView, 
 import { Column, DataGrid, GridTools, useGridState } from "../components/DataGrid";
 import { RunButton } from "../components/RunButton";
 
+const EXPORT_TITLE = "Coverage";
+
 export function Coverage() {
   const q = useIntel();
   return (
@@ -52,14 +54,14 @@ function Grid({ verdicts, sub }: { verdicts: Verdict[]; sub: string }) {
   const columns: Column<Verdict>[] = [
     { key: "company", header: "Company", sticky: true, fixed: true, sort: (v) => v.company, render: (v) => <div className="co"><b>{shortName(v.company)}</b><small>{v.ticker}</small></div> },
     { key: "sector", header: "Sector", sort: (v) => v.sector, render: (v) => <span className="muted ellipsis" style={{ maxWidth: 190, display: "inline-block" }}>{v.sector}</span> },
-    { key: "label", header: "Label", sort: (v) => LABELS.indexOf(v.label as (typeof LABELS)[number]), render: (v) => <LabelBadge label={v.label} /> },
+    { key: "label", header: "Label", sort: (v) => LABELS.indexOf(v.label as (typeof LABELS)[number]), exportValue: (v) => v.label, render: (v) => <LabelBadge label={v.label} /> },
     { key: "price", header: "Price", align: "r", sort: (v) => v.price, render: (v) => <span className="mono">{money(v.price)}</span> },
     { key: "value", header: "HYBRID MODEL", align: "r", sort: (v) => v.expected_value, render: (v) => <span className="mono strong">{money(v.expected_value)}</span> },
     { key: "range", header: "Range · value · price", render: (v) => { const s = scale(v); return <RangeBar low={v.low ?? v.bear_value} high={v.high ?? v.bull_value} value={v.expected_value} price={v.price} min={s.min} max={s.max} />; } },
-    { key: "upside", header: "Upside", align: "r", sort: (v) => v.upside, render: (v) => <span className={`mono ${isNum(v.upside) ? (v.upside >= 0 ? "up" : "down") : ""}`}>{pct(v.upside, 1, true)}</span> },
+    { key: "upside", header: "Upside", align: "r", sort: (v) => v.upside, exportValue: (v) => pct(v.upside, 1, true), render: (v) => <span className={`mono ${isNum(v.upside) ? (v.upside >= 0 ? "up" : "down") : ""}`}>{pct(v.upside, 1, true)}</span> },
     { key: "buy", header: "Buy-below", align: "r", sort: (v) => v.buy_below, render: (v) => <span className="mono muted">{money(v.buy_below)}</span> },
-    { key: "conf", header: "Confidence", sort: (v) => v.confidence, render: (v) => <div className="row"><Meter value={v.confidence} width={52} /><span className="mono muted">{isNum(v.confidence) ? v.confidence.toFixed(0) : "—"}</span></div> },
-    { key: "score", header: "Research", sort: (v) => v.research_score, render: (v) => <div className="row"><Diverge value={v.research_score} width={60} /><span className="mono muted">{signed(v.research_score)}</span></div> },
+    { key: "conf", header: "Confidence", sort: (v) => v.confidence, exportValue: (v) => (isNum(v.confidence) ? v.confidence.toFixed(0) : ""), render: (v) => <div className="row"><Meter value={v.confidence} width={52} /><span className="mono muted">{isNum(v.confidence) ? v.confidence.toFixed(0) : "—"}</span></div> },
+    { key: "score", header: "Research", sort: (v) => v.research_score, exportValue: (v) => signed(v.research_score), render: (v) => <div className="row"><Diverge value={v.research_score} width={60} /><span className="mono muted">{signed(v.research_score)}</span></div> },
     { key: "flags", header: "Flags", align: "r", sort: (v) => v.red_flags?.length ?? 0, render: (v) => <span className={`mono ${(v.red_flags?.length ?? 0) ? "down" : "faint"}`}>{v.red_flags?.length ?? 0}</span> },
     { key: "regime", header: "Type", visible: false, sort: (v) => v.regime ?? "", render: (v) => <span className="muted">{v.regime ?? "—"}</span> },
     { key: "k", header: "Cost of equity", align: "r", visible: false, sort: (v) => v.cost_of_equity, render: (v) => <span className="mono">{pct(v.cost_of_equity, 1)}</span> },
@@ -95,7 +97,7 @@ function Grid({ verdicts, sub }: { verdicts: Verdict[]; sub: string }) {
             })}
             <span className="spacer" />
             <span className="faint xs">{rows.length} of {verdicts.length} · ↑↓ to move · Enter to open</span>
-            <GridTools columns={columns} state={state} />
+            <GridTools columns={columns} state={state} exportRows={rows} exportTitle={EXPORT_TITLE} />
           </div>
           <DataGrid rows={rows} columns={columns} rowKey={(v) => v.company} state={state} selected={selected}
             onSelect={setSel} onOpen={(k) => nav(`/coverage/${slug(k)}`)} empty="No company matches these filters." />

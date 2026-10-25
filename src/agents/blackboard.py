@@ -18,6 +18,7 @@ import datetime as dt
 import json
 import sqlite3
 import threading
+import time
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
@@ -45,6 +46,19 @@ CREATE TABLE IF NOT EXISTS llm_usage (
     day TEXT, provider TEXT, calls INTEGER, tokens INTEGER,
     PRIMARY KEY (day, provider)
 );
+CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, mid TEXT, run_id INTEGER, ts REAL,
+    channel TEXT, sender TEXT, recipient TEXT, company TEXT, kind TEXT,
+    text TEXT, data TEXT, refs TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_messages_run ON messages(run_id, id);
+CREATE INDEX IF NOT EXISTS ix_messages_channel ON messages(channel, id);
+CREATE TABLE IF NOT EXISTS agent_status (
+    run_id INTEGER, agent TEXT, payload TEXT, ts REAL, PRIMARY KEY (run_id, agent)
+);
+CREATE TABLE IF NOT EXISTS run_progress (
+    run_id INTEGER PRIMARY KEY, payload TEXT, ts REAL
+);
 """
 
 
@@ -56,7 +70,9 @@ class Blackboard:
     def __init__(self, path):
         self.path = str(path)
         self._lock = threading.Lock()
-        self.db = sqlite3.connect(self.path, check_same_thread=False)
+        self.db = sqlite3.connect(self.path, check_same_thread=False, timeout=15)
+        # WAL: the web app reads agent messages live while a run writes them
+        self.db.execute("PRAGMA journal_mode=WAL")
         self.db.executescript(SCHEMA)
         self.db.commit()
 
@@ -81,6 +97,23 @@ class Blackboard:
                 "UPDATE runs SET finished=?, llm_calls=?, note=? WHERE id=?",
                 (_now(), llm_calls, note, run_id),
             )
+            self.db.commit()
+
+    # ------------------------------------------------------------ comms
+    def save_comms(self, run_id, messages, status, progress):
+        """One transaction for a batch of agent messages and status changes."""
+        with self._lock:
+            if messages:
+                self.db.executemany(
+                    "INSERT INTO messages (mid, run_id, ts, channel, sender, recipient, company, kind, text, data, refs) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?)", messages)
+            now = time.time()
+            for agent, s in (status or {}).items():
+                self.db.execute("INSERT OR REPLACE INTO agent_status VALUES (?,?,?,?)",
+                                (run_id, agent, json.dumps(s, default=str), now))
+            if progress is not None:
+                self.db.execute("INSERT OR REPLACE INTO run_progress VALUES (?,?,?)",
+                                (run_id, json.dumps(progress, default=str), now))
             self.db.commit()
 
     # ------------------------------------------------------------ findings
@@ -219,5 +252,10 @@ class Blackboard:
             ).fetchone()
             if old:
                 self.db.execute("DELETE FROM findings WHERE run_id<=?", (old[0],))
+            # agent chat: the last 30 runs; the feed trace (fetch/share) only the last 5
+            last = self.db.execute("SELECT MAX(id) FROM runs").fetchone()[0] or 0
+            self.db.execute("DELETE FROM messages WHERE run_id<=? AND run_id>0", (last - 30,))
+            self.db.execute("DELETE FROM messages WHERE run_id<=? AND channel='trace'", (last - 5,))
+            self.db.execute("DELETE FROM agent_status WHERE run_id<=?", (last - 30,))
             self.db.commit()
             self.db.execute("VACUUM")

@@ -1,23 +1,29 @@
-import { Component, ReactNode, useEffect, useRef, useState } from "react";
+import { Component, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { UseQueryResult } from "@tanstack/react-query";
 import { LABEL_COLOR } from "../lib/labels";
 import { isNum, money } from "../lib/format";
+import { ExportButton } from "./ExportButton";
 
 export function Icon({ name, className = "", title, style }: { name: string; className?: string; title?: string; style?: React.CSSProperties }) {
   return <i className={`codicon codicon-${name} ${className}`} title={title} aria-hidden={title ? undefined : true} style={style} />;
 }
 
-export function Panel({ title, meta, tools, children, flush, className = "", style, id }: {
+/** A titled panel exports itself to PDF in one click (`noExport` to opt out). */
+export function Panel({ title, meta, tools, children, flush, className = "", style, id, exportTitle, noExport }: {
   title?: ReactNode; meta?: ReactNode; tools?: ReactNode; children: ReactNode; flush?: boolean; className?: string; style?: React.CSSProperties; id?: string;
+  exportTitle?: string; noExport?: boolean;
 }) {
+  const ref = useRef<HTMLElement>(null);
+  const name = exportTitle ?? (typeof title === "string" ? title : undefined);
+  const exp = !noExport && name;
   return (
-    <section className={`panel ${className}`} style={style} id={id}>
+    <section ref={ref} className={`panel ${className}`} style={style} id={id}>
       {(title || tools) && (
         <header className="panel-h">
           {title && <h3>{title}</h3>}
           {meta && <span className="meta">{meta}</span>}
-          {tools && <div className="tools">{tools}</div>}
+          {(tools || exp) && <div className="tools">{tools}{exp && <ExportButton title={name!} target={ref} className="ibtn pexp" />}</div>}
         </header>
       )}
       <div className={`panel-b ${flush ? "flush" : ""}`}>{children}</div>
@@ -26,8 +32,10 @@ export function Panel({ title, meta, tools, children, flush, className = "", sty
 }
 
 export function PageHeader({ crumbs, title, sub, actions }: { crumbs?: { label: string; to?: string }[]; title: ReactNode; sub?: ReactNode; actions?: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const name = typeof title === "string" ? title : "Page";
   return (
-    <div className="ph">
+    <div className="ph" ref={ref}>
       <div style={{ minWidth: 0 }}>
         {crumbs && (
           <div className="crumbs">
@@ -42,7 +50,10 @@ export function PageHeader({ crumbs, title, sub, actions }: { crumbs?: { label: 
         <h1>{title}</h1>
         {sub && <div className="sub">{sub}</div>}
       </div>
-      {actions && <div className="acts">{actions}</div>}
+      <div className="acts">
+        {actions}
+        <ExportButton title={name} target={() => (ref.current?.closest(".page") as HTMLElement | null) ?? null} label="PDF" className="btn sec" tip={`Export the whole ${name} page to PDF`} />
+      </div>
     </div>
   );
 }
@@ -176,10 +187,20 @@ export function Popover({ trigger, children, className = "menu" }: { trigger: (o
     window.addEventListener("keydown", k);
     return () => { document.removeEventListener("mousedown", h); window.removeEventListener("keydown", k); };
   }, [open]);
+  // keep the popup inside the window (narrow windows, buttons near an edge)
+  const pop = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = pop.current;
+    if (!open || !el) return;
+    el.style.translate = "";
+    const r = el.getBoundingClientRect();
+    const dx = r.left < 8 ? 8 - r.left : r.right > innerWidth - 8 ? Math.max(8 - r.left, innerWidth - 8 - r.right) : 0;
+    if (dx) el.style.translate = `${dx}px 0`;
+  }, [open]);
   return (
     <div ref={ref} style={{ position: "relative" }}>
       {trigger(open, () => setOpen((o) => !o))}
-      {open && <div className={className}>{children(() => setOpen(false))}</div>}
+      {open && <div ref={pop} className={className}>{children(() => setOpen(false))}</div>}
     </div>
   );
 }

@@ -295,3 +295,6 @@
 .tc-mh { font-family: var(--mono); font-size: 11px; color: var(--fg-3); padding: 5px 9px 4px; }
 .cpanel:fullscreen { background: var(--panel); border-radius: 0; overflow: auto; }
 .cpanel:fullscreen .tc { height: calc(100vh - 150px) !important; }
+.ev.ev-x { grid-template-columns: 28px minmax(0, 1fr) 22px; cursor: default; }
+.ev.ev-x .ibtn { opacity: 0; }
+.ev.ev-x:hover .ibtn { opacity: 1; }

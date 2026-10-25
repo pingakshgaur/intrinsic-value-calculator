@@ -220,3 +220,45 @@ def test_verdict_without_saved_calibration_is_rebuilt():
     assert again["label"] == want["label"]
     # without the rebuild the value would be uncalibrated - far off
     assert HM.evaluate(base, sig)["value"] != pytest.approx(want["value"], rel=0.02)
+
+
+def test_alerts_delete_and_clear():
+    L._init_db()
+    t = L.Tracker()
+    q = {"ticker": "BETA.NS", "last": 90.0, "chg_pct": -0.1, "session": "2026-10-23", "hm": {"buy_below": 95.0}}
+    t._alerts({"ticker": "BETA.NS", "name": "Beta", "alert_below": 92.0}, q, {**L.DEFAULTS})
+    got = L.alerts()
+    assert sorted(a["kind"] for a in got) == ["below", "buy_below", "move"]
+    L.delete_alert(got[0]["id"])
+    assert len(L.alerts()) == 2
+    with pytest.raises(LookupError):
+        L.delete_alert(got[0]["id"])
+    assert L.clear_alerts() == 2 and L.alerts() == []
+
+
+def test_autostart_settings_and_start(monkeypatch, isolated):
+    from server import autostart as A
+
+    monkeypatch.setattr(A, "SETTINGS", isolated / "live" / "autostart.json")
+    assert A.settings() == A.DEFAULTS and A.settings()["llm"] is False   # rule-based unless switched on
+    assert A.save({"mode": "full", "skip_recent": "5", "llm": 1})["mode"] == "full"
+    with pytest.raises(ValueError):
+        A.save({"skip_recent": "soon"})
+    posted = []
+    monkeypatch.setattr(A.agents_api, "post_system", lambda text: posted.append(text))
+
+    class Jobs:
+        def __init__(self, busy):
+            self.busy, self.started = busy, []
+        def active(self):
+            return object() if self.busy else None
+        def start(self, kind, opts):
+            self.started.append((kind, opts))
+            return type("J", (), {"id": "j1"})()
+
+    busy = Jobs(True)
+    assert A.start_now(busy) == (None, "another job is running") and not busy.started
+    free = Jobs(False)
+    job, why = A.start_now(free)
+    assert why == "started" and free.started == [("agents", {"quick": False, "no_llm": False, "auto": "startup"})]
+    assert posted and "full run" in posted[0]
