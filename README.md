@@ -2,9 +2,13 @@
 
 A research engine that estimates the **intrinsic value per share** of Indian listed companies across a range of financial years, using **four traditional valuation models** and **four machine-learning models**, and then scores each estimate against the price the share actually traded at shortly after the year closed.
 
-It ships with a command-line interface, a desktop GUI (ttkbootstrap), an offline mock dataset for testing, a fundamentals override sheet for filling data gaps by hand, and an analysis stage that produces accuracy metrics, HD charts and an HTML report.
+It ships with a command-line interface, a browser app (`python run.py --web`), an offline mock dataset for testing, a fundamentals override sheet for filling data gaps by hand, and an analysis stage that produces accuracy metrics, HD charts and an HTML report.
 
 > **Not investment advice.** This is a research instrument. Its output is only as good as the assumptions in [`src/config.py`](src/config.py), and every one of those assumptions can be argued with.
+
+> **New: browser workbench.** `python run.py --web` opens a React UI in VS Code's Dark 2026 theme. You can explore the research and every model's results, start runs and watch them live, and edit companies and settings. See [docs/WEB.md](docs/WEB.md).
+
+> **New: Market Intelligence Agents.** `python run.py --agents` runs a 23-agent research team: news, filings, forensics, ownership, macro and geopolitics, plus bull/bear review. The team turns its findings into an agent-adjusted intrinsic value, with every constant editable in [`agent_settings.yaml`](agent_settings.yaml). It can run on GitHub's cloud on a schedule, using free Groq / Gemini / NVIDIA API keys. See [docs/AGENTS.md](docs/AGENTS.md).
 
 ---
 
@@ -16,7 +20,7 @@ It ships with a command-line interface, a desktop GUI (ttkbootstrap), an offline
 4. [How a run works (pipeline)](#4-how-a-run-works-pipeline)
 5. [Input files](#5-input-files)
 6. [Command-line reference](#6-command-line-reference)
-7. [The desktop GUI](#7-the-desktop-gui)
+7. [The web app](#7-the-web-app)
 8. [Financial years and prices](#8-financial-years-and-prices)
 9. [Data layer](#9-data-layer)
 10. [Data-sufficiency check](#10-data-sufficiency-check)
@@ -70,7 +74,6 @@ For each company in your list and each financial year in the chosen window, the 
 ### Requirements
 
 - **Python 3.10+** (the code uses `X | None` type syntax; the local `.venv` runs Python 3.14).
-- **tkinter**, only for the GUI. It ships with the python.org Windows installer and cannot be installed from pip.
 
 ### Install
 
@@ -98,8 +101,8 @@ Dependencies ([`requirements.txt`](requirements.txt)):
 | `scikit-learn>=1.4` | Random Forest, MLP, StandardScaler |
 | `xgboost>=2.0` | XGBoost regressor |
 | `lightgbm>=4.3` | LightGBM regressor |
-| `ttkbootstrap>=1.10` | Themed desktop GUI |
-| `Pillow>=10.0` | *Optional:* scales chart images inside the GUI |
+| `fastapi>=0.110`, `uvicorn>=0.29` | The web app's local server |
+| `PyYAML>=6.0`, `feedparser>=6.0` | HYBRID MODEL / agent settings and news feeds |
 
 ### Run
 
@@ -110,10 +113,10 @@ python run.py
 This reads `data/companies.csv`, values FY2021 to FY2025, and writes everything to `output/`.
 
 ```bash
-python run.py --gui
+python run.py --web
 ```
 
-This opens the desktop app instead.
+This opens the web app in your browser instead (see §7).
 
 ```bash
 python run.py --offline
@@ -128,9 +131,11 @@ This runs against the built-in synthetic dataset, with no network access needed.
 ```
 intrinsic-value-calculator/
 │
-├── run.py                        Entry point (CLI + --gui). Sets up sys.path and logging,
+├── run.py                        Entry point (CLI + --web). Sets up sys.path and logging,
 │                                 parses flags, pushes them onto config, dispatches.
-├── gui.py                        Desktop application (ttkbootstrap). Three pages + settings.
+├── agent_settings.yaml           Every HYBRID MODEL constant and research-agent setting.
+├── server/                       Local web API (FastAPI) for the browser app.
+├── web/                          React front end; web/dist is the built app.
 ├── yf_source.py                  Yahoo Finance extraction layer (statements, prices, benchmark,
 │                                 per-field diagnosis). Lives at the root, imported flat.
 ├── requirements.txt
@@ -188,7 +193,7 @@ intrinsic-value-calculator/
 
 ### Import convention
 
-Every module is imported **flat** (`import config`, never `import src.config`). [`run.py`](run.py), [`gui.py`](gui.py) and [`tools/analyze.py`](tools/analyze.py) each add `src/`, `src/sources/`, `src/models/`, `src/io_layer/` and `tools/` to `sys.path` at startup. Mixing the two import styles would load two copies of `config`, and CLI flags would stop taking effect. [`.vscode/settings.json`](.vscode/settings.json) mirrors these paths so the editor resolves the imports.
+Every module is imported **flat** (`import config`, never `import src.config`). [`run.py`](run.py), [`server/__init__.py`](server/__init__.py) and [`tools/analyze.py`](tools/analyze.py) each add `src/`, `src/sources/`, `src/models/`, `src/io_layer/` and `tools/` to `sys.path` at startup. Mixing the two import styles would load two copies of `config`, and CLI flags would stop taking effect. [`.vscode/settings.json`](.vscode/settings.json) mirrors these paths so the editor resolves the imports.
 
 ---
 
@@ -295,7 +300,7 @@ python run.py [options]
 
 | Flag | Effect |
 |---|---|
-| `--gui` | Open the desktop app |
+| `--web` | Open the web app (`--port`, `--no-browser`) |
 | `--input PATH` | Companies CSV (default `data/companies.csv`; if that is missing, you are prompted in the terminal) |
 | `--offline` | Use the synthetic mock dataset; no network |
 | `--start-year FY` / `--end-year FY` | Financial-year window, named by the year the FY **ends** (2021 = 2020-21). Default 2021–2025 |
@@ -303,7 +308,7 @@ python run.py [options]
 | `--no-ml` | Disable the whole ML stage |
 | `--ml-split {expanding,loyo}` | ML fold strategy (config default is `hybrid`) |
 | `--train-universe PATH` | Extra CSV of companies used **only** to train the ML models |
-| `--train-universe auto` | Fetch training companies one by one until the Hybrid is confident (§16, Auto-train). Tuned with `--auto-target`, `--auto-max`, `--auto-sectors`, `--auto-min-listed-years`, `--auto-batch`, `--auto-patience`, `--auto-sector-rank`, `--auto-include-financials`, `--auto-no-cache` |
+| `--train-universe auto` | Fetch training companies one by one until the Ensemble is confident (§16, Auto-train). Tuned with `--auto-target`, `--auto-max`, `--auto-sectors`, `--auto-min-listed-years`, `--auto-batch`, `--auto-patience`, `--auto-sector-rank`, `--auto-include-financials`, `--auto-no-cache` |
 | `--benchmark-basis {may1,mean,close}` | Benchmark price basis; `mean` and `close` are robustness re-runs |
 | `--mean-basis {trading,calendar}` | How the in-FY mean (anchor) price is averaged |
 | `--fy-labels {range,int}` | Financial Year column shows `2023-24` or `2024` |
@@ -334,26 +339,28 @@ python run.py --benchmark-basis mean --no-ml
 
 ---
 
-## 7. The desktop GUI
+## 7. The web app
 
 ```bash
-python run.py --gui
+python run.py --web
 ```
 
-You can also run `python gui.py` directly. The GUI is built on ttkbootstrap with a light/dark palette defined in `gui.py` itself.
+This opens `http://127.0.0.1:8765` in your browser. The server listens on this
+computer only, and every run is a separate `python run.py` process, so a
+crash or a closed tab cannot take the app down. The app replaces the old
+Tkinter desktop GUI, and every one of that GUI's features is in it:
 
-**Three pages that follow the workflow:**
+| Page | What it does |
+|---|---|
+| **Overview** | Headline numbers, an opportunity map of every researched company, upside vs confidence, what needs attention, model accuracy |
+| **Research** | Every company's research verdict; each company has its own page with the six lenses, the valuation build-up, the agents' evidence and bull vs bear cases |
+| **Hybrid Lab** | Change any HYBRID MODEL constant and see the value, range, lenses and build-up respond live, for one company or all of them, then save |
+| **Models** | Every model by year for any company, the HYBRID MODEL's band and lens weights, the Ensemble, accuracy, the chart gallery, companies left out, downloads |
+| **Run Center** | Tick companies in or out for one run, choose the years ("Last 5 / 10 years"), calculate, check data, research, or auto-train with live controls (pause, skip, skip sector, retrain, target ±5, finish) |
+| **Companies** | Edit `data/companies.csv` |
+| **Settings** | The old GUI's data-quality, price, model, report and file settings; AI providers with a live model picker and a Test button; agent weights; macro inputs; the raw settings file |
 
-1. **Load your list:** browse to a CSV, tick the companies you want, and choose the year window.
-2. **Run it:** *Calculate intrinsic values* runs the full pipeline. *Just check my data* runs the sufficiency screen only. A **Stop** button cancels the run. Progress is shown in plain English, and *Show the technical log* reveals the raw console output.
-3. **Results:** opens automatically when the run finishes. It has four tabs: *What each company looks worth*, *Companies we could not value*, *Full detail* and *Charts*. There are also buttons to open the Excel workbook or the output folder.
-
-The **Settings** (gear icon) pages cover data quality, prices, models, report and files. They map onto the same `config` values as the CLI flags. The **ⓘ** icon opens a glossary.
-
-Implementation notes:
-- The pipeline runs on a **worker thread**. `stdout` is redirected into a queue and drained by a timer on the main thread, so only the main thread touches widgets.
-- Cancellation raises `RunCancelled` (a `BaseException`) from the redirected `write()`. It is a `BaseException` so that the pipeline's `except Exception` guards cannot swallow it.
-- matplotlib is pinned to the `Agg` backend because charts render on the worker thread.
+[docs/WEB.md](docs/WEB.md) has the details.
 
 ---
 
@@ -527,13 +534,13 @@ This model works for **banks** and **loss-makers**: a below-par ROE gives a valu
 
 **Adjusted beta** ([`capital.py`](src/models/capital.py)): `β_adj = 0.67 × β_company + 0.33 × β_sector-median`. When Yahoo has no beta for the company, the sector median is used. The original DCF keeps the raw beta so that the baseline stays unchanged.
 
-### 12.4c Hybrid: [`model_hybrid.py`](src/models/model_hybrid.py)
+### 12.4c Ensemble (formerly "Hybrid"): [`model_hybrid.py`](src/models/model_hybrid.py)
 
 ```
-Hybrid = exp( Σ_k w_k · (ln V_k − c_k) )     over the components k that apply to this company-year
+Ensemble = exp( Σ_k w_k · (ln V_k − c_k) )   over the components k that apply to this company-year
 ```
 
-The Hybrid runs **last**, over the whole grid, and has four layers:
+The Ensemble runs after the single models, over the whole grid, and has four layers:
 
 1. **Regime gate.** Each company-year is classed as `lender`, `loss_maker`, `young` or `mature`. `HYBRID_REGIME_WEIGHTS` sets which components apply; a 0 removes a component outright (for example, no DCF or EV/EBITDA for a lender).
 
@@ -546,11 +553,15 @@ The Hybrid runs **last**, over the whole grid, and has four layers:
 
 3. **Calibration and learned weights, all point-in-time.** For each component, the errors `ln(V/benchmark)` from earlier years in the same sector are used (falling back to the whole sample). Each component is shifted by its median miss `c_k`, shrunk by evidence `n/(n+10)`. Its weight is the inverse squared remaining error relative to the other components, also shrunk toward equal. That weight is then multiplied by the regime weight and by 0.75 if the component rests on estimated inputs. Components more than 3× from the weighted median are dropped as outliers.
 
-4. **Uncertainty.** A correlated Monte Carlo over each component's historical error, plus the disagreement between models, gives a **P10–P90 range** and a **confidence score from 0 to 100** (High ≥ 60, Medium ≥ 35). The score is a probability: the simulated chance that the market price lands within ±20% (`HYBRID_CONF_TOLERANCE`) of the Hybrid value, discounted when components are missing or rest on estimated inputs. Each run prints a **calibration check** comparing the predicted percentage with the share that actually landed within 20%.
+4. **Uncertainty.** A correlated Monte Carlo over each component's historical error, plus the disagreement between models, gives a **P10–P90 range** and a **confidence score from 0 to 100** (High ≥ 60, Medium ≥ 35). The score is a probability: the simulated chance that the market price lands within ±20% (`HYBRID_CONF_TOLERANCE`) of the Ensemble value, discounted when components are missing or rest on estimated inputs. Each run prints a **calibration check** comparing the predicted percentage with the share that actually landed within 20%.
 
-Every row's regime, component values, calibrations, weights, range and confidence are written to `output/Hybrid_Detail.csv`. Set `HYBRID_BIAS_CORRECT = False` to see the uncalibrated ensemble.
+Every row's regime, component values, calibrations, weights, range and confidence are written to `output/Ensemble_Detail.csv`. Set `HYBRID_BIAS_CORRECT = False` to see the uncalibrated ensemble.
 
-**Limits:** the first year of any window has no error history, so it falls back to the regime-weighted equal mix. The weights reward closeness to the 1-May price, so the Hybrid inherits the study's own definition of "accurate".
+**Limits:** the first year of any window has no error history, so it falls back to the regime-weighted equal mix. The weights reward closeness to the 1-May price, so the Ensemble inherits the study's own definition of "accurate".
+
+### 12.4d HYBRID MODEL: [`hybrid_model.py`](src/hybrid_model.py)
+
+The headline value. Six lenses (cash flow, earnings power, asset, market, conservative, learning) are each calibrated against their own earlier misses. They are blended by company type, with a growth-credibility gate that only pays for growth the moat earns. The result is then adjusted for quality and governance, and run through bull / base / bear scenarios. It runs in the valuation report for every company-year (from the accounts alone, point-in-time) and in the research runs (with the agents' signals). Every constant is in `agent_settings.yaml -> hybrid_model` and can be tuned live in the web app's Hybrid Lab. Full method: [docs/HYBRID_MODEL.md](docs/HYBRID_MODEL.md). Per-row detail: `output/Hybrid_Model_Detail.csv`.
 
 ### 12.5 Machine-learning models: [`ml_common.py`](src/models/ml_common.py)
 
@@ -729,7 +740,7 @@ python run.py --train-universe auto
 python run.py --train-universe auto --auto-max 150 --auto-target 50 --auto-batch 5
 ```
 
-This grows the ML training set **one company at a time** until the Hybrid is confident enough, then values your list as normal. In the GUI, tick **Auto-train** on the Run page.
+This grows the ML training set **one company at a time** until the Hybrid is confident enough, then values your list as normal. In the web app, switch on **Auto-train** in the Run Center.
 
 1. **Candidates:** the NIFTY Total Market (~750 companies), filtered as follows:
    - **Listing age:** only companies whose official NSE listing date (`EQUITY_L.csv`) is at least `--auto-min-listed-years` ago (default 10).
@@ -737,7 +748,7 @@ This grows the ML training set **one company at a time** until the Hybrid is con
    - **Duplicates:** companies already in your list are left out.
 2. **Sectors:** the top `--auto-sectors` (default 10). With `--auto-sector-rank performance` (the default), sectors are ranked by median share-price return over the 5 years **before** the valuation window, so the ranking uses no hindsight. With `breadth`, they're ranked by the number of long-listed companies.
 3. **Order:** companies are drawn **at random** within each sector, and the sectors take turns, so stopping early still leaves a balanced sample. Every run prints its random seed, and `--auto-seed N` replays exactly the same draw. Each learned company gets its own line on screen: ticker, sector, cap, listing year, and years of accounts and prices. Fetched companies are cached in `.cache/train_cache/` for `AUTO_CACHE_DAYS` (7), so re-runs are fast.
-4. **Retraining:** every `--auto-batch` companies (default 10), the ML models are retrained and the Hybrid is re-scored on your companies. The **meter** shows the Hybrid's average confidence, meaning its predicted chance of landing within ±20% of the real price.
+4. **Retraining:** every `--auto-batch` companies (default 10), the ML models are retrained and the Ensemble is re-scored on your companies. The **meter** shows the Ensemble's average confidence, meaning its predicted chance of landing within ±20% of the real price.
 5. **Stopping:** it stops at the first of these:
    - the confidence target is reached (`--auto-target`, default 60 = "High")
    - *(optional, off by default)* `--auto-patience N` retrains in a row each gain less than 0.5 points
@@ -745,7 +756,7 @@ This grows the ML training set **one company at a time** until the Hybrid is con
    - the candidates run out
    - you stop it
 
-**Controls.** In a Windows terminal, use these keys: **P** pause/resume, **S** skip the current company, **X** skip the current sector, **R** retrain now, **+ / −** change the target by 5, **Q** stop and finish with what has been learned (Ctrl+C does the same). The GUI has the same controls as buttons.
+**Controls.** In a Windows terminal, use these keys: **P** pause/resume, **S** skip the current company, **X** skip the current sector, **R** retrain now, **+ / −** change the target by 5, **Q** stop and finish with what has been learned (Ctrl+C does the same). The web app's Run Center has the same controls as buttons.
 
 **Outputs:**
 - `data/auto_training_universe.csv`: the companies learned, in `companies.csv` format. Reuse it with `--train-universe data/auto_training_universe.csv`.
@@ -804,7 +815,7 @@ This screens a candidate universe on fundamentals and writes the companies that 
 
 ## 17. Configuration reference
 
-All settings live in [`src/config.py`](src/config.py). CLI flags and the GUI write to the same values at runtime.
+All settings live in [`src/config.py`](src/config.py). CLI flags and the web app's run settings write to the same values at runtime.
 
 ### Financial years and prices
 
@@ -877,7 +888,6 @@ All settings live in [`src/config.py`](src/config.py). CLI flags and the GUI wri
 | `EXCHANGE_SUFFIX` / `CURRENCY_SYMBOL` | `".NS"` / `"₹"` |
 | `REQUEST_PAUSE` | 0.6 s between network calls |
 
-GUI settings: `GUI_LIGHT_THEMES`, `GUI_DARK_THEMES`, `GUI_WINDOW_SIZE` (`1360x880`), `GUI_MIN_SIZE`, `GUI_START_IN_DARK`, `GUI_SCROLL_STEP`.
 
 ---
 
@@ -932,8 +942,8 @@ The mock benchmark date is 2 May, which exercises the "nearest session" path. A 
 | A whole sector shows `NO PEER BENCHMARK` | Fewer than 2 valid peers. Add companies to that sector. |
 | ML cells show `INSUFFICIENT TRAINING DATA` | Too few labelled rows per fold. Use `--train-universe` with a larger list. |
 | `LIBRARY NOT INSTALLED` | `pip install xgboost lightgbm scikit-learn` |
-| `GUI unavailable: ...` | `pip install ttkbootstrap`. If `tkinter` itself is missing, repair Python with "tcl/tk and IDLE" ticked. |
-| GUI charts are not scaled | Install `Pillow` (optional) |
+| `Web UI unavailable: ...` | `pip install fastapi uvicorn` |
+| The browser shows "The web UI is not built yet" | `cd web`, `npm install`, `npm run build` |
 | The NSE fallback never returns anything | NSE blocks VPN and datacentre IPs. Run from a home connection. |
 | Yahoo rate-limit errors | Raise `REQUEST_PAUSE` to 1.5–2.0 |
 | ₹ shows as `â‚¹` in Excel | Open the `.xlsx`, or import the CSV as UTF-8 |
@@ -954,7 +964,7 @@ For any crash, the full traceback is in `output/run_log.txt`.
 3. Add `"<key>": True` to `config.MODELS_ENABLED`.
 4. Add the call in the valuation loop in [`pipeline.py`](src/pipeline.py) (`if "<key>" in enabled: row["<key>"] = guard(...)`).
 
-The exporter, analyzer and GUI read the registry, so they pick up the new model automatically.
+The exporter, analyzer and web app read the registry, so they pick up the new model automatically.
 
 ### Add a machine-learning model
 

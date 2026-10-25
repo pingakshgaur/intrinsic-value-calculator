@@ -103,7 +103,8 @@ MODEL_SPECS: list[tuple[str, str]] = [
     ("Random Forest", "(Random Forest) Intrinsic Value"),
     ("LightGBM", "(LightGBM) Intrinsic Value"),
     ("MLP Neural Network", "(MLP Neural Network) Intrinsic Value"),
-    ("Hybrid", "(Hybrid) Intrinsic Value"),
+    ("Ensemble", "(Ensemble) Intrinsic Value"),
+    ("HYBRID MODEL", "(HYBRID MODEL) Intrinsic Value"),
 ]
 
 MODEL_NAMES = [m for m, _ in MODEL_SPECS]
@@ -123,7 +124,8 @@ COLOURS: dict[str, str] = {
     "Random Forest": "#9467bd",
     "LightGBM": "#17becf",
     "Residual Income": "#bcbd22",
-    "Hybrid": "#c0392b",
+    "Ensemble": "#c0392b",
+    "HYBRID MODEL": "#6a1b9a",
 }
 
 # Every model in MODEL_SPECS needs an entry here. Graham and MLP were missing,
@@ -139,7 +141,8 @@ MARKERS: dict[str, str] = {
     "Random Forest": "P",
     "LightGBM": "X",
     "MLP Neural Network": "<",
-    "Hybrid": "*",
+    "Ensemble": "*",
+    "HYBRID MODEL": "P",
 }
 
 plt.rcParams.update(

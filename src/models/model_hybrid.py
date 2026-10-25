@@ -1,5 +1,5 @@
 """
-Hybrid intrinsic value - an applicability-gated, error-weighted ensemble with
+Ensemble intrinsic value (formerly 'Hybrid') - an applicability-gated, error-weighted ensemble with
 an uncertainty band.
 
     Hybrid = exp( SUM_k  w_k x ln(V_k) )        over the components k that apply
@@ -127,9 +127,9 @@ from fy_utils import num, clamp, fy_label
 
 log = logging.getLogger(__name__)
 
-KEY = "hybrid"
-NAME = "Hybrid"
-COLUMN = "(Hybrid) Intrinsic Value"
+KEY = "ensemble"
+NAME = "Ensemble"
+COLUMN = "(Ensemble) Intrinsic Value"
 
 COMPONENTS = ["dcf_plus", "ri", "pe_reg", "ev_reg", "graham", "ml"]
 COMPONENT_NAMES = {
@@ -141,7 +141,7 @@ COMPONENT_NAMES = {
     "ml": "ML consensus",
 }
 
-DETAIL_FILE = "Hybrid_Detail.csv"
+DETAIL_FILE = "Ensemble_Detail.csv"
 
 
 # =============================================================== regime gate
@@ -657,7 +657,8 @@ def confidence_label(c):
 
 # ================================================================== driver
 def attach(
-    rows, universe, peer_universe, pe_table, ev_table, ml_store, failures, write=True
+    rows, universe, peer_universe, pe_table, ev_table, ml_store, failures, write=True,
+    set_value=True,
 ):
     """
     Compute row["hybrid"] for every report row, in place, and (when write is
@@ -698,11 +699,18 @@ def attach(
     for row in rows:
         name, fy = row["company"], row["fy"]
         if name in failures:
-            row[KEY] = failures[name]
+            if set_value:
+                row[KEY] = failures[name]
             continue
         t = table.get((name, fy))
         if t is None:
-            row[KEY] = Result.bad(R.NOT_COMPUTABLE, "company was not in the universe")
+            if set_value:
+                row[KEY] = Result.bad(R.NOT_COMPUTABLE, "company was not in the universe")
+            continue
+        # The HYBRID MODEL reads the same components; keep them on the row
+        # (underscore keys are never exported).
+        row["_comps"], row["_regime"] = t["comps"], t["regime"]
+        if not set_value:
             continue
         try:
             b = blend(t["comps"], t["regime"], t["sector"], fy, hist, rng)
@@ -731,7 +739,7 @@ def attach(
             row[KEY] = Result.good(b["value"], method=method)
         detail.append(_detail_row(name, t, fy, row, b))
 
-    if write:
+    if write and set_value:
         path = _write_detail(detail)
         _print_summary(rows, detail, path)
     return detail
@@ -803,13 +811,13 @@ def _write_detail(detail):
 
 def _print_summary(rows, detail, path):
     valued = [d for d in detail if d["Hybrid Value"] != ""]
-    print(f"\n[hybrid] valued {len(valued)}/{len(rows)} company-years")
+    print(f"\n[ensemble] valued {len(valued)}/{len(rows)} company-years")
     if valued:
         regimes = {}
         for d in detail:
             regimes[d["Regime"]] = regimes.get(d["Regime"], 0) + 1
         print(
-            "[hybrid] regimes: "
+            "[ensemble] regimes: "
             + ", ".join(f"{k} {v}" for k, v in sorted(regimes.items()))
         )
         labels = {}
@@ -817,14 +825,14 @@ def _print_summary(rows, detail, path):
             labels[d["Confidence label"]] = labels.get(d["Confidence label"], 0) + 1
         sc = scorecard(detail)
         print(
-            f"[hybrid] confidence: average {sc['confidence']:.0f}/100  ("
+            f"[ensemble] confidence: average {sc['confidence']:.0f}/100  ("
             + ", ".join(f"{k} {labels.get(k, 0)}" for k in ("High", "Medium", "Low"))
             + ")"
         )
         print(
-            f"[hybrid] calibration check: predicted {sc['confidence']:.0f}% within "
+            f"[ensemble] calibration check: predicted {sc['confidence']:.0f}% within "
             f"+/-{getattr(config, 'HYBRID_CONF_TOLERANCE', 0.20):.0%}, actually "
             f"{sc['hit20']:.0f}% ({sc['n_scored']} scored rows)"
         )
     if path:
-        print(f"[hybrid] weights, ranges and components -> {path}")
+        print(f"[ensemble] weights, ranges and components -> {path}")

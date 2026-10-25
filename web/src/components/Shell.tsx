@@ -1,0 +1,233 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useIntel, useJobs, useMarket, useStatus } from "../lib/hooks";
+import { ago, isNum, num, pct, shortName, slug } from "../lib/format";
+import { CommandPalette } from "./CommandPalette";
+import { RunMonitor } from "./JobLog";
+import { Drawer, ErrorBoundary, Icon, Popover } from "./ui";
+import { AppContext, Toast } from "./workbenchContext";
+
+const NAV = [
+  { group: "Analysis", items: [
+    { to: "/", icon: "pulse", label: "Command Center", end: true },
+    { to: "/coverage", icon: "table", label: "Coverage" },
+    { to: "/studio", icon: "beaker", label: "HYBRID MODEL Studio", badge: "NEW" },
+  ] },
+  { group: "Models & data", items: [
+    { to: "/performance", icon: "graph-line", label: "Model Performance" },
+    { to: "/universe", icon: "database", label: "Universe" },
+  ] },
+  { group: "Operations", items: [
+    { to: "/operations", icon: "server-process", label: "Operations" },
+    { to: "/configuration", icon: "settings", label: "Configuration" },
+  ] },
+];
+
+const TAPE: Record<string, { k: string; fmt: (v: number) => string }> = {
+  nifty: { k: "NIFTY 50", fmt: (v) => num(v, 0) },
+  india_vix: { k: "INDIA VIX", fmt: (v) => num(v, 2) },
+  usd_inr: { k: "USD/INR", fmt: (v) => num(v, 2) },
+  brent: { k: "BRENT", fmt: (v) => "$" + num(v, 1) },
+  us_10y: { k: "US 10Y", fmt: (v) => num(v, 2) + "%" },
+  gold: { k: "GOLD", fmt: (v) => "$" + num(v, 0) },
+};
+
+export const JOB_TITLE: Record<string, string> = { agents: "Research", valuation: "Valuation report", screen: "Data check", llm_check: "AI key check" };
+export function jobTitle(kind: string, opts: Record<string, unknown> | null | undefined) {
+  if (kind === "agents") return opts?.quick ? "Quick sweep" : "Full research";
+  if (kind === "valuation" && opts?.auto_train) return "Valuation + auto-train";
+  return JOB_TITLE[kind] ?? kind;
+}
+
+const GLOSSARY: [string, string][] = [
+  ["Intrinsic value", "What the business is estimated to be worth from its published accounts, as opposed to what people are paying for the shares today. A gap means either the market knows something the accounts do not, or the shares are mispriced — the app does not say which."],
+  ["HYBRID MODEL", "The headline value: six lenses (cash flow, earnings power, asset, market, conservative, learning), each calibrated against its own earlier misses, blended by company type, adjusted for quality and governance, then run through bull, base and bear scenarios. Every constant is editable in the Studio."],
+  ["Growth-credibility gate", "Growth is only paid for when returns on capital earn it. If too much of the cash-flow lens comes from future growth rather than today's earning power, the lens is cut back; a wider moat allows more."],
+  ["Calibration", "Each lens's typical miss against the 1-May price in earlier years is removed, and lenses that have priced well count for more. A year never learns from itself."],
+  ["Confidence", "The modelled chance the price lands within 20% of the value, from the lenses' disagreement — blended, after research, with evidence coverage, validation and the team's agreement."],
+  ["Buy-below", "The HYBRID MODEL value less a margin of safety that widens as confidence falls and red flags rise. A research reference point, not an instruction."],
+  ["Ensemble", "The calculator's earlier blend (formerly “Hybrid”): improved versions of every model weighted by past accuracy. Its components feed the HYBRID MODEL."],
+  ["Comparison price", "Everything is scored against the close nearest 1 May after each financial year — a month after the accounts appear — so nothing can peek at information it should not have had."],
+  ["The asterisk", "At least one input was estimated from the company's own history or its sector rather than read from a published statement."],
+  ["A word of caution", "Every number here is an estimate from past accounts and public information. Methods disagree for good reasons and can all be wrong at once. Treat the output as a starting point for your own research, not a recommendation."],
+];
+
+export function Shell() {
+  const nav = useNavigate();
+  const loc = useLocation();
+  const status = useStatus();
+  const intel = useIntel();
+  const market = useMarket();
+  const active = status.data?.active_job ?? null;
+  const jobs = useJobs(!!active);
+  const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem("frame.collapsed") === "1"; } catch { return false; } });
+  const [runDrawer, setRunDrawer] = useState<string | null | false>(false);
+  const [glossary, setGlossary] = useState(false);
+  const [palette, setPalette] = useState(false);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const toast = useCallback((text: string, tone: Toast["tone"] = "info") => {
+    const id = Date.now() + Math.random();
+    setToasts((t) => [...t, { id, text, tone }]);
+    window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 5000);
+  }, []);
+  const showJob = useCallback((id: string) => setRunDrawer(id), []);
+  const openHelp = useCallback(() => setGlossary(true), []);
+  const ctx = useMemo(() => ({ toast, showJob, openHelp }), [toast, showJob, openHelp]);
+
+  useEffect(() => { try { localStorage.setItem("frame.collapsed", collapsed ? "1" : "0"); } catch { /* ignore */ } }, [collapsed]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      const typing = t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette(true); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "\\") { e.preventDefault(); setCollapsed((c) => !c); }
+      else if (!typing && e.key === "?") setGlossary(true);
+      else if (e.altKey && /^[1-7]$/.test(e.key)) { e.preventDefault(); nav(NAV.flatMap((g) => g.items)[Number(e.key) - 1].to); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [nav]);
+
+  const verdicts = intel.data?.verdicts ?? [];
+  const alerts = useMemo(() => [
+    ...verdicts.flatMap((v) => (v.red_flags ?? []).map((f) => ({ icon: "warning", tone: "down", v, text: f }))),
+    ...verdicts.flatMap((v) => (v.changes ?? []).filter((c) => !c.startsWith("first")).map((c) => ({ icon: c.startsWith("label") ? "tag" : "pulse", tone: "info", v, text: c }))),
+  ], [verdicts]);
+  const keys = status.data?.keys ?? {};
+  const llm = ["GROQ_API_KEY", "GEMINI_API_KEY", "NVIDIA_API_KEY"].filter((k) => keys[k]).length;
+  const lastJob = jobs.data?.[0];
+  const offline = status.isError;
+
+  return (
+    <AppContext.Provider value={ctx}>
+      <div className={`frame ${collapsed ? "collapsed" : ""}`}>
+        <aside className="sidebar">
+          <div className="sb-brand">
+            <span className="sb-logo"><i /></span>
+            <span className="sb-name">INTVAL</span>
+            <span className="sb-env">NSE · INR</span>
+          </div>
+          <nav className="sb-nav" aria-label="Main">
+            {NAV.map((g) => (
+              <div className="sb-group" key={g.group}>
+                <div className="label">{g.group}</div>
+                {g.items.map((it) => (
+                  <NavLink key={it.to} to={it.to} end={it.end} className={({ isActive }) => `sb-item ${isActive ? "active" : ""}`} title={it.label}>
+                    <Icon name={it.icon} />
+                    <span>{it.label}</span>
+                    {it.to === "/coverage" && verdicts.length > 0 && <span className="count">{verdicts.length}</span>}
+                    {"badge" in it && it.badge && <span className="tagnew">{it.badge}</span>}
+                  </NavLink>
+                ))}
+              </div>
+            ))}
+          </nav>
+          <div className="sb-foot">
+            <div className="r"><span className={`dot ${offline ? "bad" : "ok"}`} />Server<b>{offline ? "offline" : "local"}</b></div>
+            <div className="r"><span className={`dot ${llm ? "ok" : ""}`} />AI providers<b>{llm}/3</b></div>
+            <div className="r"><span className="dot" />Report<b>{ago(status.data?.valuation_updated)}</b></div>
+            <div className="r"><span className="dot" />Research<b>{ago(status.data?.intel_updated)}</b></div>
+            <button className="btn ghost xs" style={{ justifyContent: "flex-start", marginTop: 4, paddingLeft: 0 }} onClick={() => setCollapsed(true)}>
+              <Icon name="layout-sidebar-left-off" className="sm" /> Collapse <kbd style={{ marginLeft: "auto" }}>Ctrl \</kbd>
+            </button>
+          </div>
+          {collapsed && <button className="ibtn" style={{ margin: "0 auto 12px" }} title="Expand (Ctrl \)" onClick={() => setCollapsed(false)}><Icon name="layout-sidebar-left" /></button>}
+        </aside>
+
+        <header className="topbar">
+          <div className="tape" aria-label="Market">
+            {(market.data ?? []).map((t) => {
+              const m = TAPE[t.name];
+              if (!m || !isNum(t.last)) return null;
+              const d = t.chg_1m;
+              return (
+                <div className="tape-item" key={t.name} title={`${t.ticker} · ${t.date} · 1M ${pct(t.chg_1m, 1, true)} · 1Y ${pct(t.chg_1y, 1, true)}`}>
+                  <span className="k">{m.k}</span>
+                  <span className="v">{m.fmt(t.last)}</span>
+                  {isNum(d) && <span className={`d ${d >= 0 ? "up" : "down"}`}>{d >= 0 ? "▲" : "▼"}{pct(Math.abs(d), 1)}</span>}
+                </div>
+              );
+            })}
+            {market.isLoading && <div className="tape-item"><span className="k">MARKET</span><span className="faint">loading…</span></div>}
+            {market.data && !market.data.length && <div className="tape-item"><span className="k">MARKET</span><span className="faint">data unavailable</span></div>}
+            {(market.data?.length ?? 0) > 0 && <div className="tape-item" style={{ borderRight: 0 }}><span className="faint xs">1-month change</span></div>}
+          </div>
+          <div className="top-tools">
+            <button className="cmdk" onClick={() => setPalette(true)}><Icon name="search" className="sm" /><span>Search companies, actions…</span><kbd>Ctrl K</kbd></button>
+            <Popover className="pop" trigger={(open, toggle) => (
+              <button className={`tool ${open ? "on" : ""}`} title="Alerts" onClick={toggle}>
+                <Icon name="bell" />{alerts.length > 0 && <span className="pip">{alerts.length > 99 ? "99+" : alerts.length}</span>}
+              </button>
+            )}>
+              {(close) => (
+                <>
+                  <div className="pop-h">Alerts <span className="faint xs" style={{ marginLeft: 8 }}>from the latest research run</span></div>
+                  {alerts.length === 0 ? <div className="empty" style={{ padding: 28 }}><Icon name="pass" className="up" /><span className="small">No red flags or changes.</span></div> : (
+                    <div className="feed">
+                      {alerts.slice(0, 40).map((a, i) => (
+                        <div key={i} className="ev" onClick={() => { close(); nav(`/coverage/${slug(a.v.company)}`); }}>
+                          <span className="ic"><Icon name={a.icon} className={`sm ${a.tone}`} /></span>
+                          <div><div className="t">{shortName(a.v.company)}</div><div className="d">{a.text}</div></div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </Popover>
+            <button className="tool" title="Glossary (?)" onClick={() => setGlossary(true)}><Icon name="question" /></button>
+            <button className={`runchip ${active ? "busy" : ""}`} onClick={() => setRunDrawer(active?.id ?? lastJob?.id ?? null)} title="Runs">
+              <span className={`dot ${active ? "busy" : lastJob?.status === "failed" ? "bad" : lastJob ? "ok" : ""}`} />
+              {active ? <>{jobTitle(active.kind, active.opts)}<span className="bar"><span className="indet" /></span></> : lastJob ? `Last run ${ago(lastJob.finished ?? lastJob.started)}` : "No runs"}
+            </button>
+          </div>
+        </header>
+
+        <main className="main">
+          {offline && (
+            <div className="note err" style={{ borderRadius: 0, borderLeft: 0, borderRight: 0, borderTop: 0 }}>
+              <Icon name="debug-disconnect" /><div>The local server is not answering. Start it with <span className="mono">python run.py --web</span>; this page reconnects by itself.</div>
+            </div>
+          )}
+          <ErrorBoundary resetKey={loc.pathname}><Outlet /></ErrorBoundary>
+        </main>
+      </div>
+
+      {runDrawer !== false && (
+        <Drawer title="Runs" icon="server-process" onClose={() => setRunDrawer(false)}
+          actions={<button className="btn sm sec" onClick={() => { setRunDrawer(false); nav(`/operations${runDrawer ? `?job=${runDrawer}` : ""}`); }}>Open Operations</button>}>
+          <RunMonitor jobId={runDrawer} compact />
+          {(jobs.data?.length ?? 0) > 0 && (
+            <div className="col" style={{ gap: 2 }}>
+              <div className="label" style={{ marginBottom: 4 }}>Recent</div>
+              {jobs.data!.slice(0, 8).map((j) => (
+                <button key={j.id} className={`btn ghost sm ${j.id === runDrawer ? "sec" : ""}`} style={{ justifyContent: "flex-start" }} onClick={() => setRunDrawer(j.id)}>
+                  <span className={`dot ${j.status === "running" ? "busy" : j.status === "succeeded" ? "ok" : j.status === "failed" ? "bad" : ""}`} />
+                  <span className="grow ellipsis" style={{ textAlign: "left" }}>{jobTitle(j.kind, j.opts)}</span>
+                  <span className="faint xs">{ago(j.started)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </Drawer>
+      )}
+      {glossary && (
+        <Drawer title="Glossary" icon="book" onClose={() => setGlossary(false)}>
+          {GLOSSARY.map(([t, d]) => (
+            <div key={t}><div className="strong" style={{ marginBottom: 3 }}>{t}</div><p className="muted small" style={{ lineHeight: 1.6 }}>{d}</p></div>
+          ))}
+          <div className="xs faint"><kbd>Ctrl K</kbd> search · <kbd>Alt 1–7</kbd> pages · <kbd>Ctrl \</kbd> sidebar · <kbd>?</kbd> glossary · <kbd>↑ ↓</kbd> rows in grids</div>
+        </Drawer>
+      )}
+      {palette && <CommandPalette onClose={() => setPalette(false)} />}
+      <div className="toasts">
+        {toasts.map((t) => (
+          <div key={t.id} className={`note ${t.tone === "error" ? "err" : t.tone === "ok" ? "ok" : "inf"}`}>
+            <Icon name={t.tone === "error" ? "error" : t.tone === "ok" ? "pass" : "info"} /><div>{t.text}</div>
+          </div>
+        ))}
+      </div>
+    </AppContext.Provider>
+  );
+}

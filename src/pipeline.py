@@ -18,6 +18,7 @@ import model_ev_ebitda
 import model_graham
 import model_residual_income
 import model_hybrid
+import model_hybrid_model
 import capital
 import exporter
 import csv_analyzer
@@ -457,10 +458,13 @@ def value_rows(ctx, ml_store, write_hybrid=True):
                 row[m.KEY] = guard(m.intrinsic_value, ml_store, name, fy)
             rows.append(row)
 
-    # The hybrid runs last and over the whole grid at once: its weights are
+    # The Ensemble runs last and over the whole grid at once: its weights are
     # learned from every company's earlier-year errors, so no single row can
-    # be blended until every row's components exist.
-    if "hybrid" in enabled:
+    # be blended until every row's components exist. The HYBRID MODEL reads
+    # the same components, so they are built whenever either is switched on.
+    want_ens = "ensemble" in enabled
+    want_hm = "hybrid_model" in enabled
+    if want_ens or want_hm:
         try:
             detail = model_hybrid.attach(
                 rows,
@@ -471,14 +475,22 @@ def value_rows(ctx, ml_store, write_hybrid=True):
                 ml_store,
                 failures,
                 write=write_hybrid,
+                set_value=want_ens,
             )
         except Exception as e:
-            log.exception("hybrid stage failed")
-            print(f"\n[hybrid] FAILED: {type(e).__name__}: {e}")
+            log.exception("ensemble stage failed")
+            print(f"\n[ensemble] FAILED: {type(e).__name__}: {e}")
             for r in rows:
-                r.setdefault(
-                    "hybrid", Result.bad(R.CALC_ERROR, f"{type(e).__name__}: {e}")
-                )
+                if want_ens:
+                    r.setdefault("ensemble", Result.bad(R.CALC_ERROR, f"{type(e).__name__}: {e}"))
+    if want_hm:
+        try:
+            model_hybrid_model.attach(rows, universe, failures, write=write_hybrid)
+        except Exception as e:
+            log.exception("HYBRID MODEL stage failed")
+            print(f"\n[hybrid model] FAILED: {type(e).__name__}: {e}")
+            for r in rows:
+                r.setdefault("hybrid_model", Result.bad(R.CALC_ERROR, f"{type(e).__name__}: {e}"))
 
     return rows, detail
 
@@ -488,10 +500,10 @@ def _auto_train(trainer, ml_universe, ctx):
     import contextlib
     import io
 
-    if not ctx["ml_modules"] or "hybrid" not in ctx["enabled"]:
+    if not ctx["ml_modules"] or not ({"ensemble", "hybrid_model"} & set(ctx["enabled"])):
         print(
-            "\n[auto] auto-train needs the Hybrid and at least one machine-"
-            "learning model switched on - skipped"
+            "\n[auto] auto-train needs the Ensemble or the HYBRID MODEL and at "
+            "least one machine-learning model switched on - skipped"
         )
         return
 
@@ -522,7 +534,7 @@ def _auto_train(trainer, ml_universe, ctx):
 
     _banner(
         "STEP 2 of 3 - learning from the live market",
-        f"Random long-listed NSE companies, fetched one by one, until the Hybrid's "
+        f"Random long-listed NSE companies, fetched one by one, until the Ensemble's "
         f"confidence reaches {trainer.controls.target:.0f} or "
         f"{trainer.opts.max_companies} companies have been learned.",
     )
@@ -534,7 +546,7 @@ def _auto_train(trainer, ml_universe, ctx):
     )
     _banner(
         "STEP 3 of 3 - valuing your companies with the trained models",
-        "Final training run, then the report, the Hybrid and the charts.",
+        "Final training run, then the report, the Ensemble, the HYBRID MODEL and the charts.",
     )
 
 
@@ -566,16 +578,17 @@ def plain_summary(rows, excluded_count):
     for r in rows:
         companies.add(r["company"])
         price = r.get("price")
-        # When the hybrid valued the row it IS the considered estimate; the
-        # plain average of every model is only the fallback.
-        hyb = r.get("hybrid")
+        # When the HYBRID MODEL (or failing that, the Ensemble) valued the
+        # row it IS the considered estimate; the plain average of every model
+        # is only the fallback.
+        hyb = r.get("hybrid_model") or r.get("ensemble")
         if hyb is not None and getattr(hyb, "ok", False):
             vals = [hyb.value]
         else:
             vals = [
                 r[k].value
                 for k in keys
-                if k != "hybrid" and k in r and getattr(r[k], "ok", False)
+                if k not in ("ensemble", "hybrid_model") and k in r and getattr(r[k], "ok", False)
             ]
         if not (price is not None and getattr(price, "ok", False)) or not vals:
             unknown += 1

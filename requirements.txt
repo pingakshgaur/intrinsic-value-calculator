@@ -1,11 +1,11 @@
 # --- Data acquisition ---
 yfinance>=0.2.40          # primary source: statements + price history
-requests>=2.31            # NSE portal fallback, Yahoo ticker search
+requests>=2.31            # NSE portal fallback, Yahoo ticker search, LLM APIs
 
 # --- Core computation ---
 pandas>=2.0               # statement DataFrames, feature matrix, export
 numpy>=1.24               # fold metrics, array maths in ml_common
-matplotlib>=3.7           # chart rendering (Agg for files, TkAgg inside the GUI)
+matplotlib>=3.7           # chart rendering (Agg, written to PNG files)
 
 # --- Output ---
 openpyxl>=3.1             # .xlsx writer (report, diagnostics, methods,
@@ -16,13 +16,14 @@ scikit-learn>=1.4         # Random Forest, MLP neural network, StandardScaler
 xgboost>=2.0              # XGBoost regressor
 lightgbm>=4.3             # LightGBM regressor
 
-# --- Desktop interface ---
-# tkinter itself is NOT listed here: it ships with the python.org Windows
-# installer as part of the standard library and cannot be installed from PyPI.
-# If 'import tkinter' fails, repair the Python install and tick "tcl/tk and
-# IDLE" - do not go looking for a pip package.
-ttkbootstrap>=1.10        # themed widgets over tkinter; pure Python, no
-                          # compiled extensions, no Qt runtime to ship
-Pillow>=10.0              # OPTIONAL: scales the analyzer's PNG charts to fit
-                          # the results pane. Without it the charts tab falls
-                          # back to full-size images in a scroll frame.
+# --- Web app (python run.py --web) ---
+# The React front end is pre-built in web/dist; Node is only needed to
+# change it (see docs/WEB.md).
+fastapi>=0.110            # local JSON API, bound to 127.0.0.1 only
+uvicorn>=0.29             # serves the API and the built front end
+
+# --- Market intelligence agents and the HYBRID MODEL settings ---
+PyYAML>=6.0               # agent_settings.yaml
+feedparser>=6.0           # Google News RSS for the news agents
+# LLM providers (Groq, Gemini, NVIDIA) are called over plain HTTPS with
+# 'requests' above - no provider SDKs needed.

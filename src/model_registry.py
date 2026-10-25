@@ -163,10 +163,10 @@ ALL_MODELS = [
         ),
     ),
     ModelSpec(
-        key="hybrid",
-        name="Hybrid",
-        column="(Hybrid) Intrinsic Value",
-        diff_column="Difference (Market - Hybrid)",
+        key="ensemble",
+        name="Ensemble",
+        column="(Ensemble) Intrinsic Value",
+        diff_column="Difference (Market - Ensemble)",
         kind="hybrid",
         blurb=(
             "Combines improved versions of every method above. It first decides "
@@ -176,7 +176,25 @@ ALL_MODELS = [
             "confidence score alongside the number."
         ),
     ),
+    ModelSpec(
+        key="hybrid_model",
+        name="HYBRID MODEL",
+        column="(HYBRID MODEL) Intrinsic Value",
+        diff_column="Difference (Market - HYBRID MODEL)",
+        kind="hybrid",
+        blurb=(
+            "The project's headline value. Six lenses - cash flow, earnings "
+            "power, assets, peer multiples, Graham and machine learning - "
+            "blended by company type, with growth only paid for when the "
+            "company's returns on capital earn it, then adjusted for quality, "
+            "governance and bull / base / bear scenarios. Every constant is "
+            "editable in the web app's Hybrid Model Lab."
+        ),
+    ),
 ]
+
+# Older settings and command lines said "hybrid" for what is now the Ensemble.
+ALIASES = {"hybrid": "ensemble"}
 
 BY_KEY = {m.key: m for m in ALL_MODELS}
 ALL_KEYS = [m.key for m in ALL_MODELS]
@@ -194,11 +212,13 @@ def is_enabled(key) -> bool:
     Unknown keys answer False rather than raising: a stale key left in a saved
     setting should quietly do nothing, not stop the program.
     """
+    key = ALIASES.get(key, key)
     spec = BY_KEY.get(key)
     if spec is None:
         return False
     switches = getattr(config, "MODELS_ENABLED", None) or {}
-    if not switches.get(key, True):
+    old = [a for a, k in ALIASES.items() if k == key]
+    if not switches.get(key, all(switches.get(a, True) for a in old)):
         return False
     # The machine-learning stage has a master switch of its own. When it is
     # off, no learner runs whatever its individual tick-box says.

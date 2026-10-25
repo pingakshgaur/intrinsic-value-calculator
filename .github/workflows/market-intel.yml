@@ -1,0 +1,145 @@
+# Market Intelligence Agents - runs in GitHub's cloud, so your PC can stay off.
+#
+# Schedule (GitHub cron is UTC; IST = UTC + 5:30). GitHub may start scheduled
+# jobs some minutes late when its runners are busy.
+#   full   16:45 IST Mon-Fri   after the close: valuation + all 23 agents
+#   quick  08:45 IST Mon-Fri   pre-market news / market-activity sweep
+#   quick  12:45 IST Mon-Fri   midday sweep
+# Run by hand any time: Actions tab -> Market Intelligence -> Run workflow.
+#
+# State (the SQLite blackboard + reports) lives on the 'intel-reports'
+# branch, so every run remembers the previous one: what changed, what is new.
+#
+# Secrets (Settings -> Secrets and variables -> Actions -> New secret), any
+# subset; with none at all the agents run rule-based:
+#   GROQ_API_KEY  GEMINI_API_KEY  NVIDIA_API_KEY
+#   TELEGRAM_BOT_TOKEN  TELEGRAM_CHAT_ID   (only if alerts.telegram is true)
+
+name: Market Intelligence
+
+on:
+  schedule:
+    - cron: "15 11 * * 1-5"   # full
+    - cron: "15 3 * * 1-5"    # quick
+    - cron: "15 7 * * 1-5"    # quick
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "full or quick"
+        type: choice
+        options: [full, quick]
+        default: full
+      tickers:
+        description: "optional comma-separated tickers (blank = whole list)"
+        required: false
+        default: ""
+      use_llm:
+        description: "use the LLM providers whose keys are set"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: market-intel
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      AGENT_STATE_DIR: ${{ github.workspace }}/intel_state
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Restore research history (intel-reports branch)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$remote" intel-reports >/dev/null 2>&1; then
+            git clone --depth 1 --branch intel-reports "$remote" intel_state
+          else
+            mkdir -p intel_state
+            cd intel_state
+            git init -b intel-reports
+            git remote add origin "$remote"
+            printf 'feeds/\n' > .gitignore
+            printf '# Market intelligence history\n\nOpen latest/dashboard.html or latest/report.md.\nWritten by .github/workflows/market-intel.yml on main.\n' > README.md
+          fi
+
+      - name: Pick mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "15 11 * * 1-5" ]; then
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=quick" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run the research team
+        # inputs travel as environment variables, never pasted into the
+        # script, so a crafted ticker string cannot run shell commands
+        env:
+          MODE: ${{ steps.mode.outputs.mode }}
+          TICKERS: ${{ inputs.tickers }}
+          USE_LLM: ${{ inputs.use_llm }}
+        run: |
+          args=(--agents)
+          [ "$MODE" = "quick" ] && args+=(--quick)
+          if [ -n "$TICKERS" ]; then
+            clean="$(printf '%s' "$TICKERS" | tr -cd 'A-Za-z0-9,.&_-')"
+            args+=(--tickers "$clean")
+          fi
+          [ "$USE_LLM" = "false" ] && args+=(--no-llm)
+          python run.py "${args[@]}"
+
+      - name: Show the report on the run page
+        if: always()
+        run: |
+          if [ -f intel_state/latest/report.md ]; then
+            head -c 900000 intel_state/latest/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Save research history
+        if: always()
+        run: |
+          cd intel_state
+          [ -f .gitignore ] || printf 'feeds/\n' > .gitignore
+          git config user.name "market-intel-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "nothing new to save"
+          else
+            git commit -q -m "Research run $(date -u +%Y-%m-%dT%H:%MZ) (${{ steps.mode.outputs.mode }})"
+            git push -q origin HEAD:intel-reports
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: market-intel-${{ steps.mode.outputs.mode }}-${{ github.run_number }}
+          path: intel_state/latest/
+          retention-days: 14
+          if-no-files-found: ignore

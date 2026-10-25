@@ -20,6 +20,22 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# --- Secrets ----------------------------------------------------------------
+# API keys for the market intelligence agents. .env.example is the template.
+.env
+.env.*
+!.env.example
+
+# --- Web UI -----------------------------------------------------------------
+# web/dist IS tracked on purpose: 'python run.py --web' then works on a fresh
+# clone without Node installed. Rebuild it with 'npm run build' after editing
+# web/src.
+web/node_modules/
+*.tsbuildinfo
+
+# --- Agent state checked out by the cloud workflow --------------------------
+intel_state/
+
 # --- Environments -----------------------------------------------------------
 .venv/
 venv/
@@ -45,3 +61,5 @@ Thumbs.db
 *.log
 *.tmp
 scratch/
+# backup written when settings are saved from the web app
+agent_settings.yaml.bak

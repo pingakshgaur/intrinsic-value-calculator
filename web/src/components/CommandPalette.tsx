@@ -1,0 +1,129 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useIntel, useLabCompanies, useStartJob } from "../lib/hooks";
+import { shortName, slug } from "../lib/format";
+import { Icon } from "./ui";
+import { useApp } from "./workbenchContext";
+
+interface Cmd {
+  id: string;
+  group: string;
+  label: string;
+  icon: string;
+  hint?: string;
+  run: () => void;
+}
+
+export function CommandPalette({ onClose }: { onClose: () => void }) {
+  const nav = useNavigate();
+  const intel = useIntel();
+  const lab = useLabCompanies();
+  const start = useStartJob();
+  const app = useApp();
+  const [q, setQ] = useState("");
+  const [sel, setSel] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+
+  useEffect(() => input.current?.focus(), []);
+
+  const commands = useMemo<Cmd[]>(() => {
+    const go = (path: string) => () => nav(path);
+    const job = (kind: string, options: Record<string, unknown> = {}) => () =>
+      start.mutate(
+        { kind, options },
+        { onSuccess: (j) => app.showJob(j.id), onError: (e) => app.toast(e instanceof Error ? e.message : String(e), "error") },
+      );
+    const c: Cmd[] = [
+      { id: "p-o", group: "Go to", label: "Command Center", icon: "pulse", hint: "Alt+1", run: go("/") },
+      { id: "p-r", group: "Go to", label: "Coverage", icon: "table", hint: "Alt+2", run: go("/coverage") },
+      { id: "p-l", group: "Go to", label: "HYBRID MODEL Studio", icon: "beaker", hint: "Alt+3", run: go("/studio") },
+      { id: "p-m", group: "Go to", label: "Model Performance", icon: "graph-line", hint: "Alt+4", run: go("/performance") },
+      { id: "p-u", group: "Go to", label: "Universe", icon: "database", hint: "Alt+5", run: go("/universe") },
+      { id: "p-run", group: "Go to", label: "Operations", icon: "server-process", hint: "Alt+6", run: go("/operations") },
+      { id: "p-s", group: "Go to", label: "Configuration", icon: "settings", hint: "Alt+7", run: go("/configuration") },
+      { id: "p-ai", group: "Go to", label: "Configuration · AI providers", icon: "sparkle", run: go("/configuration?section=ai") },
+      { id: "p-help", group: "Go to", label: "Glossary", icon: "book", hint: "?", run: app.openHelp },
+      { id: "r-full", group: "Run", label: "Full research (23 agents)", icon: "rocket", run: job("agents") },
+      { id: "r-quick", group: "Run", label: "Quick news & market sweep", icon: "zap", run: job("agents", { quick: true }) },
+      { id: "r-val", group: "Run", label: "Valuation report (all models)", icon: "graph", run: job("valuation") },
+      { id: "r-screen", group: "Run", label: "Data sufficiency check", icon: "filter", run: job("screen") },
+      { id: "r-llm", group: "Run", label: "Check AI keys and models", icon: "plug", run: job("llm_check") },
+    ];
+    const seen = new Set<string>();
+    for (const v of intel.data?.verdicts ?? []) {
+      seen.add(v.company);
+      c.push({ id: "c-" + v.company, group: "Companies", label: shortName(v.company), icon: "symbol-class", hint: v.label, run: go(`/coverage/${slug(v.company)}`) });
+      c.push({ id: "l-" + v.company, group: "Open in Studio", label: shortName(v.company), icon: "beaker", run: go(`/studio?company=${slug(v.company)}`) });
+    }
+    for (const r of lab.data ?? []) {
+      if (seen.has(r.company)) continue;
+      c.push({ id: "l-" + r.company, group: "Open in Studio", label: shortName(r.company), icon: "beaker", hint: "report inputs", run: go(`/studio?company=${slug(r.company)}`) });
+    }
+    return c;
+  }, [intel.data, lab.data, nav, start, app]);
+
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return commands.filter((c) => c.group === "Go to" || c.group === "Run");
+    const words = s.split(/\s+/);
+    return commands.filter((c) => words.every((w) => (c.label + " " + c.group + " " + (c.hint ?? "")).toLowerCase().includes(w))).slice(0, 60);
+  }, [q, commands]);
+
+  useEffect(() => setSel(0), [q]);
+  useEffect(() => {
+    list.current?.querySelector(".palette-item.on")?.scrollIntoView({ block: "nearest" });
+  }, [sel]);
+
+  const exec = (c: Cmd | undefined) => {
+    if (!c) return;
+    onClose();
+    c.run();
+  };
+
+  let lastGroup = "";
+  return (
+    <>
+      <div className="palette-scrim" onMouseDown={onClose} />
+      <div className="palette" role="dialog" aria-label="Search">
+        <div className="palette-input">
+          <Icon name="search" />
+          <input
+            ref={input}
+            value={q}
+            placeholder="Search companies, pages and actions…"
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setSel((s) => Math.min(filtered.length - 1, s + 1));
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setSel((s) => Math.max(0, s - 1));
+              } else if (e.key === "Enter") exec(filtered[sel]);
+              else if (e.key === "Escape") onClose();
+            }}
+          />
+          <kbd>Esc</kbd>
+        </div>
+        <div className="palette-list" ref={list}>
+          {filtered.length === 0 && <div className="palette-group">Nothing matches “{q}”</div>}
+          {filtered.map((c, i) => {
+            const head = c.group !== lastGroup ? <div className="palette-group">{c.group}</div> : null;
+            lastGroup = c.group;
+            return (
+              <div key={c.id}>
+                {head}
+                <div className={`palette-item ${i === sel ? "on" : ""}`} onMouseEnter={() => setSel(i)} onMouseDown={() => exec(c)}>
+                  <Icon name={c.icon} />
+                  <span className="ellipsis">{c.label}</span>
+                  {c.hint && <span className="hint">{c.hint}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}

@@ -661,6 +661,86 @@ class AutoTrainer:
         return paths
 
 
+# ================================================================ web meter
+class WebMeter:
+    """
+    The browser's view of an auto-train run in a child process.
+
+    Events go out as one JSON line each on the real stdout ("[auto-event]
+    {...}"), which the web server already streams to the page. Commands come
+    back through a small file the server appends to: one JSON object per line,
+    {"action": "pause" | "skip" | "skip_sector" | "retrain" | "target" |
+    "stop", "value": ...}. Same Controls object the terminal keys drive.
+    """
+
+    def __init__(self, controls, control_file):
+        self.controls = controls
+        self.path = control_file
+        self._stop = threading.Event()
+        self._offset = 0
+        self.out = sys.__stdout__ or sys.stdout
+
+    def start_keys(self):
+        threading.Thread(target=self._poll, daemon=True).start()
+        return True
+
+    def stop_keys(self):
+        self._stop.set()
+
+    def _poll(self):
+        import json
+
+        while not self._stop.is_set():
+            try:
+                with open(self.path, encoding="utf-8") as f:
+                    f.seek(self._offset)
+                    chunk = f.read()
+                    self._offset = f.tell()
+            except OSError:
+                chunk = ""
+            for line in chunk.splitlines():
+                try:
+                    cmd = json.loads(line)
+                except ValueError:
+                    continue
+                self._apply(cmd.get("action"), cmd.get("value"))
+            time.sleep(0.4)
+
+    def _apply(self, action, value):
+        c = self.controls
+        if action == "pause":
+            paused = c.toggle_pause()
+            self("status", message="paused" if paused else "resuming")
+        elif action == "skip":
+            c.skip()
+            self("status", message="skipping this company")
+        elif action == "skip_sector":
+            c.skip_sector()
+            self("status", message=f"skipping the rest of {c.current_sector}")
+        elif action == "retrain":
+            c.retrain()
+            self("status", message="will retrain after this company")
+        elif action == "target":
+            try:
+                t = c.adjust_target(float(value or 0))
+            except (TypeError, ValueError):
+                return
+            self("status", message=f"target changed to {t:.0f}")
+        elif action == "stop":
+            c.stop()
+            self("status", message="finishing with what has been learned")
+
+    def __call__(self, kind, **info):
+        import json
+
+        payload = {"kind": kind, "target": self.controls.target, "paused": self.controls.paused, **info}
+        try:
+            text = json.dumps(payload, default=str)
+        except (TypeError, ValueError):
+            text = json.dumps({"kind": kind, "message": str(info)[:300]})
+        print(f"[auto-event] {text}", file=self.out, flush=True)
+
+
 # ============================================================ terminal meter
 class TerminalMeter:
     """
@@ -773,7 +853,7 @@ class TerminalMeter:
             hist = self.state.get("history_text", "")
             self.state["history_text"] = (hist + f" {info['confidence']:.0f}").strip()
             self._say(
-                f"retrained on {info['labelled']} labelled rows -> Hybrid confidence "
+                f"retrained on {info['labelled']} labelled rows -> Ensemble confidence "
                 f"{info['confidence']:.1f} (actual within 20%: {info['hit20']:.0f}%)"
                 f"   history: {self.state['history_text']}"
             )

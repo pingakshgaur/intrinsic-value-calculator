@@ -5,7 +5,6 @@
 Intrinsic Value Calculator - entry point.
 
     python run.py
-    python run.py --gui                        # open the desktop window
     python run.py --input data/companies.csv
     python run.py --no-ml --reasons short
     python run.py --benchmark-basis mean       # robustness re-run
@@ -13,6 +12,14 @@ Intrinsic Value Calculator - entry point.
     python run.py --make-override-template     # writes the fill-in sheet
     python run.py --screen-only                # sufficiency dry run, no valuation
     python run.py --min-complete-fy 3          # loosen the gate for one run
+
+    python run.py --agents                     # 23-agent research + valuation
+    python run.py --agents --quick             # news / market sweep only
+    python run.py --agents --tickers HAL,BEL   # just these companies
+    python run.py --agents --no-llm            # rule-based agents only
+    python run.py --agents --llm-check         # test the API keys and stop
+
+    python run.py --web                        # browser UI on http://127.0.0.1:8765
 """
 
 import os
@@ -86,10 +93,12 @@ def build_parser():
         ),
     )
     ap.add_argument(
-        "--gui",
+        "--web",
         action="store_true",
-        help="open the desktop window instead of running in the terminal",
+        help="start the browser UI (http://127.0.0.1:8765) and open it",
     )
+    ap.add_argument("--port", type=int, default=8765, help="port for --web (default 8765)")
+    ap.add_argument("--no-browser", action="store_true", help="with --web: do not open a browser tab")
     ap.add_argument("--input", help="path to companies CSV")
     ap.add_argument("--mean-basis", choices=["trading", "calendar"])
     ap.add_argument(
@@ -188,7 +197,40 @@ def build_parser():
         help="re-download companies even if fetched in the last "
         f"{config.AUTO_CACHE_DAYS} days",
     )
-    ap.add_argument("--ml-split", choices=["expanding", "loyo"])
+    # ---- market intelligence agents ----
+    ag = ap.add_argument_group("market intelligence agents (settings: agent_settings.yaml)")
+    ag.add_argument(
+        "--agents",
+        action="store_true",
+        help="run the 23-agent research team and the agent-adjusted valuation",
+    )
+    ag.add_argument(
+        "--quick",
+        action="store_true",
+        help="with --agents: re-run only the news and market-activity teams, "
+        "re-using the last full run's valuation and slow-moving findings",
+    )
+    ag.add_argument(
+        "--tickers",
+        metavar="LIST",
+        help="with --agents: comma-separated tickers to research, e.g. HAL,BEL",
+    )
+    ag.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="with --agents: never call an LLM; every agent uses its rule-based path",
+    )
+    ag.add_argument(
+        "--llm-check",
+        action="store_true",
+        help="with --agents: ping each configured LLM provider and stop",
+    )
+    ag.add_argument(
+        "--agent-settings",
+        metavar="YAML",
+        help="with --agents: use this settings file instead of agent_settings.yaml",
+    )
+    ap.add_argument("--ml-split", choices=["hybrid", "expanding", "loyo"])
     ap.add_argument("--no-ml", action="store_true")
     ap.add_argument(
         "--no-analyze", action="store_true", help="skip the chart/statistics stage"
@@ -226,6 +268,47 @@ def build_parser():
         help="financial years that must carry a benchmark price",
     )
     ap.add_argument(
+        "--no-auto-relax",
+        action="store_true",
+        help="if nobody passes the gate, stop instead of lowering the bar for this run",
+    )
+    ap.add_argument(
+        "--drop-from-peers",
+        action="store_true",
+        help="leave companies that fail the gate out of the sector averages too",
+    )
+    ap.add_argument(
+        "--drop-from-ml",
+        action="store_true",
+        help="leave companies that fail the gate out of the ML training data too",
+    )
+    ap.add_argument(
+        "--no-require-price",
+        action="store_true",
+        help="count a financial year as complete even without an in-year share price",
+    )
+    ap.add_argument(
+        "--audit-all",
+        action="store_true",
+        help="list the companies that passed on the left-out sheets as well",
+    )
+    ap.add_argument(
+        "--bench-offset-days",
+        type=int,
+        metavar="N",
+        help="how many days either side of 1 May a benchmark price may come from",
+    )
+    ap.add_argument(
+        "--estimation",
+        choices=["off", "balanced", "aggressive"],
+        help="how small gaps in the accounts are filled",
+    )
+    ap.add_argument(
+        "--auto-control",
+        metavar="FILE",
+        help=argparse.SUPPRESS,  # the web app's channel for auto-train controls
+    )
+    ap.add_argument(
         "--screen-only",
         action="store_true",
         help=(
@@ -238,8 +321,8 @@ def build_parser():
 
 
 def apply_args(args):
-    """Push CLI flags onto config. Shared with the GUI, which builds the same
-    namespace from its widgets."""
+    """Push CLI flags onto config. The web app's run settings arrive as these
+    same flags, so the terminal and the browser always run the same thing."""
     # The year window first: the sufficiency thresholds are clamped against
     # its length, so it has to be settled before anything reads FY_LIST.
     start = getattr(args, "start_year", None)
@@ -251,6 +334,7 @@ def apply_args(args):
     chosen = getattr(args, "models", None)
     if chosen:
         wanted = {k.strip().lower() for k in chosen.split(",") if k.strip()}
+        wanted = {model_registry.ALIASES.get(k, k) for k in wanted}
         unknown = wanted - set(model_registry.ALL_KEYS)
         if unknown:
             sys.exit(
@@ -295,6 +379,20 @@ def apply_args(args):
         config.MIN_COMPLETE_FY = args.min_complete_fy
     if args.min_benchmark_fy:
         config.MIN_BENCHMARK_FY = args.min_benchmark_fy
+    if args.no_auto_relax:
+        config.SUFFICIENCY_AUTO_RELAX = False
+    if args.drop_from_peers:
+        config.SUFFICIENCY_KEEP_IN_PEERS = False
+    if args.drop_from_ml:
+        config.SUFFICIENCY_KEEP_IN_ML = False
+    if args.no_require_price:
+        config.SUFFICIENCY_REQUIRE_ANCHOR_PRICE = False
+    if args.audit_all:
+        config.EXCLUSION_SHEET_INCLUDE_PASSED = True
+    if args.bench_offset_days:
+        config.BENCHMARK_MAX_OFFSET_DAYS = args.bench_offset_days
+    if args.estimation:
+        config.ESTIMATION_MODE = args.estimation
 
 
 def load_companies(args):
@@ -331,12 +429,57 @@ def build_auto_trainer(args, companies):
         },
     )
     controls = auto_train.Controls(opts.target)
+    if args.auto_control:
+        meter = auto_train.WebMeter(controls, args.auto_control)
+        meter.start_keys()
+        print("[auto] controlled from the web app")
+        return auto_train.AutoTrainer(opts, controls, meter), meter
     meter = auto_train.TerminalMeter(controls)
     if meter.start_keys():
         print(f"[auto] keyboard controls on: {meter.KEYS}")
     else:
         print("[auto] keyboard controls need a Windows console; Ctrl+C stops and finishes")
     return auto_train.AutoTrainer(opts, controls, meter), meter
+
+
+def run_agents(args):
+    """--agents: the research team. Separate from the report pipeline."""
+    from agents import settings as agent_settings
+
+    agent_settings.load(args.agent_settings)
+    agent_settings.load_dotenv()
+
+    if args.llm_check:
+        from agents.llm import LLMRouter
+
+        router = LLMRouter(board=None)
+        print("[llm-check] provider        model                                  result")
+        for prov, model, ok, note in router.check():
+            print(f"[llm-check] {prov:15s} {model:38s} {'OK  ' if ok else 'FAIL'} {note}")
+        return
+
+    from agents.runner import run_agents as research
+
+    if args.offline:
+        import mock_source
+
+        companies = mock_source.COMPANIES
+    else:
+        path = args.input or agent_settings.get("run.companies_csv", str(config.DEFAULT_INPUT))
+        if not os.path.isabs(path):
+            path = str(ROOT / path)
+        companies = inputs.read_csv_input(path)
+    only = [t.strip() for t in args.tickers.split(",") if t.strip()] if args.tickers else None
+    result = research(
+        companies,
+        offline=args.offline,
+        use_llm=not args.no_llm,
+        quick=args.quick,
+        only=only,
+        ml=False if args.no_ml else None,
+    )
+    if result is None:
+        sys.exit(1)
 
 
 def main():
@@ -346,15 +489,24 @@ def main():
     ssl_trust.install()
     args = build_parser().parse_args()
 
-    if args.gui:
+    if args.web:
         try:
-            import gui
+            from server.app import serve
         except ImportError as e:
-            sys.exit(
-                f"GUI unavailable: {e}\n"
-                "Install the toolkit with:  pip install ttkbootstrap"
-            )
-        gui.launch()
+            sys.exit(f"Web UI unavailable: {e}\nInstall with:  pip install fastapi uvicorn")
+        serve(args.port, open_browser=not args.no_browser)
+        return
+
+    if args.agents:
+        try:
+            run_agents(args)
+        except KeyboardInterrupt:
+            print("\nInterrupted by user.")
+        except Exception as e:
+            log.exception("agents fatal")
+            print(f"\nFATAL: {type(e).__name__}: {e}\nTraceback: {log_path}")
+            sys.exit(1)
+        print(f"\nFull log: {log_path}")
         return
 
     apply_args(args)

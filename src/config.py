@@ -1,12 +1,15 @@
 # FILE: src/config.py
 """Global assumptions and knobs. Tune these before running."""
 
+import os
 from pathlib import Path
 
 # ---------------- Paths ----------------
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
-OUTPUT_DIR = PROJECT_ROOT / "output"
+# INTVAL_OUTPUT_DIR redirects every report file - used by the tests so a test
+# run can never overwrite a real report.
+OUTPUT_DIR = Path(os.environ.get("INTVAL_OUTPUT_DIR") or PROJECT_ROOT / "output")
 CACHE_DIR = PROJECT_ROOT / ".cache"
 DEFAULT_INPUT = DATA_DIR / "companies.csv"
 OVERRIDE_FILE = DATA_DIR / "fundamentals_override.csv"
@@ -232,7 +235,8 @@ MODELS_ENABLED = {
     "random_forest": True,
     "lightgbm": True,
     "mlp": True,
-    "hybrid": True,
+    "ensemble": True,
+    "hybrid_model": True,
 }
 
 # ---------------- Market / IO ----------------
