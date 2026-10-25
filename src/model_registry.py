@@ -22,8 +22,9 @@ WHAT A MODEL IS
     name         what a person calls it
     column       header of its intrinsic-value column in the report
     diff_column  header of its "Market Price - Intrinsic Value" column
-    kind         "traditional" (reasons from the accounts) or
-                 "ml" (learns a pattern from the whole panel)
+    kind         "traditional" (reasons from the accounts),
+                 "ml" (learns a pattern from the whole panel), or
+                 "hybrid" (blends the others; computed last)
     blurb        two or three plain sentences for the Settings page
 
 ORDER matters: it is the left-to-right order of the spreadsheet. Traditional
@@ -101,6 +102,19 @@ ALL_MODELS = [
         ),
     ),
     ModelSpec(
+        key="ri",
+        name="Residual Income",
+        column="(Residual Income) Intrinsic Value",
+        diff_column="Difference (Market - Residual Income)",
+        kind="traditional",
+        blurb=(
+            "Starts from what the company owns (its book value) and adds the "
+            "value of any profit it earns above what shareholders demand. "
+            "Unlike the others it still works for banks and for companies "
+            "having a bad year."
+        ),
+    ),
+    ModelSpec(
         key="xgboost",
         name="XGBoost",
         column="(XGBoost) Intrinsic Value",
@@ -146,6 +160,20 @@ ALL_MODELS = [
             "A small neural network. Unlike the tree models it draws smooth "
             "curves rather than steps, so it can catch relationships the others "
             "miss - and it needs more data before its answers settle down."
+        ),
+    ),
+    ModelSpec(
+        key="hybrid",
+        name="Hybrid",
+        column="(Hybrid) Intrinsic Value",
+        diff_column="Difference (Market - Hybrid)",
+        kind="hybrid",
+        blurb=(
+            "Combines improved versions of every method above. It first decides "
+            "which methods suit this company (no cash-flow model for a bank, "
+            "say), then trusts each one in proportion to how well it priced "
+            "the sector in earlier years, and reports a likely range and a "
+            "confidence score alongside the number."
         ),
     ),
 ]

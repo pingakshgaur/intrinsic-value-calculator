@@ -1,0 +1,364 @@
+company name,sector name,market cap,ticker
+ABB India Ltd.,Capital Goods,Large,ABB.NS
+ACC Ltd.,Construction Materials,Small,ACC.NS
+ACME Solar Holdings Ltd.,Power and Renewable Energy,Small,ACMESOLAR.NS
+AIA Engineering Ltd.,Capital Goods,Mid,AIAENG.NS
+APL Apollo Tubes Ltd.,Capital Goods,Mid,APLAPOLLO.NS
+AWL Agri Business Ltd.,Fast Moving Consumer Goods,Small,AWL.NS
+Aarti Industries Ltd.,Chemicals,Small,AARTIIND.NS
+Abbott India Ltd.,Healthcare and Medical Devices,Mid,ABBOTINDIA.NS
+Action Construction Equipment Ltd.,Capital Goods,Small,ACE.NS
+Acutaas Chemicals Ltd.,Healthcare and Medical Devices,Small,ACUTAAS.NS
+Adani Enterprises Ltd.,Metals and Mining,Large,ADANIENT.NS
+Adani Green Energy Ltd.,Power and Renewable Energy,Large,ADANIGREEN.NS
+Adani Ports and Special Economic Zone Ltd.,Services,Large,ADANIPORTS.NS
+Adani Total Gas Ltd.,Oil Gas & Consumable Fuels,Mid,ATGL.NS
+Aditya Birla Real Estate Ltd.,Realty,Small,ABREL.NS
+Aditya Infotech Ltd.,Capital Goods,Small,CPPLUS.NS
+Aegis Logistics Ltd.,Oil Gas & Consumable Fuels,Small,AEGISLOG.NS
+Aegis Vopak Terminals Ltd.,Oil Gas & Consumable Fuels,Small,AEGISVOPAK.NS
+Aether Industries Ltd.,Chemicals,Small,AETHER.NS
+Afcons Infrastructure Ltd.,Construction,Small,AFCONS.NS
+Affle 3i Ltd.,Information Technology,Small,AFFLE.NS
+Ajanta Pharmaceuticals Ltd.,Healthcare and Medical Devices,Mid,AJANTPHARM.NS
+Alkem Laboratories Ltd.,Healthcare and Medical Devices,Mid,ALKEM.NS
+Allied Blenders and Distillers Ltd.,Fast Moving Consumer Goods,Small,ABDL.NS
+Amara Raja Energy & Mobility Ltd.,Automobiles and Auto Components,Small,ARE&M.NS
+Amber Enterprises India Ltd.,Consumer Durables,Small,AMBER.NS
+Ambuja Cements Ltd.,Construction Materials,Large,AMBUJACEM.NS
+Anant Raj Ltd.,Realty,Small,ANANTRAJ.NS
+Anthem Biosciences Ltd.,Healthcare and Medical Devices,Mid,ANTHEM.NS
+Anupam Rasayan India Ltd.,Chemicals,Small,ANURAS.NS
+Apar Industries Ltd.,Capital Goods,Mid,APARINDS.NS
+Apollo Tyres Ltd.,Automobiles and Auto Components,Small,APOLLOTYRE.NS
+Asahi India Glass Ltd.,Automobiles and Auto Components,Small,ASAHIINDIA.NS
+Asian Paints Ltd.,Consumer Durables,Large,ASIANPAINT.NS
+Aster DM Quality Care Ltd.,Healthcare and Medical Devices,Mid,ASTERDM.NS
+Astral Ltd.,Capital Goods,Mid,ASTRAL.NS
+Ather Energy Ltd.,Automobiles and Auto Components,Small,ATHERENERG.NS
+Atul Ltd.,Chemicals,Small,ATUL.NS
+Aurobindo Pharma Ltd.,Healthcare and Medical Devices,Mid,AUROPHARMA.NS
+Avanti Feeds Ltd.,Fast Moving Consumer Goods,Small,AVANTIFEED.NS
+Avenue Supermarts Ltd.,Consumer Services,Large,DMART.NS
+Azad Engineering Ltd.,Capital Goods,Small,AZAD.NS
+BEML Ltd.,Capital Goods,Small,BEML.NS
+BLS International Services Ltd.,Consumer Services,Small,BLS.NS
+Bajaj Auto Ltd.,Automobiles and Auto Components,Large,BAJAJ-AUTO.NS
+Balkrishna Industries Ltd.,Automobiles and Auto Components,Mid,BALKRISIND.NS
+Balrampur Chini Mills Ltd.,Fast Moving Consumer Goods,Small,BALRAMCHIN.NS
+Bata India Ltd.,Consumer Durables,Small,BATAINDIA.NS
+Belrise Industries Ltd.,Automobiles and Auto Components,Small,BELRISE.NS
+Berger Paints India Ltd.,Consumer Durables,Mid,BERGEPAINT.NS
+Bharat Coking Coal Ltd.,Oil Gas & Consumable Fuels,Small,BHARATCOAL.NS
+Bharat Forge Ltd.,Automobiles and Auto Components,Mid,BHARATFORG.NS
+Bharat Heavy Electricals Ltd.,Capital Goods,Mid,BHEL.NS
+Bharat Petroleum Corporation Ltd.,Oil Gas & Consumable Fuels,Large,BPCL.NS
+Bharti Airtel Ltd.,Telecommunication,Large,BHARTIARTL.NS
+Bharti Hexacom Ltd.,Telecommunication,Mid,BHARTIHEXA.NS
+Biocon Ltd.,Healthcare and Medical Devices,Mid,BIOCON.NS
+Birlasoft Ltd.,Information Technology,Small,BSOFT.NS
+Black Box Ltd.,Information Technology,Small,BBOX.NS
+Blue Star Ltd.,Consumer Durables,Mid,BLUESTARCO.NS
+Bosch Ltd.,Automobiles and Auto Components,Large,BOSCHLTD.NS
+Brainbees Solutions Ltd.,Consumer Services,Small,FIRSTCRY.NS
+Brigade Enterprises Ltd.,Realty,Small,BRIGADE.NS
+Britannia Industries Ltd.,Fast Moving Consumer Goods,Large,BRITANNIA.NS
+CCL Products (I) Ltd.,Fast Moving Consumer Goods,Small,CCL.NS
+CESC Ltd.,Power and Renewable Energy,Small,CESC.NS
+CG Power and Industrial Solutions Ltd.,Capital Goods,Large,CGPOWER.NS
+CIE Automotive India Ltd.,Automobiles and Auto Components,Small,CIEINDIA.NS
+Caplin Point Laboratories Ltd.,Healthcare and Medical Devices,Small,CAPLIPOINT.NS
+Carborundum Universal Ltd.,Capital Goods,Small,CARBORUNIV.NS
+Cartrade Tech Ltd.,Consumer Services,Small,CARTRADE.NS
+Castrol India Ltd.,Oil Gas & Consumable Fuels,Small,CASTROLIND.NS
+Ceat Ltd.,Automobiles and Auto Components,Small,CEATLTD.NS
+Cemindia Projects Ltd.,Construction,Small,CEMPRO.NS
+Central Mine Planning & Design Institute Ltd.,Services,Small,CMPDI.NS
+Chambal Fertilizers & Chemicals Ltd.,Chemicals,Small,CHAMBLFERT.NS
+Chennai Petroleum Corporation Ltd.,Oil Gas & Consumable Fuels,Small,CHENNPETRO.NS
+Cipla Ltd.,Healthcare and Medical Devices,Large,CIPLA.NS
+Clean Max Enviro Energy Solutions Ltd.,Power and Renewable Energy,Small,CLEANMAX.NS
+Clean Science and Technology Ltd.,Chemicals,Small,CLEAN.NS
+Coal India Ltd.,Oil Gas & Consumable Fuels,Large,COALINDIA.NS
+Cochin Shipyard Ltd.,Capital Goods,Mid,COCHINSHIP.NS
+Coforge Ltd.,Information Technology,Mid,COFORGE.NS
+Cohance Lifesciences Ltd.,Healthcare and Medical Devices,Small,COHANCE.NS
+Colgate Palmolive (India) Ltd.,Fast Moving Consumer Goods,Mid,COLPAL.NS
+Concord Biotech Ltd.,Healthcare and Medical Devices,Small,CONCORDBIO.NS
+Container Corporation of India Ltd.,Services,Mid,CONCOR.NS
+Coromandel International Ltd.,Chemicals,Mid,COROMANDEL.NS
+Craftsman Automation Ltd.,Automobiles and Auto Components,Small,CRAFTSMAN.NS
+Crompton Greaves Consumer Electricals Ltd.,Consumer Durables,Small,CROMPTON.NS
+Cummins India Ltd.,Capital Goods,Large,CUMMINSIND.NS
+Cupid Ltd.,Fast Moving Consumer Goods,Small,CUPID.NS
+Cyient Ltd.,Information Technology,Small,CYIENT.NS
+DLF Ltd.,Realty,Large,DLF.NS
+DOMS Industries Ltd.,Fast Moving Consumer Goods,Small,DOMS.NS
+Dabur India Ltd.,Fast Moving Consumer Goods,Mid,DABUR.NS
+Dalmia Bharat Ltd.,Construction Materials,Mid,DALBHARAT.NS
+Deepak Fertilisers & Petrochemicals Corp. Ltd.,Chemicals,Small,DEEPAKFERT.NS
+Deepak Nitrite Ltd.,Chemicals,Small,DEEPAKNTR.NS
+Delhivery Ltd.,Services,Small,DELHIVERY.NS
+Devyani International Ltd.,Consumer Services,Small,DEVYANI.NS
+Divi's Laboratories Ltd.,Healthcare and Medical Devices,Large,DIVISLAB.NS
+Dixon Technologies (India) Ltd.,Consumer Durables,Mid,DIXON.NS
+Dr. Lal Path Labs Ltd.,Healthcare and Medical Devices,Small,LALPATHLAB.NS
+Dr. Reddy's Laboratories Ltd.,Healthcare and Medical Devices,Large,DRREDDY.NS
+Dummy HEG Ltd.,Metals and Mining,Small,DUMMYHEG.NS
+E.I.D. Parry (India) Ltd.,Fast Moving Consumer Goods,Small,EIDPARRY.NS
+EIH Ltd.,Consumer Services,Small,EIHOTEL.NS
+Eicher Motors Ltd.,Automobiles and Auto Components,Large,EICHERMOT.NS
+Elecon Engineering Co. Ltd.,Capital Goods,Small,ELECON.NS
+Elgi Equipments Ltd.,Capital Goods,Small,ELGIEQUIP.NS
+Emami Ltd.,Fast Moving Consumer Goods,Small,EMAMILTD.NS
+Emcure Pharmaceuticals Ltd.,Healthcare and Medical Devices,Small,EMCURE.NS
+Emmvee Photovoltaic Power Ltd.,Capital Goods,Small,EMMVEE.NS
+Endurance Technologies Ltd.,Automobiles and Auto Components,Mid,ENDURANCE.NS
+Engineers India Ltd.,Construction,Small,ENGINERSIN.NS
+Eternal Ltd.,Consumer Services,Large,ETERNAL.NS
+Exide Industries Ltd.,Automobiles and Auto Components,Mid,EXIDEIND.NS
+FSN E-Commerce Ventures Ltd.,Consumer Services,Mid,NYKAA.NS
+Fertilisers and Chemicals Travancore Ltd.,Chemicals,Mid,FACT.NS
+Finolex Cables Ltd.,Capital Goods,Small,FINCABLES.NS
+Firstsource Solutions Ltd.,Services,Small,FSL.NS
+Force Motors Ltd.,Automobiles and Auto Components,Small,FORCEMOT.NS
+Fractal Analytics Ltd.,Information Technology,Small,FRACTAL.NS
+GAIL (India) Ltd.,Oil Gas & Consumable Fuels,Large,GAIL.NS
+GE Vernova T&D India Ltd.,Capital Goods,Mid,GVT&D.NS
+GMR Airports Ltd.,Services,Mid,GMRAIRPORT.NS
+Gabriel India Ltd.,Automobiles and Auto Components,Small,GABRIEL.NS
+Gallantt Ispat Ltd.,Capital Goods,Small,GALLANTT.NS
+Gillette India Ltd.,Fast Moving Consumer Goods,Small,GILLETTE.NS
+Gland Pharma Ltd.,Healthcare and Medical Devices,Small,GLAND.NS
+Glaxosmithkline Pharmaceuticals Ltd.,Healthcare and Medical Devices,Mid,GLAXO.NS
+Glenmark Pharmaceuticals Ltd.,Healthcare and Medical Devices,Mid,GLENMARK.NS
+Global Health Ltd.,Healthcare and Medical Devices,Mid,MEDANTA.NS
+Godawari Power & Ispat Ltd.,Capital Goods,Small,GPIL.NS
+Godrej Consumer Products Ltd.,Fast Moving Consumer Goods,Large,GODREJCP.NS
+Godrej Industries Ltd.,Diversified,Mid,GODREJIND.NS
+Godrej Properties Ltd.,Realty,Mid,GODREJPROP.NS
+Granules India Ltd.,Healthcare and Medical Devices,Small,GRANULES.NS
+Graphite India Ltd.,Capital Goods,Small,GRAPHITE.NS
+Grasim Industries Ltd.,Construction Materials,Large,GRASIM.NS
+Gravita India Ltd.,Metals and Mining,Small,GRAVITA.NS
+Great Eastern Shipping Co. Ltd.,Services,Small,GESHIP.NS
+Gujarat Fluorochemicals Ltd.,Chemicals,Mid,FLUOROCHEM.NS
+Gujarat Mineral Development Corporation Ltd.,Metals and Mining,Small,GMDCLTD.NS
+HBL Engineering Ltd.,Capital Goods,Small,HBLENGINE.NS
+HEG Advanced Materials Ltd.,Capital Goods,Small,HEGAM.NS
+Havells India Ltd.,Consumer Durables,Mid,HAVELLS.NS
+Hero MotoCorp Ltd.,Automobiles and Auto Components,Mid,HEROMOTOCO.NS
+Hexaware Technologies Ltd.,Information Technology,Mid,HEXT.NS
+Himadri Speciality Chemical Ltd.,Chemicals,Small,HSCL.NS
+Hindustan Copper Ltd.,Metals and Mining,Mid,HINDCOPPER.NS
+Hindustan Petroleum Corporation Ltd.,Oil Gas & Consumable Fuels,Mid,HINDPETRO.NS
+Hitachi Energy India Ltd.,Capital Goods,Large,POWERINDIA.NS
+Honasa Consumer Ltd.,Fast Moving Consumer Goods,Small,HONASA.NS
+Honeywell Automation India Ltd.,Capital Goods,Small,HONAUT.NS
+Hyundai Motor India Ltd.,Automobiles and Auto Components,Large,HYUNDAI.NS
+INOX India Ltd.,Capital Goods,Small,INOXINDIA.NS
+IRB Infrastructure Developers Ltd.,Construction,Small,IRB.NS
+IRCON International Ltd.,Construction,Small,IRCON.NS
+ITC Hotels Ltd.,Consumer Services,Mid,ITCHOTELS.NS
+ITI Ltd.,Telecommunication,Small,ITI.NS
+India Cements Ltd.,Construction Materials,Small,INDIACEM.NS
+Indiamart Intermesh Ltd.,Consumer Services,Small,INDIAMART.NS
+Indian Hotels Co. Ltd.,Consumer Services,Mid,INDHOTEL.NS
+Indian Oil Corporation Ltd.,Oil Gas & Consumable Fuels,Large,IOC.NS
+Indian Railway Catering And Tourism Corporation Ltd.,Consumer Services,Mid,IRCTC.NS
+Indraprastha Gas Ltd.,Oil Gas & Consumable Fuels,Small,IGL.NS
+Indus Towers Ltd.,Telecommunication,Mid,INDUSTOWER.NS
+Info Edge (India) Ltd.,Consumer Services,Mid,NAUKRI.NS
+Inox Wind Ltd.,Capital Goods,Small,INOXWIND.NS
+Intellect Design Arena Ltd.,Information Technology,Small,INTELLECT.NS
+InterGlobe Aviation Ltd.,Services,Large,INDIGO.NS
+International Gemological Institute Ltd.,Services,Small,IGIL.NS
+Inventurus Knowledge Solutions Ltd.,Information Technology,Small,IKS.NS
+Ipca Laboratories Ltd.,Healthcare and Medical Devices,Mid,IPCALAB.NS
+J.K. Cement Ltd.,Construction Materials,Mid,JKCEMENT.NS
+JBM Auto Ltd.,Automobiles and Auto Components,Small,JBMA.NS
+JK Tyre & Industries Ltd.,Automobiles and Auto Components,Small,JKTYRE.NS
+JSW Cement Ltd.,Construction Materials,Small,JSWCEMENT.NS
+JSW Energy Ltd.,Power and Renewable Energy,Mid,JSWENERGY.NS
+JSW Infrastructure Ltd.,Services,Mid,JSWINFRA.NS
+Jain Resource Recycling Ltd.,Metals and Mining,Small,JAINREC.NS
+Jindal Saw Ltd.,Capital Goods,Small,JINDALSAW.NS
+Jindal Stainless Ltd.,Metals and Mining,Mid,JSL.NS
+Jindal Steel Ltd.,Metals and Mining,Large,JINDALSTEL.NS
+Jubilant Foodworks Ltd.,Consumer Services,Mid,JUBLFOOD.NS
+Jubilant Ingrevia Ltd.,Chemicals,Small,JUBLINGREA.NS
+Jupiter Wagons Ltd.,Capital Goods,Small,JWL.NS
+Jyoti CNC Automation Ltd.,Capital Goods,Small,JYOTICNC.NS
+K.P.R. Mill Ltd.,Textiles,Mid,KPRMILL.NS
+KEI Industries Ltd.,Capital Goods,Mid,KEI.NS
+KPIT Technologies Ltd.,Information Technology,Small,KPITTECH.NS
+KSB Ltd.,Capital Goods,Small,KSB.NS
+Kajaria Ceramics Ltd.,Consumer Durables,Small,KAJARIACER.NS
+Kalpataru Projects International Ltd.,Construction,Small,KPIL.NS
+Kalyan Jewellers India Ltd.,Consumer Durables,Mid,KALYANKJIL.NS
+Kaynes Technology India Ltd.,Capital Goods,Small,KAYNES.NS
+Kec International Ltd.,Construction,Small,KEC.NS
+Kirloskar Brothers Ltd.,Capital Goods,Small,KIRLOSBROS.NS
+Kirloskar Oil Eng Ltd.,Capital Goods,Small,KIRLOSENG.NS
+Krishna Institute of Medical Sciences Ltd.,Healthcare and Medical Devices,Small,KIMS.NS
+L&T Technology Services Ltd.,Information Technology,Mid,LTTS.NS
+LG Electronics India Ltd.,Consumer Durables,Mid,LGEINDIA.NS
+LT Foods Ltd.,Fast Moving Consumer Goods,Small,LTFOODS.NS
+LTM Ltd.,Information Technology,Large,LTM.NS
+Larsen & Toubro Ltd.,Construction,Large,LT.NS
+Laurus Labs Ltd.,Healthcare and Medical Devices,Mid,LAURUSLABS.NS
+Lemon Tree Hotels Ltd.,Consumer Services,Small,LEMONTREE.NS
+Lenskart Solutions Ltd.,Consumer Services,Mid,LENSKART.NS
+Linde India Ltd.,Chemicals,Mid,LINDEINDIA.NS
+Lloyds Metals And Energy Ltd.,Metals and Mining,Mid,LLOYDSME.NS
+Lodha Developers Ltd.,Realty,Mid,LODHA.NS
+Lupin Ltd.,Healthcare and Medical Devices,Mid,LUPIN.NS
+MMTC Ltd.,Services,Small,MMTC.NS
+MRF Ltd.,Automobiles and Auto Components,Mid,MRF.NS
+Mahanagar Gas Ltd.,Oil Gas & Consumable Fuels,Small,MGL.NS
+Mahindra & Mahindra Ltd.,Automobiles and Auto Components,Large,M&M.NS
+Mangalore Refinery & Petrochemicals Ltd.,Oil Gas & Consumable Fuels,Small,MRPL.NS
+Mankind Pharma Ltd.,Healthcare and Medical Devices,Mid,MANKIND.NS
+Marico Ltd.,Fast Moving Consumer Goods,Mid,MARICO.NS
+Maruti Suzuki India Ltd.,Automobiles and Auto Components,Large,MARUTI.NS
+Mazagoan Dock Shipbuilders Ltd.,Capital Goods,Large,MAZDOCK.NS
+Meesho Ltd.,Consumer Services,Mid,MEESHO.NS
+Minda Corporation Ltd.,Automobiles and Auto Components,Small,MINDACORP.NS
+Motherson Sumi Wiring India Ltd.,Automobiles and Auto Components,Small,MSUMI.NS
+MphasiS Ltd.,Information Technology,Mid,MPHASIS.NS
+NATCO Pharma Ltd.,Healthcare and Medical Devices,Small,NATCOPHARM.NS
+NBCC (India) Ltd.,Construction,Small,NBCC.NS
+NCC Ltd.,Construction,Small,NCC.NS
+NLC India Ltd.,Power and Renewable Energy,Mid,NLCINDIA.NS
+NMDC Ltd.,Metals and Mining,Mid,NMDC.NS
+NMDC Steel Ltd.,Metals and Mining,Small,NSLNISP.NS
+NTPC Green Energy Ltd.,Power and Renewable Energy,Mid,NTPCGREEN.NS
+NTPC Ltd.,Power and Renewable Energy,Large,NTPC.NS
+Navin Fluorine International Ltd.,Chemicals,Small,NAVINFLUOR.NS
+Nestle India Ltd.,Fast Moving Consumer Goods,Large,NESTLEIND.NS
+Netweb Technologies India Ltd.,Information Technology,Small,NETWEB.NS
+Neuland Laboratories Ltd.,Healthcare and Medical Devices,Small,NEULANDLAB.NS
+Nuvoco Vistas Corporation Ltd.,Construction Materials,Small,NUVOCO.NS
+Oberoi Realty Ltd.,Realty,Mid,OBEROIRLTY.NS
+Oil & Natural Gas Corporation Ltd.,Oil Gas & Consumable Fuels,Large,ONGC.NS
+Oil India Ltd.,Oil Gas & Consumable Fuels,Mid,OIL.NS
+Ola Electric Mobility Ltd.,Automobiles and Auto Components,Small,OLAELEC.NS
+Olectra Greentech Ltd.,Automobiles and Auto Components,Small,OLECTRA.NS
+Onesource Specialty Pharma Ltd.,Healthcare and Medical Devices,Small,ONESOURCE.NS
+PCBL Chemical Ltd.,Chemicals,Small,PCBL.NS
+PG Electroplast Ltd.,Consumer Durables,Small,PGEL.NS
+PI Industries Ltd.,Chemicals,Mid,PIIND.NS
+PTC Industries Ltd.,Capital Goods,Small,PTCIL.NS
+PVR INOX Ltd.,Media Entertainment & Publication,Small,PVRINOX.NS
+Page Industries Ltd.,Textiles,Mid,PAGEIND.NS
+Paradeep Phosphates Ltd.,Chemicals,Small,PARADEEP.NS
+Patanjali Foods Ltd.,Fast Moving Consumer Goods,Mid,PATANJALI.NS
+Persistent Systems Ltd.,Information Technology,Mid,PERSISTENT.NS
+Petronet LNG Ltd.,Oil Gas & Consumable Fuels,Mid,PETRONET.NS
+Phoenix Mills Ltd.,Realty,Mid,PHOENIXLTD.NS
+Physicswallah Ltd.,Consumer Services,Small,PWL.NS
+Pidilite Industries Ltd.,Chemicals,Large,PIDILITIND.NS
+Piramal Pharma Ltd.,Healthcare and Medical Devices,Small,PPLPHARMA.NS
+Polycab India Ltd.,Capital Goods,Large,POLYCAB.NS
+Premier Energies Ltd.,Capital Goods,Mid,PREMIERENE.NS
+Prestige Estates Projects Ltd.,Realty,Mid,PRESTIGE.NS
+Prime Focus Ltd.,Media Entertainment & Publication,Small,PFOCUS.NS
+Privi Speciality Chemicals Ltd.,Chemicals,Small,PRIVISCL.NS
+R R Kabel Ltd.,Capital Goods,Small,RRKABEL.NS
+RHI MAGNESITA INDIA LTD.,Capital Goods,Small,RHIM.NS
+RITES Ltd.,Construction,Small,RITES.NS
+Radico Khaitan Ltd,Fast Moving Consumer Goods,Mid,RADICO.NS
+Rail Vikas Nigam Ltd.,Construction,Mid,RVNL.NS
+Railtel Corporation Of India Ltd.,Telecommunication,Small,RAILTEL.NS
+Rainbow Childrens Medicare Ltd.,Healthcare and Medical Devices,Small,RAINBOW.NS
+Ramkrishna Forgings Ltd.,Automobiles and Auto Components,Small,RKFORGE.NS
+Redington Ltd.,Services,Small,REDINGTON.NS
+Reliance Industries Ltd.,Oil Gas & Consumable Fuels,Large,RELIANCE.NS
+Reliance Power Ltd.,Power and Renewable Energy,Small,RPOWER.NS
+Rubicon Research Ltd.,Healthcare and Medical Devices,Small,RUBICON.NS
+SJVN Ltd.,Power and Renewable Energy,Small,SJVN.NS
+SPR Auto Technologies Ltd.,Automobiles and Auto Components,Small,SHRIPISTON.NS
+SRF Ltd.,Chemicals,Mid,SRF.NS
+Sagility Ltd.,Information Technology,Small,SAGILITY.NS
+Sai Life Sciences Ltd.,Healthcare and Medical Devices,Small,SAILIFE.NS
+Samvardhana Motherson International Ltd.,Automobiles and Auto Components,Large,MOTHERSON.NS
+Sansera Engineering Ltd.,Automobiles and Auto Components,Small,SANSERA.NS
+Sarda Energy and Minerals Ltd.,Metals and Mining,Small,SARDAEN.NS
+Schaeffler India Ltd.,Automobiles and Auto Components,Mid,SCHAEFFLER.NS
+Schneider Electric Infrastructure Ltd.,Capital Goods,Small,SCHNEIDER.NS
+Shipping Corporation of India Ltd.,Services,Small,SCI.NS
+Shree Cement Ltd.,Construction Materials,Mid,SHREECEM.NS
+Shyam Metalics and Energy Ltd.,Capital Goods,Small,SHYAMMETL.NS
+Siemens Energy India Ltd.,Capital Goods,Large,ENRIN.NS
+Siemens Ltd.,Capital Goods,Large,SIEMENS.NS
+Signatureglobal (India) Ltd.,Realty,Small,SIGNATURE.NS
+Sobha Ltd.,Realty,Small,SOBHA.NS
+Solar Industries India Ltd.,Chemicals,Large,SOLARINDS.NS
+Sona BLW Precision Forgings Ltd.,Automobiles and Auto Components,Small,SONACOMS.NS
+Steel Authority of India Ltd.,Metals and Mining,Mid,SAIL.NS
+Sumitomo Chemical India Ltd.,Chemicals,Small,SUMICHEM.NS
+Sun Pharmaceutical Industries Ltd.,Healthcare and Medical Devices,Large,SUNPHARMA.NS
+Sun TV Network Ltd.,Media Entertainment & Publication,Small,SUNTV.NS
+Supreme Industries Ltd.,Capital Goods,Mid,SUPREMEIND.NS
+Suzlon Energy Ltd.,Capital Goods,Mid,SUZLON.NS
+Swan Corp Ltd.,Chemicals,Small,SWANCORP.NS
+Swiggy Ltd.,Consumer Services,Mid,SWIGGY.NS
+Syngene International Ltd.,Healthcare and Medical Devices,Small,SYNGENE.NS
+Syrma SGS Technology Ltd.,Capital Goods,Small,SYRMA.NS
+TBO Tek Ltd.,Consumer Services,Small,TBOTEK.NS
+TD Power Systems Ltd.,Capital Goods,Small,TDPOWERSYS.NS
+TVS Motor Company Ltd.,Automobiles and Auto Components,Large,TVSMOTOR.NS
+Tata Chemicals Ltd.,Chemicals,Small,TATACHEM.NS
+Tata Communications Ltd.,Telecommunication,Mid,TATACOMM.NS
+Tata Consumer Products Ltd.,Fast Moving Consumer Goods,Large,TATACONSUM.NS
+Tata Elxsi Ltd.,Information Technology,Small,TATAELXSI.NS
+Tata Motors Ltd.,Capital Goods,Large,TMCV.NS
+Tata Motors Passenger Vehicles Ltd.,Automobiles and Auto Components,Large,TMPV.NS
+Tata Technologies Ltd.,Information Technology,Small,TATATECH.NS
+Tata Teleservices (Maharashtra) Ltd.,Telecommunication,Small,TTML.NS
+Tech Mahindra Ltd.,Information Technology,Large,TECHM.NS
+Techno Electric & Engineering Company Ltd.,Construction,Small,TECHNOE.NS
+Tega Industries Ltd.,Capital Goods,Small,TEGA.NS
+Tejas Networks Ltd.,Telecommunication,Small,TEJASNET.NS
+Tenneco Clean Air India Ltd.,Automobiles and Auto Components,Small,TENNIND.NS
+Thangamayil Jewellery Ltd.,Consumer Durables,Small,THANGAMAYL.NS
+The Ramco Cements Ltd.,Construction Materials,Small,RAMCOCEM.NS
+Thermax Ltd.,Capital Goods,Mid,THERMAX.NS
+Timken India Ltd.,Capital Goods,Small,TIMKEN.NS
+Titagarh Rail Systems Ltd.,Capital Goods,Small,TITAGARH.NS
+Titan Company Ltd.,Consumer Durables,Large,TITAN.NS
+Torrent Pharmaceuticals Ltd.,Healthcare and Medical Devices,Large,TORNTPHARM.NS
+Torrent Power Ltd.,Power and Renewable Energy,Mid,TORNTPOWER.NS
+Transformers And Rectifiers (India) Ltd.,Capital Goods,Small,TARIL.NS
+Trent Ltd.,Consumer Services,Large,TRENT.NS
+Trident Ltd.,Textiles,Small,TRIDENT.NS
+Triveni Turbine Ltd.,Capital Goods,Small,TRITURBINE.NS
+Tube Investments of India Ltd.,Automobiles and Auto Components,Mid,TIINDIA.NS
+UNO Minda Ltd.,Automobiles and Auto Components,Mid,UNOMINDA.NS
+UPL Ltd.,Chemicals,Mid,UPL.NS
+UltraTech Cement Ltd.,Construction Materials,Large,ULTRACEMCO.NS
+United Breweries Ltd.,Fast Moving Consumer Goods,Mid,UBL.NS
+United Spirits Ltd.,Fast Moving Consumer Goods,Mid,UNITDSPR.NS
+Urban Company Ltd.,Consumer Services,Small,URBANCO.NS
+Usha Martin Ltd.,Capital Goods,Small,USHAMART.NS
+Vardhman Textiles Ltd.,Textiles,Small,VTL.NS
+Varun Beverages Ltd.,Fast Moving Consumer Goods,Large,VBL.NS
+Vedanta Aluminium Metal Ltd.,Metals and Mining,Large,VAML.NS
+Vedanta Iron and Steel Ltd.,Metals and Mining,Small,VISL.NS
+Vedanta Oil and Gas Ltd.,Oil Gas & Consumable Fuels,Small,VOGL.NS
+Vedanta Power Ltd.,Power and Renewable Energy,Small,VEDPOWER.NS
+Vijaya Diagnostic Centre Ltd.,Healthcare and Medical Devices,Small,VIJAYA.NS
+Vishal Mega Mart Ltd.,Consumer Services,Mid,VMM.NS
+Vodafone Idea Ltd.,Telecommunication,Large,IDEA.NS
+Voltas Ltd.,Consumer Durables,Mid,VOLTAS.NS
+Waaree Energies Ltd.,Capital Goods,Mid,WAAREEENER.NS
+Welspun Corp Ltd.,Capital Goods,Small,WELCORP.NS
+Welspun Living Ltd.,Textiles,Small,WELSPUNLIV.NS
+Whirlpool of India Ltd.,Consumer Durables,Small,WHIRLPOOL.NS
+Wockhardt Ltd.,Healthcare and Medical Devices,Small,WOCKPHARMA.NS
+ZF Commercial Vehicle Control Systems India Ltd.,Automobiles and Auto Components,Small,ZFCVINDIA.NS
+Zee Entertainment Enterprises Ltd.,Media Entertainment & Publication,Small,ZEEL.NS
+Zensar Technolgies Ltd.,Information Technology,Small,ZENSARTECH.NS
+Zydus Lifesciences Ltd.,Healthcare and Medical Devices,Large,ZYDUSLIFE.NS
+Zydus Wellness Ltd.,Fast Moving Consumer Goods,Small,ZYDUSWELL.NS
+eClerx Services Ltd.,Services,Small,ECLERX.NS

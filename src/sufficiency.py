@@ -42,6 +42,7 @@ MODEL_REQUIREMENTS = {
     "DCF": ("ocf", "capex", "shares", "total_debt", "cash"),
     "P/E Relative": ("eps", "shares"),
     "EV/EBITDA": ("ebitda", "shares", "total_debt", "cash"),
+    "Residual Income": ("net_income", "equity", "shares"),
 }
 
 

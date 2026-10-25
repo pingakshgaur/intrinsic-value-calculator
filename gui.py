@@ -1511,6 +1511,20 @@ class App(tb.Window):
         self.v_overrides = tk.BooleanVar(value=g(config, "USE_OVERRIDES", True))
         self.v_offline = tk.BooleanVar(value=g(config, "OFFLINE", False))
 
+        # ---- auto-train: keep learning from the market until confident ----
+        self.v_auto = tk.BooleanVar(value=False)
+        self.v_auto_target = tk.IntVar(
+            value=int(g(config, "AUTO_TARGET", None) or g(config, "HYBRID_CONF_HIGH", 60))
+        )
+        self.v_auto_max = tk.IntVar(value=g(config, "AUTO_MAX_COMPANIES", 100))
+        self.v_auto_sectors = tk.IntVar(value=g(config, "AUTO_SECTORS", 10))
+        self.v_auto_years = tk.IntVar(value=g(config, "AUTO_MIN_LISTED_YEARS", 10))
+        self.v_auto_conf = tk.StringVar(value="not trained yet")
+        self.v_auto_detail = tk.StringVar(value="")
+        self.v_auto_status = tk.StringVar(value="")
+        self.auto_controls = None
+        self.auto_state = {}
+
         self.v_status = tk.StringVar(value="Ready")
         self.v_headline = tk.StringVar(value="Nothing running yet")
         self.v_count = tk.StringVar(value="No companies loaded")
@@ -2484,6 +2498,8 @@ class App(tb.Window):
             justify="left",
         ).pack(side="left", padx=(16, 0))
 
+        self._build_auto(top)
+
         # ---- the live panel
         panel = ttk.Frame(parent, style="Card.TFrame", padding=(18, 16))
         panel.grid(row=1, column=0, sticky="nsew")
@@ -2548,6 +2564,218 @@ class App(tb.Window):
         self.console.configure(state="disabled")
         bind_wheel_native(self.console)
         self.register_tk(self.console, "console")
+
+
+    # ------------------------------------------------------- auto-train panel
+    def _build_auto(self, top):
+        """
+        The auto-train switch, its four settings, and the live meter.
+
+        The meter stays hidden until an auto-train run starts, so the page
+        looks exactly as before for anyone who never ticks the box.
+        """
+        auto = ttk.Frame(top, style="Card.TFrame")
+        auto.pack(fill="x", pady=(16, 0))
+        ttk.Checkbutton(
+            auto,
+            text="Auto-train: keep learning from the market until the Hybrid is confident",
+            variable=self.v_auto,
+            style="Card.TCheckbutton",
+        ).pack(anchor="w")
+
+        opts = ttk.Frame(auto, style="Card.TFrame")
+        opts.pack(anchor="w", pady=(8, 0), padx=(24, 0))
+        for label, var, lo, hi in (
+            ("Target confidence", self.v_auto_target, 5, 95),
+            ("Most companies", self.v_auto_max, 5, 1000),
+            ("Top sectors", self.v_auto_sectors, 1, 25),
+            ("Listed at least (years)", self.v_auto_years, 1, 30),
+        ):
+            ttk.Label(opts, text=label, style="CardBody.TLabel").pack(side="left")
+            ttk.Spinbox(
+                opts, from_=lo, to=hi, textvariable=var, width=6, increment=1
+            ).pack(side="left", padx=(6, 18))
+
+        ttk.Label(
+            auto,
+            text="Before valuing your list, the program fetches long-listed companies "
+            "from the best-performing sectors one at a time, retrains the AI models "
+            "every few companies, and re-checks how confident the Hybrid is. It stops "
+            "on its own when the target is reached, when more data stops helping, or "
+            "at the company limit - or whenever you press Finish learning.",
+            style="CardMuted.TLabel",
+            wraplength=900,
+            justify="left",
+        ).pack(anchor="w", pady=(6, 0), padx=(24, 0))
+
+        # ---- the live meter (hidden until used) ----
+        self.auto_panel = ttk.Frame(top, style="Card.TFrame")
+        meter = ttk.Frame(self.auto_panel, style="Card.TFrame")
+        meter.pack(fill="x")
+        ttk.Label(meter, text="Hybrid confidence", style="CardHead.TLabel").pack(
+            side="left"
+        )
+        ttk.Label(meter, textvariable=self.v_auto_conf, style="CardBody.TLabel").pack(
+            side="right"
+        )
+        self.auto_bar = ttk.Progressbar(
+            self.auto_panel,
+            mode="determinate",
+            maximum=100,
+            style="Run.Horizontal.TProgressbar",
+        )
+        self.auto_bar.pack(fill="x", pady=(6, 6))
+        ttk.Label(
+            self.auto_panel, textvariable=self.v_auto_detail, style="CardBody.TLabel"
+        ).pack(anchor="w")
+        ttk.Label(
+            self.auto_panel,
+            textvariable=self.v_auto_status,
+            style="CardMuted.TLabel",
+            wraplength=900,
+            justify="left",
+        ).pack(anchor="w", pady=(2, 8))
+
+        ctl = ttk.Frame(self.auto_panel, style="Card.TFrame")
+        ctl.pack(anchor="w")
+
+        def do(method, *a):
+            c = self.auto_controls
+            if c is None:
+                return None
+            return getattr(c, method)(*a)
+
+        self.btn_auto_pause = ttk.Button(
+            ctl, text="Pause", style="Ghost.TButton", command=self._auto_pause
+        )
+        self.auto_buttons = [self.btn_auto_pause]
+        for text, cmd in (
+            ("Skip this company", lambda: (do("skip"), self._auto_note("Skipping this company"))),
+            ("Skip this sector", lambda: (do("skip_sector"), self._auto_note("Skipping the rest of this sector"))),
+            ("Retrain now", lambda: (do("retrain"), self._auto_note("Will retrain after this company"))),
+            ("Target -5", lambda: self._auto_target(-5)),
+            ("Target +5", lambda: self._auto_target(+5)),
+        ):
+            self.auto_buttons.append(ttk.Button(ctl, text=text, style="Ghost.TButton", command=cmd))
+        self.auto_buttons.append(
+            ttk.Button(
+                ctl,
+                text="Finish learning",
+                style="Accent.TButton",
+                command=lambda: (do("stop"), self._auto_note("Finishing with what has been learned ...")),
+            )
+        )
+        for i, b in enumerate(self.auto_buttons):
+            b.pack(side="left", padx=(0 if i == 0 else 8, 0))
+
+    def _auto_note(self, text):
+        self.v_auto_status.set(text)
+
+    def _auto_pause(self):
+        if self.auto_controls is None:
+            return
+        paused = self.auto_controls.toggle_pause()
+        self.btn_auto_pause.configure(text="Resume" if paused else "Pause")
+        self._auto_note("Paused - press Resume to carry on" if paused else "Resuming ...")
+
+    def _auto_target(self, delta):
+        if self.auto_controls is None:
+            return
+        t = self.auto_controls.adjust_target(delta)
+        self.v_auto_target.set(int(t))
+        self._auto_render()
+        self._auto_note(f"Target changed to {t:.0f}")
+
+    def _auto_render(self):
+        s = self.auto_state
+        tgt = self.auto_controls.target if self.auto_controls else self._iget(self.v_auto_target, 60)
+        if "confidence" in s:
+            self.auto_bar.configure(value=s["confidence"])
+            self.v_auto_conf.set(
+                f"{s['confidence']:.1f} of a {tgt:.0f} target   "
+                f"(really landed within 20%: {s.get('hit20', 0):.0f}%)"
+            )
+        self.v_auto_detail.set(
+            f"Learned {s.get('learned', 0)} of up to {s.get('max', '?')} companies"
+            + (f"   ·   now: {s['current']}" if s.get("current") else "")
+            + (f"  ({s['sector']})" if s.get("sector") else "")
+        )
+
+    def _make_trainer(self, selected):
+        import auto_train
+
+        opts = auto_train.Options(
+            target=self._iget(self.v_auto_target, 60),
+            max_companies=self._iget(self.v_auto_max, 100),
+            sectors=self._iget(self.v_auto_sectors, 10),
+            min_listed_years=self._iget(self.v_auto_years, 10),
+            exclude_tickers={
+                (c.get("ticker") or "").upper().split(".")[0]
+                for c in selected
+                if c.get("ticker")
+            },
+        )
+        self.auto_controls = auto_train.Controls(opts.target)
+        self.auto_state = {"learned": 0, "max": opts.max_companies}
+        self.auto_bar.configure(value=0)
+        self.v_auto_conf.set("measuring the starting point ...")
+        self.v_auto_status.set("Reading the NSE company lists ...")
+        self.btn_auto_pause.configure(text="Pause")
+        for b in self.auto_buttons:
+            b.configure(state="normal")
+        self._auto_render()
+        self.auto_panel.pack(fill="x", pady=(16, 0))
+
+        def on_event(kind, **info):  # worker thread: queue only, no widgets
+            self.queue.put(("train", (kind, info)))
+
+        return auto_train.AutoTrainer(opts, self.auto_controls, on_event)
+
+    def _on_train(self, kind, info):
+        """Main thread. One auto-train event -> meter, detail line, status line."""
+        s = self.auto_state
+        if kind == "plan":
+            s["max"] = info.get("max", s.get("max"))
+            names = ", ".join(n for n, _, _ in info["sectors"])
+            how = "past share-price performance" if info["rank"] == "performance" else "number of companies"
+            self._auto_note(
+                f"Learning from the top {len(info['sectors'])} sectors by {how}: {names}"
+            )
+        elif kind in ("status", "error"):
+            self._auto_note(info["message"])
+        elif kind == "fetching":
+            s.update(current=info["current"], sector=info["sector"])
+        elif kind == "learned":
+            s["learned"] = info["learned"]
+            self._auto_note(
+                f"Learned {info['name']} - {info['sector']}, {info['cap']} cap, "
+                f"listed {info['listed'][:4]} ({info['fund']} years of accounts, "
+                f"{info['px']} of prices)"
+            )
+        elif kind == "skipped":
+            self._auto_note(f"Skipped {info['name']}: {info['why']}")
+        elif kind == "training":
+            s["current"] = "retraining the models ..."
+            s["sector"] = ""
+        elif kind == "score":
+            s.update(confidence=info["confidence"], hit20=info["hit20"])
+            self._auto_note(
+                f"Retrained on {info['labelled']} labelled company-years. "
+                f"Hybrid confidence is now {info['confidence']:.1f}."
+            )
+        elif kind == "paused":
+            self.btn_auto_pause.configure(text="Resume")
+        elif kind == "resumed":
+            self.btn_auto_pause.configure(text="Pause")
+        elif kind == "done":
+            s["current"], s["sector"] = "", ""
+            for b in self.auto_buttons:
+                b.configure(state="disabled")
+            self._auto_note(
+                f"Finished learning: {info['reason']}. {info['learned']} companies "
+                f"learned. Now valuing your list ..."
+            )
+        self._auto_render()
 
     def _toggle_log(self):
         if self.v_shownlog.get():
@@ -2980,6 +3208,17 @@ class App(tb.Window):
         ):
             return
 
+        trainer = None
+        if mode == "run" and self.v_auto.get():
+            if config.OFFLINE:
+                messagebox.showwarning(
+                    "Auto-train needs the internet",
+                    "Auto-train downloads real companies, so it cannot run with "
+                    "'Use fake data' switched on. Untick one of the two.",
+                )
+                return
+            trainer = self._make_trainer(selected)
+
         self.cancel.clear()
         self.expected = len(selected)
         self.fetched = 0
@@ -3001,11 +3240,11 @@ class App(tb.Window):
             f"MIN_COMPLETE_FY={config.MIN_COMPLETE_FY}\n{'=' * 78}\n"
         )
         self.worker = threading.Thread(
-            target=self._work, args=(mode, selected), daemon=True
+            target=self._work, args=(mode, selected, trainer), daemon=True
         )
         self.worker.start()
 
-    def _work(self, mode, selected):
+    def _work(self, mode, selected, trainer=None):
         """Worker thread. Touches no widgets - everything goes via the queue."""
         writer = QueueWriter(self.queue, self.cancel)
         old_out, old_err = sys.stdout, sys.stderr
@@ -3016,7 +3255,7 @@ class App(tb.Window):
                 self.queue.put(("records", records))
                 self.queue.put(("done", "screen_finished"))
             else:
-                pipeline.run(selected)
+                pipeline.run(selected, auto_train=trainer)
                 self.queue.put(("done", "finished"))
         except RunCancelled:
             self.queue.put(("done", "cancelled"))
@@ -3032,6 +3271,10 @@ class App(tb.Window):
     def _request_cancel(self):
         if self.worker and self.worker.is_alive():
             self.cancel.set()
+            # The auto-train loop prints nothing while it learns, so the stdout
+            # tripwire alone would not stop it - tell it directly as well.
+            if self.auto_controls is not None:
+                self.auto_controls.stop()
             self.v_headline.set("Stopping after the current company ...")
 
     def _drain(self):
@@ -3045,6 +3288,8 @@ class App(tb.Window):
                 elif kind == "records":
                     self.last_records = payload
                     self._update_gate_hint()
+                elif kind == "train":
+                    self._on_train(*payload)
                 elif kind == "done":
                     self._finish(payload)
         except queue.Empty:
@@ -3079,6 +3324,10 @@ class App(tb.Window):
         self.btn_run.configure(state="normal")
         self.btn_screen.configure(state="normal")
         self.btn_cancel.configure(state="disabled")
+        if self.auto_controls is not None:
+            for b in self.auto_buttons:
+                b.configure(state="disabled")
+            self.auto_controls = None
 
         if outcome == "finished":
             for key, _ in STEPS:
@@ -3128,6 +3377,9 @@ class App(tb.Window):
 
 def launch():
     setup_logging()
+    import ssl_trust
+
+    ssl_trust.install()
     App().mainloop()
 
 

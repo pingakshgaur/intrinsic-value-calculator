@@ -2,6 +2,7 @@
 """Fetch -> screen -> estimate -> value -> export -> analyse. All exception capture lives here."""
 
 import logging
+import statistics
 import time
 import traceback
 
@@ -15,6 +16,9 @@ import model_dcf
 import model_pe
 import model_ev_ebitda
 import model_graham
+import model_residual_income
+import model_hybrid
+import capital
 import exporter
 import csv_analyzer
 import ml_common
@@ -131,7 +135,7 @@ def screen_only(companies):
     return records
 
 
-def run(companies, extra_training=None):
+def run(companies, extra_training=None, auto_train=None):
     if overrides.ensure_template_exists():
         print(
             f"[override] created empty {config.OVERRIDE_FILE} - run "
@@ -139,6 +143,13 @@ def run(companies, extra_training=None):
         )
     overrides.load()
 
+    if auto_train is not None:
+        _banner(
+            f"STEP 1 of 3 - downloading YOUR {len(companies)} companies (the list "
+            f"being valued)",
+            "Training companies are NOT in this list - they are drawn at random "
+            "from the live market in step 2.",
+        )
     universe, failures = build_universe(companies)
 
     # ---- sufficiency gate: AFTER fetch, BEFORE estimation ----
@@ -229,7 +240,31 @@ def run(companies, extra_training=None):
         model_ev_ebitda.build_sector_table(peer_universe) if peer_universe else {}
     )
 
+    # Only what the user left ticked. A model switched off is not computed
+    # at all - it does not merely lose its column later on.
+    enabled = set(model_registry.enabled_keys())
+    print(f"\n[models] {model_registry.describe_selection()}")
+
+    # Sector betas feed the adjusted beta used by Residual Income and the
+    # Hybrid. Built from the whole fetched universe, like the peer tables.
+    capital.build_sector_betas(universe)
+
     ml_modules = active_ml_modules()
+    ctx = {
+        "valued": valued,
+        "universe": universe,
+        "failures": failures,
+        "peer_universe": peer_universe,
+        "pe_table": pe_table,
+        "ev_table": ev_table,
+        "ml_modules": ml_modules,
+        "enabled": enabled,
+    }
+
+    # ---- auto-train: grow the ML training universe until confident ----
+    if auto_train is not None:
+        _auto_train(auto_train, ml_universe, ctx)
+
     ml_store, ml_df = None, None
     if ml_modules and universe:
         print("\n[ml] building feature matrix ...")
@@ -245,78 +280,7 @@ def run(companies, extra_training=None):
     elif not ml_modules:
         print("\n[ml] no machine-learning models selected - stage skipped")
 
-    def guard(fn, *a):
-        try:
-            return fn(*a)
-        except Exception as e:
-            log.error("model crashed: %s", traceback.format_exc())
-            return Result.bad(R.CALC_ERROR, f"{type(e).__name__}: {e}")
-
-    # Only what the user left ticked. A model switched off is not computed
-    # at all - it does not merely lose its column later on.
-    enabled = set(model_registry.enabled_keys())
-    print(f"\n[models] {model_registry.describe_selection()}")
-
-    rows = []
-    for c in valued:
-        name, sector = c["name"], c["sector"]
-        # ascending, so each company block reads oldest FY first
-        for fy in sorted(config.FY_LIST):
-            base = {"company": name, "sector": sector, "fy": fy}
-            if name in failures:
-                f = failures[name]
-                rows.append(
-                    {
-                        **base,
-                        "price": f,
-                        "price_anchor": f,
-                        "price_bench_date": "",
-                        **{key: f for key in enabled},
-                    }
-                )
-                continue
-
-            data = universe[name]["data"]
-            d = data["years"].get(fy, {})
-            row = {
-                **base,
-                # "price" is the BENCHMARK: the close on the trading day
-                # nearest 1 May following FY end. It is what every model is
-                # scored against.
-                "price": field_result(
-                    d, "price_bench", fy, "1-May benchmark market price"
-                ),
-                # the in-FY mean price the models actually consumed. Carried
-                # for the numeric twin so anchor and benchmark can be compared
-                # during review; never shown in the main grid.
-                "price_anchor": field_result(d, "price", fy, "in-FY mean price"),
-                # the date the benchmark close was actually taken from - 1 May
-                # is a market holiday, so this is rarely 1 May itself.
-                "price_bench_date": d.get("price_bench_date") or "",
-            }
-            if "dcf" in enabled:
-                row["dcf"] = guard(model_dcf.intrinsic_value, data, fy)
-            if "pe" in enabled:
-                row["pe"] = guard(
-                    model_pe.intrinsic_value, universe, pe_table, name, sector, fy
-                )
-            if "ev" in enabled:
-                row["ev"] = guard(
-                    model_ev_ebitda.intrinsic_value,
-                    universe,
-                    ev_table,
-                    name,
-                    sector,
-                    fy,
-                )
-            if "graham" in enabled:
-                row["graham"] = guard(
-                    model_graham.intrinsic_value, universe, name, fy
-                )
-            for m in ml_modules:
-                row[m.KEY] = guard(m.intrinsic_value, ml_store, name, fy)
-            rows.append(row)
-
+    rows, _ = value_rows(ctx, ml_store)
     csv_p, xlsx_p, aux_p = exporter.export(rows, exclusions=records)
     print(f"\n[export] {len(rows)} rows -> {csv_p}")
     print(f"[export]              -> {xlsx_p}")
@@ -402,6 +366,186 @@ def run(companies, extra_training=None):
         )
 
 
+
+def _guard(fn, *a):
+    try:
+        return fn(*a)
+    except Exception as e:
+        log.error("model crashed: %s", traceback.format_exc())
+        return Result.bad(R.CALC_ERROR, f"{type(e).__name__}: {e}")
+
+
+def value_rows(ctx, ml_store, write_hybrid=True):
+    """
+    Value every kept company-year with every enabled model, then blend the
+    Hybrid over the whole grid. -> (rows, hybrid detail rows).
+
+    Separate from run() so the auto-trainer can re-score the Hybrid after
+    each training batch without exporting anything.
+    """
+    valued, universe, failures = ctx["valued"], ctx["universe"], ctx["failures"]
+    peer_universe, pe_table, ev_table = (
+        ctx["peer_universe"],
+        ctx["pe_table"],
+        ctx["ev_table"],
+    )
+    ml_modules, enabled = ctx["ml_modules"], ctx["enabled"]
+    guard = _guard
+    detail = []
+
+    rows = []
+    for c in valued:
+        name, sector = c["name"], c["sector"]
+        # ascending, so each company block reads oldest FY first
+        for fy in sorted(config.FY_LIST):
+            base = {"company": name, "sector": sector, "fy": fy}
+            if name in failures:
+                f = failures[name]
+                rows.append(
+                    {
+                        **base,
+                        "price": f,
+                        "price_anchor": f,
+                        "price_bench_date": "",
+                        **{key: f for key in enabled},
+                    }
+                )
+                continue
+
+            data = universe[name]["data"]
+            d = data["years"].get(fy, {})
+            row = {
+                **base,
+                # "price" is the BENCHMARK: the close on the trading day
+                # nearest 1 May following FY end. It is what every model is
+                # scored against.
+                "price": field_result(
+                    d, "price_bench", fy, "1-May benchmark market price"
+                ),
+                # the in-FY mean price the models actually consumed. Carried
+                # for the numeric twin so anchor and benchmark can be compared
+                # during review; never shown in the main grid.
+                "price_anchor": field_result(d, "price", fy, "in-FY mean price"),
+                # the date the benchmark close was actually taken from - 1 May
+                # is a market holiday, so this is rarely 1 May itself.
+                "price_bench_date": d.get("price_bench_date") or "",
+            }
+            if "dcf" in enabled:
+                row["dcf"] = guard(model_dcf.intrinsic_value, data, fy)
+            if "pe" in enabled:
+                row["pe"] = guard(
+                    model_pe.intrinsic_value, universe, pe_table, name, sector, fy
+                )
+            if "ev" in enabled:
+                row["ev"] = guard(
+                    model_ev_ebitda.intrinsic_value,
+                    universe,
+                    ev_table,
+                    name,
+                    sector,
+                    fy,
+                )
+            if "graham" in enabled:
+                row["graham"] = guard(
+                    model_graham.intrinsic_value, universe, name, fy
+                )
+            if "ri" in enabled:
+                row["ri"] = guard(
+                    model_residual_income.intrinsic_value, universe, name, fy
+                )
+            for m in ml_modules:
+                row[m.KEY] = guard(m.intrinsic_value, ml_store, name, fy)
+            rows.append(row)
+
+    # The hybrid runs last and over the whole grid at once: its weights are
+    # learned from every company's earlier-year errors, so no single row can
+    # be blended until every row's components exist.
+    if "hybrid" in enabled:
+        try:
+            detail = model_hybrid.attach(
+                rows,
+                universe,
+                peer_universe,
+                pe_table,
+                ev_table,
+                ml_store,
+                failures,
+                write=write_hybrid,
+            )
+        except Exception as e:
+            log.exception("hybrid stage failed")
+            print(f"\n[hybrid] FAILED: {type(e).__name__}: {e}")
+            for r in rows:
+                r.setdefault(
+                    "hybrid", Result.bad(R.CALC_ERROR, f"{type(e).__name__}: {e}")
+                )
+
+    return rows, detail
+
+
+def _auto_train(trainer, ml_universe, ctx):
+    """Run the auto-trainer, retraining and re-scoring after every batch."""
+    import contextlib
+    import io
+
+    if not ctx["ml_modules"] or "hybrid" not in ctx["enabled"]:
+        print(
+            "\n[auto] auto-train needs the Hybrid and at least one machine-"
+            "learning model switched on - skipped"
+        )
+        return
+
+    # Training companies are gap-filled as they arrive, inside evaluate(); the
+    # main companies were already filled before the peer tables were built.
+    specs = [m.SPEC for m in ctx["ml_modules"]]
+
+    def evaluate(train_universe):
+        t0 = time.time()
+        sink = io.StringIO()
+        with contextlib.redirect_stdout(sink):
+            estimation.fill_universe(train_universe)
+            df, fails = ml_common.build_dataset(train_universe)
+            store = ml_common.run_models(df, specs, fails)
+            _, detail = value_rows(ctx, store, write_hybrid=False)
+        sc = model_hybrid.scorecard(detail)
+        ok = [
+            m["directional_accuracy"]
+            for m in store.metrics
+            if m.get("status") == "ok" and not m.get("leaked")
+        ]
+        return {
+            **sc,
+            "labelled": int(df["label"].notna().sum()) if not df.empty else 0,
+            "ml_direction": round(100 * statistics.mean(ok), 1) if ok else None,
+            "seconds": time.time() - t0,
+        }
+
+    _banner(
+        "STEP 2 of 3 - learning from the live market",
+        f"Random long-listed NSE companies, fetched one by one, until the Hybrid's "
+        f"confidence reaches {trainer.controls.target:.0f} or "
+        f"{trainer.opts.max_companies} companies have been learned.",
+    )
+    summary = trainer.run(ml_universe, evaluate)
+    print(
+        f"[auto] training universe is now {len(ml_universe)} companies "
+        f"({len(summary.get('learned', []))} added); stop reason: "
+        f"{summary.get('reason')}"
+    )
+    _banner(
+        "STEP 3 of 3 - valuing your companies with the trained models",
+        "Final training run, then the report, the Hybrid and the charts.",
+    )
+
+
+def _banner(title, subtitle=""):
+    print("\n" + "=" * 78)
+    print(f"  {title}")
+    if subtitle:
+        print(f"  {subtitle}")
+    print("=" * 78)
+
+
 def plain_summary(rows, excluded_count):
     """
     Jargon-free closing summary.
@@ -422,7 +566,17 @@ def plain_summary(rows, excluded_count):
     for r in rows:
         companies.add(r["company"])
         price = r.get("price")
-        vals = [r[k].value for k in keys if k in r and getattr(r[k], "ok", False)]
+        # When the hybrid valued the row it IS the considered estimate; the
+        # plain average of every model is only the fallback.
+        hyb = r.get("hybrid")
+        if hyb is not None and getattr(hyb, "ok", False):
+            vals = [hyb.value]
+        else:
+            vals = [
+                r[k].value
+                for k in keys
+                if k != "hybrid" and k in r and getattr(r[k], "ok", False)
+            ]
         if not (price is not None and getattr(price, "ok", False)) or not vals:
             unknown += 1
             continue

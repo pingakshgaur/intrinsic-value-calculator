@@ -98,10 +98,12 @@ MODEL_SPECS: list[tuple[str, str]] = [
     ("P/E Relative", "(P/E Relative Valuation) Intrinsic Value"),
     ("EV/EBITDA", "(EV/EBITDA Valuation) Intrinsic Value"),
     ("Graham Number", "(Graham Number) Intrinsic Value"),
+    ("Residual Income", "(Residual Income) Intrinsic Value"),
     ("XGBoost", "(XGBoost) Intrinsic Value"),
     ("Random Forest", "(Random Forest) Intrinsic Value"),
     ("LightGBM", "(LightGBM) Intrinsic Value"),
     ("MLP Neural Network", "(MLP Neural Network) Intrinsic Value"),
+    ("Hybrid", "(Hybrid) Intrinsic Value"),
 ]
 
 MODEL_NAMES = [m for m, _ in MODEL_SPECS]
@@ -120,16 +122,24 @@ COLOURS: dict[str, str] = {
     "XGBoost": "#ff7f0e",
     "Random Forest": "#9467bd",
     "LightGBM": "#17becf",
+    "Residual Income": "#bcbd22",
+    "Hybrid": "#c0392b",
 }
 
+# Every model in MODEL_SPECS needs an entry here. Graham and MLP were missing,
+# which raised KeyError in the first sector chart and stopped every chart.
 MARKERS: dict[str, str] = {
     "Market Price": "o",
     "DCF": "s",
     "P/E Relative": "^",
     "EV/EBITDA": "D",
+    "Graham Number": "h",
+    "Residual Income": "p",
     "XGBoost": "v",
     "Random Forest": "P",
     "LightGBM": "X",
+    "MLP Neural Network": "<",
+    "Hybrid": "*",
 }
 
 plt.rcParams.update(

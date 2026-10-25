@@ -1,923 +1,987 @@
-# Intrinsic Value Calculator — Technical Documentation
+# Intrinsic Value Calculator (INTVAL-Calc)
 
-**Version:** 1.0
-**Scope:** Traditional intrinsic-value estimation (DCF, P/E Relative, EV/EBITDA) for Indian listed equities, FY2021–FY2025
-**Audience:** the researcher running it, an examiner auditing it, and anyone extending it later
+A research engine that estimates the **intrinsic value per share** of Indian listed companies across a range of financial years, using **four traditional valuation models** and **four machine-learning models**, and then scores each estimate against the price the share actually traded at shortly after the year closed.
+
+It ships with a command-line interface, a desktop GUI (ttkbootstrap), an offline mock dataset for testing, a fundamentals override sheet for filling data gaps by hand, and an analysis stage that produces accuracy metrics, HD charts and an HTML report.
+
+> **Not investment advice.** This is a research instrument. Its output is only as good as the assumptions in [`src/config.py`](src/config.py), and every one of those assumptions can be argued with.
 
 ---
 
 ## Table of contents
 
-1. [What this system does](#1-what-this-system-does)
-2. [Architecture at a glance](#2-architecture-at-a-glance)
-3. [Installation and first run](#3-installation-and-first-run)
-4. [The financial-year convention](#4-the-financial-year-convention)
-5. [How market price is determined](#5-how-market-price-is-determined)
-6. [The data layer](#6-the-data-layer)
-7. [The valuation engine](#7-the-valuation-engine)
-8. [The error-handling architecture](#8-the-error-handling-architecture)
-9. [Output format](#9-output-format)
-10. [The screener](#10-the-screener)
-11. [Testing without a network](#11-testing-without-a-network)
-12. [Configuration reference](#12-configuration-reference)
-13. [Known limitations and methodological caveats](#13-known-limitations-and-methodological-caveats)
-14. [Troubleshooting](#14-troubleshooting)
-15. [Extending the system](#15-extending-the-system)
-16. [Glossary](#16-glossary)
+1. [What it does](#1-what-it-does)
+2. [Quick start](#2-quick-start)
+3. [Project structure](#3-project-structure)
+4. [How a run works (pipeline)](#4-how-a-run-works-pipeline)
+5. [Input files](#5-input-files)
+6. [Command-line reference](#6-command-line-reference)
+7. [The desktop GUI](#7-the-desktop-gui)
+8. [Financial years and prices](#8-financial-years-and-prices)
+9. [Data layer](#9-data-layer)
+10. [Data-sufficiency check](#10-data-sufficiency-check)
+11. [Estimation (gap-filling) layer](#11-estimation-gap-filling-layer)
+12. [Valuation models](#12-valuation-models)
+13. [Error handling and reason codes](#13-error-handling-and-reason-codes)
+14. [Outputs](#14-outputs)
+15. [Analysis stage (metrics and charts)](#15-analysis-stage-metrics-and-charts)
+16. [Tools](#16-tools)
+17. [Configuration reference](#17-configuration-reference)
+18. [Testing offline](#18-testing-offline)
+19. [Known limitations](#19-known-limitations)
+20. [Troubleshooting](#20-troubleshooting)
+21. [Extending the system](#21-extending-the-system)
+22. [Glossary](#22-glossary)
 
 ---
 
-## 1. What this system does
+## 1. What it does
 
-Given a list of Indian listed companies, the system computes — for each company, for each of five financial years — an estimate of what one share is *worth* under three independent valuation methods, alongside what that share actually *traded* at during the year.
+For each company in your list and each financial year in the chosen window, the engine:
 
-It produces a single spreadsheet with one row per company-year:
+1. **Downloads** the income statement, balance sheet, cash-flow statement, daily price history and beta from Yahoo Finance (`yfinance`), with the NSE website as a fallback for prices only.
+2. **Checks data sufficiency.** Companies without enough *reported* data are set aside, and the reason is recorded in plain English.
+3. **Fills gaps** with documented estimation methods. Every estimated value is marked with `*`.
+4. **Values the company** with up to eight models:
 
-| Company name | Sector Name | Financial Year | Market Price | (DCF) Intrinsic Value | (P/E Relative) Intrinsic Value | (EV/EBITDA) Intrinsic Value |
-|---|---|---|---|---|---|---|
+   | Traditional | Machine learning |
+   |---|---|
+   | DCF (two-stage FCFF) | XGBoost |
+   | P/E Relative (sector median) | Random Forest |
+   | EV/EBITDA (sector median) | LightGBM |
+   | Graham Number | MLP Neural Network |
 
-The comparison between column 4 and columns 5–7 is the research output. The system deliberately does **not** compute a verdict, a difference, or a buy/sell signal — that interpretation belongs to the analyst, not the code.
+5. **Compares** each estimate with the **benchmark market price**: the closing price on the trading day nearest **1 May** after the financial year ends.
+6. **Exports** an Excel workbook and several CSVs (report, numeric twin, diagnostics, methods, excluded companies).
+7. **Analyses** model accuracy (MAE, RMSE, MAPE, MedAPE, bias, hit rate, Spearman, win rate) and renders charts plus an HTML report.
 
-### Design commitments
+### Design principles
 
-Four principles shaped every decision in the codebase. They're worth stating up front because they explain choices that would otherwise look odd.
-
-**Minimal extraction.** Each data source returns *only* the fields the three formulae consume — fourteen per company-year — and discards everything else at the boundary. Yahoo's API returns hundreds of line items; the system keeps EBIT, EBITDA, EPS, net income, D&A, CapEx, ΔNWC, operating cash flow, total debt, cash, shares, tax rate, price, and beta. Nothing more.
-
-**Never a silent blank.** Every cell either holds a number or holds the specific reason no number exists. A company whose FY2021 cash-flow statement isn't published says so, in those words, in that cell. A blank cell is a bug; a reason string is data.
-
-**Per-method exclusion.** A negative-FCFF year kills the DCF but leaves P/E and EV/EBITDA intact. Failures are isolated to the model they affect, never propagated across the row.
-
-**Point-in-time discipline.** Valuing FY2022 uses only data from FY2022 and earlier. Growth rates, peer medians, and cash-flow histories are all truncated at the year being valued, so no FY2025 information leaks backward into an FY2022 estimate.
-
----
-
-## 2. Architecture at a glance
-
-```
-Intrinsic Value Calculator/
-│
-├── config.py               All assumptions and thresholds. Single source of truth.
-├── fy_utils.py             Financial-year date maths, numeric coercion, formatting.
-├── result.py               The Result carrier and the reason-code vocabulary.
-│
-├── ticker_resolver.py      Company name → Yahoo ticker (manual map → search → cache).
-├── yf_source.py            Primary extraction layer. Statements, prices, diagnosis.
-├── nse_source.py           NSE portal fallback for price history only.
-│
-├── model_dcf.py            Two-stage FCFF discounted cash flow.
-├── model_pe.py             Sector-median P/E relative valuation.
-├── model_ev_ebitda.py      Sector-median EV/EBITDA relative valuation.
-│
-├── exporter.py             Combined seven-column report, CSV + XLSX.
-├── main.py                 Orchestrator. Input → fetch → value → export.
-│
-├── screener.py             Optional. Builds companies.csv from a screened universe.
-├── mock_source.py          Optional. Offline synthetic dataset for testing.
-│
-├── companies.csv           Input: company name, sector name, market cap, ticker.
-├── requirements.txt
-│
-├── .cache/                 Ticker lookups and screener metrics (auto-created).
-└── output/                 Reports and logs (auto-created).
-    ├── Intrinsic_Value_Report.csv
-    ├── Intrinsic_Value_Report.xlsx
-    ├── screening_report.csv
-    ├── run_log.txt
-    └── screener_log.txt
-```
-
-### Execution flow
-
-```
-main.py
-  │
-  ├─ read input               companies.csv or terminal prompt
-  │
-  ├─ build_universe()         for each company:
-  │     ticker_resolver ─────► ticker
-  │     yf_source ───────────► {beta, years: {FY: {14 fields, _diag, _notes}}}
-  │       └─ nse_source        (price fallback only, if yfinance is empty)
-  │
-  ├─ build peer tables        two passes over the universe:
-  │     model_pe ────────────► {(sector, FY): {company: observed P/E}}
-  │     model_ev_ebitda ─────► {(sector, FY): {company: observed EV/EBITDA}}
-  │
-  ├─ value                    for each company × each FY:
-  │     model_dcf ───────────► Result
-  │     model_pe ────────────► Result
-  │     model_ev_ebitda ─────► Result
-  │
-  └─ exporter ───────────────► one CSV + one XLSX, plus terminal coverage summary
-```
-
-The two-pass structure matters. Relative valuation needs sector medians, and sector medians need every company's observed multiple, so nothing can be valued until every company has been fetched. This is why the fetch loop completes fully before any valuation begins.
+- **No silent blanks.** Every cell holds either a number or the specific reason no number exists.
+- **Per-model exclusion.** If one model fails (for example, negative FCFF kills the DCF), the other models for that row still run.
+- **Point-in-time discipline.** Valuing FY*t* uses only data from FY*t* and earlier. The benchmark price is taken *after* the year closes and is never used as an input.
+- **Estimates are always visible.** Estimated values carry `*` in the report, and the Methods sheet records exactly how each one was produced.
+- **Failed companies are listed, not dropped.** Excluded companies appear on their own sheet with the reason.
 
 ---
 
-## 3. Installation and first run
+## 2. Quick start
 
 ### Requirements
 
-```
-yfinance>=0.2.40
-pandas>=2.0
-numpy>=1.24
-requests>=2.31
-openpyxl>=3.1
+- **Python 3.10+** (the code uses `X | None` type syntax; the local `.venv` runs Python 3.14).
+- **tkinter**, only for the GUI. It ships with the python.org Windows installer and cannot be installed from pip.
+
+### Install
+
+```bash
+python -m venv .venv
 ```
 
-Python 3.10 or later (the code uses `float | None` union syntax).
+```bash
+.venv\Scripts\activate
+```
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Input file
+Dependencies ([`requirements.txt`](requirements.txt)):
 
-`companies.csv` in the project root:
+| Package | Purpose |
+|---|---|
+| `yfinance>=0.2.40` | Primary data source: financial statements and price history |
+| `requests>=2.31` | NSE fallback and Yahoo ticker search |
+| `pandas>=2.0`, `numpy>=1.24` | Data handling and maths |
+| `matplotlib>=3.7` | Charts |
+| `openpyxl>=3.1` | `.xlsx` writer |
+| `scikit-learn>=1.4` | Random Forest, MLP, StandardScaler |
+| `xgboost>=2.0` | XGBoost regressor |
+| `lightgbm>=4.3` | LightGBM regressor |
+| `ttkbootstrap>=1.10` | Themed desktop GUI |
+| `Pillow>=10.0` | *Optional:* scales chart images inside the GUI |
+
+### Run
+
+```bash
+python run.py
+```
+
+This reads `data/companies.csv`, values FY2021 to FY2025, and writes everything to `output/`.
+
+```bash
+python run.py --gui
+```
+
+This opens the desktop app instead.
+
+```bash
+python run.py --offline
+```
+
+This runs against the built-in synthetic dataset, with no network access needed.
+
+---
+
+## 3. Project structure
+
+```
+intrinsic-value-calculator/
+│
+├── run.py                        Entry point (CLI + --gui). Sets up sys.path and logging,
+│                                 parses flags, pushes them onto config, dispatches.
+├── gui.py                        Desktop application (ttkbootstrap). Three pages + settings.
+├── yf_source.py                  Yahoo Finance extraction layer (statements, prices, benchmark,
+│                                 per-field diagnosis). Lives at the root, imported flat.
+├── requirements.txt
+├── README.md
+├── .gitignore                    Ignores output/, .cache/, .venv/, __pycache__/, editor files
+├── .vscode/settings.json         python.analysis.extraPaths so the flat imports resolve in VS Code
+│
+├── src/
+│   ├── config.py                 ALL assumptions and switches. Single source of truth.
+│   ├── model_registry.py         The one list of models; which are enabled; column names.
+│   ├── pipeline.py               Orchestrator: fetch → screen → estimate → value → export → analyse.
+│   ├── sufficiency.py            Data-sufficiency check (runs before estimation).
+│   ├── estimation.py             Gap-filling ladder (back-cast, CAGR, sector ratios, identities).
+│   ├── overrides.py              Loads data/fundamentals_override.csv; manual values always win.
+│   ├── result.py                 Result carrier (value | reason) + reason-code vocabulary.
+│   ├── fy_utils.py               FY date maths, benchmark date, FY labels, numeric helpers.
+│   ├── plain_reasons.py          Translates exclusion verdicts into plain English.
+│   ├── csv_analyzer.py           Accuracy metrics, HD charts, HTML report.
+│   │
+│   ├── sources/
+│   │   ├── ticker_resolver.py    Company name → Yahoo ticker (explicit → manual map → cache → search).
+│   │   ├── nse_source.py         NSE portal fallback for closing prices only.
+│   │   └── mock_source.py        Deterministic offline dataset that triggers every reason code.
+│   │
+│   ├── models/
+│   │   ├── model_dcf.py          Two-stage FCFF DCF.
+│   │   ├── model_pe.py           Sector-median P/E relative valuation.
+│   │   ├── model_ev_ebitda.py    Sector-median EV/EBITDA relative valuation.
+│   │   ├── model_graham.py       Graham Number.
+│   │   ├── ml_common.py          Shared ML pipeline: features, labels, folds, preprocessing, metrics.
+│   │   ├── model_xgboost.py      XGBoost estimator spec.
+│   │   ├── model_random_forest.py Random Forest estimator spec.
+│   │   ├── model_lightgbm.py     LightGBM estimator spec.
+│   │   └── model_mlp.py          MLP (StandardScaler + MLPRegressor pipeline).
+│   │
+│   └── io_layer/
+│       ├── inputs.py             Tolerant CSV reader (auto-detects delimiter/header) + terminal input.
+│       └── exporter.py           Writes report, numeric twin, diagnostics, methods, exclusions.
+│
+├── tools/
+│   ├── analyze.py                Re-run the analysis stage on an existing results CSV.
+│   ├── make_override_template.py Builds a fill-in sheet of every missing fundamental.
+│   └── screener.py               Optional: screens a candidate universe into a companies CSV.
+│
+├── data/
+│   ├── companies.csv             Main input (~42 companies, 9 sectors, explicit NSE tickers).
+│   ├── companies_raw1.csv        Raw source list (unnormalised: sector, name, cap range).
+│   ├── companies_raw2.csv        Raw source list (another unnormalised variant).
+│   ├── companies_raw3.csv        Alternative normalised list (~66 companies).
+│   └── fundamentals_override.csv Manual fundamentals sheet (currently header only).
+│
+├── output/                       Generated on each run (git-ignored; see §14).
+└── .cache/                       tickers.json — cached name→ticker lookups (git-ignored).
+```
+
+### Import convention
+
+Every module is imported **flat** (`import config`, never `import src.config`). [`run.py`](run.py), [`gui.py`](gui.py) and [`tools/analyze.py`](tools/analyze.py) each add `src/`, `src/sources/`, `src/models/`, `src/io_layer/` and `tools/` to `sys.path` at startup. Mixing the two import styles would load two copies of `config`, and CLI flags would stop taking effect. [`.vscode/settings.json`](.vscode/settings.json) mirrors these paths so the editor resolves the imports.
+
+---
+
+## 4. How a run works (pipeline)
+
+[`src/pipeline.py`](src/pipeline.py) → `run(companies, extra_training=None)`:
+
+```
+run.py
+  │  setup_logging()  →  output/run_log.txt (DEBUG)
+  │  apply_args()     →  CLI flags written onto config
+  │  load_companies() →  --offline mock | --input CSV | data/companies.csv | terminal prompt
+  ▼
+pipeline.run()
+  │
+  ├─ overrides.ensure_template_exists() / load()
+  │
+  ├─ build_universe()           per company:
+  │     ticker_resolver.resolve()  →  ticker
+  │     yf_source.fetch_company()  →  {beta, years:{FY:{fields, _diag, _notes}}}
+  │        └─ nse_source (price fallback)    └─ overrides.apply() per FY
+  │
+  ├─ sufficiency.screen()       ON REPORTED DATA ONLY (before estimation)
+  │     └─ auto-relax if nobody passes
+  │
+  ├─ (optional) --train-universe → extra companies for ML training only
+  │
+  ├─ estimation.fill_universe() gap-filling, every fill recorded in _method
+  │
+  ├─ peer tables                model_pe.build_sector_pe_table()
+  │                             model_ev_ebitda.build_sector_table()
+  │
+  ├─ ML stage                   ml_common.build_dataset() → run_models() → write_diagnostics()
+  │
+  ├─ value                      for each kept company × FY (oldest first):
+  │                             DCF, P/E, EV/EBITDA, Graham, + each enabled ML model
+  │                             each wrapped in guard() → CALCULATION ERROR on crash
+  │
+  ├─ exporter.export()          report CSV/XLSX, data twin, diagnostics, methods, exclusions
+  │
+  ├─ console summary            model coverage, ML fold performance, reason tally,
+  │                             plain-English summary
+  │
+  └─ csv_analyzer.run_analysis() metrics CSVs, charts, analysis_report.html
+```
+
+**Why the order matters:**
+
+- The **sufficiency check runs before estimation**, because estimation can produce a plausible value for almost any gap. Run afterwards, the check would never fail anyone.
+- **Estimation runs before the peer tables** are built, so sector medians use the filled data.
+- **All companies are fetched before any valuation**, because the relative models need sector medians built from every company.
+
+`pipeline.screen_only()` runs fetch → screen → export exclusions and then stops (`--screen-only`).
+
+---
+
+## 5. Input files
+
+### `data/companies.csv`
 
 ```csv
 company name,sector name,market cap,ticker
+Hindustan Aeronautics Limited,Defence and Aerospace,Large,HAL.NS
 Bharat Electronics Limited,Defence and Aerospace,Large,BEL.NS
-Bharat Dynamics Limited,Defence and Aerospace,Mid,BDL.NS
-...
 ```
 
-`company name` and `sector name` are required. `ticker` is optional but strongly recommended — supplying it skips the Yahoo name-search entirely, which is both faster and more reliable. `market cap` is read and carried through but not currently used in any calculation.
+| Column | Required | Notes |
+|---|---|---|
+| `company name` | ✅ | Aliases: `company`, `name` |
+| `sector name` | ✅ (else `Unclassified`) | Alias: `sector`. Determines peer groups for P/E and EV/EBITDA. |
+| `market cap` | — | `Large` / `Mid` / `Small`. Alias: `cap`. Becomes the ML feature `cap_tier_ord`. |
+| `ticker` | Recommended | Skips the name search. A bare symbol gets `EXCHANGE_SUFFIX` (`.NS`) appended. |
 
-The reader is deliberately tolerant: it accepts `company`/`name` as aliases for `company name`, `sector` for `sector name`, ignores blank lines, and reports ragged rows with their line number instead of crashing.
+The reader in [`src/io_layer/inputs.py`](src/io_layer/inputs.py) is tolerant:
+- **Detects the delimiter automatically** (`,` tab `;` `|`), so a spreadsheet copy-paste saved as `.csv` still loads.
+- **Detects a missing header** and falls back to positional columns.
+- **Reports ragged rows by line number** instead of crashing. If a company name contains a comma, quote it: `"Emami, Ltd",FMCG,Mid,EMAMILTD.NS`.
+- Handles UTF-8 files with or without a BOM.
 
-> **Comma trap.** A company name containing a comma must be quoted: `"Emami, Ltd",FMCG,Mid,EMAMILTD.NS`. Unquoted, the extra comma shifts every subsequent field by one column. The reader detects this and warns, but the row will be wrong.
+The current sample covers Defence & Aerospace, IT, Power & Renewables, Healthcare & Medical Devices, Metals & Mining, FMCG, Autos, FinTech and Tobacco. **Aim for at least 4 companies per sector.** With fewer, the peer medians become largely self-referential.
 
-### Running
+### `data/fundamentals_override.csv`
+
+```
+ticker,fy,ebit,ebitda,eps,net_income,da,capex,delta_nwc,ocf,total_debt,cash,shares,revenue,assets,cur_liab,equity
+```
+
+- One row per company-year. Blank cells are ignored.
+- **Override values always win** over the downloaded data, and they are applied *before* the sufficiency check, so they count as reported data.
+- **Units:** absolute rupees for money fields (not crore or lakh), rupees per share for `eps`, an absolute count for `shares`.
+- Generate a pre-filled template with `python run.py --make-override-template`.
+
+### Other files in `data/`
+
+`companies_raw1.csv` and `companies_raw2.csv` are raw research lists (sector, name, cap range, cap structure) in a non-standard layout, kept for reference. `companies_raw3.csv` is a larger list in the standard 4-column format. Pass any standard-format list with `--input`.
+
+---
+
+## 6. Command-line reference
 
 ```bash
-python main.py --input companies.csv
+python run.py [options]
 ```
 
-Other invocations:
-
-| Command | Effect |
+| Flag | Effect |
 |---|---|
-| `python main.py` | Prompts for terminal input, or offers `companies.csv` if present |
-| `python main.py --mean-basis calendar` | Averages over calendar days rather than trading sessions |
-| `python main.py --exchange .BO` | Default suffix becomes BSE for tickers without one |
-| `python main.py --reasons short` | Blank cells show the reason code only, no explanation |
-| `python main.py --reasons off` | Reverts to plain `N/A` |
-| `python main.py --offline` | Runs against the synthetic dataset, no network |
+| `--gui` | Open the desktop app |
+| `--input PATH` | Companies CSV (default `data/companies.csv`; if that is missing, you are prompted in the terminal) |
+| `--offline` | Use the synthetic mock dataset; no network |
+| `--start-year FY` / `--end-year FY` | Financial-year window, named by the year the FY **ends** (2021 = 2020-21). Default 2021–2025 |
+| `--models LIST` | Comma list from `dcf,pe,ev,graham,xgboost,random_forest,lightgbm,mlp`. Models you leave out lose their columns |
+| `--no-ml` | Disable the whole ML stage |
+| `--ml-split {expanding,loyo}` | ML fold strategy (config default is `hybrid`) |
+| `--train-universe PATH` | Extra CSV of companies used **only** to train the ML models |
+| `--train-universe auto` | Fetch training companies one by one until the Hybrid is confident (§16, Auto-train). Tuned with `--auto-target`, `--auto-max`, `--auto-sectors`, `--auto-min-listed-years`, `--auto-batch`, `--auto-patience`, `--auto-sector-rank`, `--auto-include-financials`, `--auto-no-cache` |
+| `--benchmark-basis {may1,mean,close}` | Benchmark price basis; `mean` and `close` are robustness re-runs |
+| `--mean-basis {trading,calendar}` | How the in-FY mean (anchor) price is averaged |
+| `--fy-labels {range,int}` | Financial Year column shows `2023-24` or `2024` |
+| `--exchange {.NS,.BO}` | Default suffix for bare tickers |
+| `--reasons {code,detailed,off}` | How empty cells are annotated in the main report |
+| `--no-overrides` | Ignore `fundamentals_override.csv` |
+| `--make-override-template` | Fetch, then write a fill-in sheet for every gap |
+| `--screening {enforce,report,off}` | Data-sufficiency check mode |
+| `--min-complete-fy N` | Complete FYs required to stay in |
+| `--min-benchmark-fy N` | FYs that must carry a benchmark price |
+| `--screen-only` | Fetch and screen, write the exclusion sheet, then stop |
+| `--no-analyze` | Skip the charts and statistics stage |
+| `--dpi N` | Chart resolution (default 200) |
 
-### Expected runtime
+Examples:
 
-Roughly 3–5 seconds per company: three statement downloads, one price history, one info block, plus the configured 0.6-second courtesy pause. Thirty companies takes about three minutes. Ticker lookups are cached in `.cache/tickers.json` and persist across runs.
+```bash
+python run.py --start-year 2022 --end-year 2025 --models dcf,pe,ev,graham
+```
+
+```bash
+python run.py --screen-only --min-complete-fy 3
+```
+
+```bash
+python run.py --benchmark-basis mean --no-ml
+```
 
 ---
 
-## 4. The financial-year convention
+## 7. The desktop GUI
 
-Indian companies report on an April–March fiscal year. Throughout this system, **FY *N* means 1 April *N*−1 through 31 March *N***.
-
-| Label | Period covered | Statement period-end |
-|---|---|---|
-| FY2021 | 01-Apr-2020 → 31-Mar-2021 | 31-Mar-2021 |
-| FY2022 | 01-Apr-2021 → 31-Mar-2022 | 31-Mar-2022 |
-| FY2023 | 01-Apr-2022 → 31-Mar-2023 | 31-Mar-2023 |
-| FY2024 | 01-Apr-2023 → 31-Mar-2024 | 31-Mar-2024 |
-| FY2025 | 01-Apr-2024 → 31-Mar-2025 | 31-Mar-2025 |
-
-Implemented in `fy_utils.py`:
-
-```python
-def fy_window(fy):
-    return (dt.date(fy - 1, 4, 1), dt.date(fy, 3, 31))
-
-def fy_end(fy):
-    return dt.date(fy, 3, 31)
+```bash
+python run.py --gui
 ```
 
-### Matching statements to financial years
+You can also run `python gui.py` directly. The GUI is built on ttkbootstrap with a light/dark palette defined in `gui.py` itself.
 
-Yahoo returns annual statements as a DataFrame whose *columns* are period-end timestamps. These don't always land exactly on 31 March — a company may report to 30 March, or Yahoo may carry a slightly different date. `_col_for_fy()` therefore picks the column whose period-end is *closest* to 31 March of the target FY, and accepts it only if the gap is within **100 days**.
+**Three pages that follow the workflow:**
 
-The 100-day tolerance absorbs ordinary reporting variation while refusing to match, say, a December period-end to a March financial year. When no column falls inside the tolerance, the failure message lists every period Yahoo actually returned — which is how you diagnose the depth problem described in §13.
+1. **Load your list:** browse to a CSV, tick the companies you want, and choose the year window.
+2. **Run it:** *Calculate intrinsic values* runs the full pipeline. *Just check my data* runs the sufficiency screen only. A **Stop** button cancels the run. Progress is shown in plain English, and *Show the technical log* reveals the raw console output.
+3. **Results:** opens automatically when the run finishes. It has four tabs: *What each company looks worth*, *Companies we could not value*, *Full detail* and *Charts*. There are also buttons to open the Excel workbook or the output folder.
+
+The **Settings** (gear icon) pages cover data quality, prices, models, report and files. They map onto the same `config` values as the CLI flags. The **ⓘ** icon opens a glossary.
+
+Implementation notes:
+- The pipeline runs on a **worker thread**. `stdout` is redirected into a queue and drained by a timer on the main thread, so only the main thread touches widgets.
+- Cancellation raises `RunCancelled` (a `BaseException`) from the redirected `write()`. It is a `BaseException` so that the pipeline's `except Exception` guards cannot swallow it.
+- matplotlib is pinned to the `Agg` backend because charts render on the worker thread.
 
 ---
 
-## 5. How market price is determined
+## 8. Financial years and prices
 
-**The market price for FY *N* is the arithmetic mean of every daily closing price inside that financial year.** This is a long-term moving average over the year, not a single-day snapshot.
+### Financial-year convention
 
-### Why a mean and not a closing price
+**FY *N* = 1 April *N*−1 → 31 March *N*.** FY2024 is labelled `2023-24`.
 
-A financial year's market price should represent how the market valued the company *over that year*. A 31 March close is one observation out of roughly 247, and 31 March in India is a fiscal-year-end date with its own tax-driven trading patterns. Using it would make the entire intrinsic-versus-market comparison hostage to one day's noise — a stock that spent the year at ₹400 but closed March at ₹520 would appear overvalued by 30% for reasons that have nothing to do with the year.
+`config.set_fy_range(start, end)` moves the window. It swaps the ends if they are reversed, caps `end` at the latest *completed* FY, applies a floor of `FY_MIN_ALLOWED` (2000), and limits the span to `FY_MAX_SPAN` (30) years. Everything downstream reads `config.FY_LIST`.
 
-The mean also matches how the price is *used*. It feeds the equity weight in WACC and the observed P/E and EV/EBITDA multiples that build the sector medians. Those are year-level constructs; a year-level price is the consistent input.
+Statement columns are mapped to FYs by the **midpoint of the reporting period** (`fy_utils.fy_for_period_end`). As a result, companies with non-March year-ends (for example, Siemens reports October–September) still land in the correct FY.
 
-### Two averaging bases
+### Three prices, not interchangeable
 
-Set by `FY_MEAN_BASIS` in `config.py`:
-
-**`"trading"` (default)** — mean of the ~247 sessions the stock actually traded. This is standard practice and what most academic and commercial sources mean by an annual average price.
-
-**`"calendar"`** — the daily series is resampled to all ~365 calendar days with forward-fill, then averaged. Weekends and holidays carry the prior close forward, so Fridays and pre-holiday sessions are counted two or three times. This is literally an average over 365 days.
-
-In practice the two differ by well under one percent, because forward-filling just repeats Friday's price. `trading` is recommended; `calendar` exists so the choice can be stated explicitly rather than assumed.
-
-### Split and bonus adjustment
-
-Prices are fetched with `auto_adjust=False`, which in current yfinance still returns a `Close` series adjusted for splits and bonus issues but **not** for dividends. That combination is exactly right here:
-
-- **Split adjustment is essential.** A 1:2 split mid-year would otherwise halve the price series overnight and corrupt the mean.
-- **Dividend adjustment would be wrong.** Intrinsic value is expressed per share as a price. Comparing it against a total-return-adjusted series would compare unlike quantities.
-
-### Coverage guards
-
-A mean over eight sessions is not a year average. Two thresholds enforce this:
-
-| Threshold | Default | Behaviour below it |
+| Field | What it is | Used for |
 |---|---|---|
-| `MIN_TRADING_DAYS_FOR_FY` | 60 | Price reported as unavailable, with the session count and date range in the reason |
-| `PARTIAL_YEAR_SESSIONS` | 200 | Mean is used, but flagged in `_notes` as a partial-year average, not comparable to peers |
+| `price` (**anchor**) | Mean of daily closes **inside** FY*t* | **Model input:** WACC equity weight, observed P/E and EV/EBITDA multiples, ML features |
+| `price_fwd` | Mean of daily closes in FY*t+1* | Numerator of the ML training label only |
+| `price_bench` (**benchmark**) | Close on the trading day **nearest 1 May** of year *t* (one month after FY*t* ends) | **Scoring only**, shown as "Market Price" in the report |
 
-This matters because recent IPOs are common in the thematic sectors this project covers. A company listing in August has roughly 160 sessions in that financial year — usable, but not equivalent to a peer's full 247, and the flag records that.
-
-Every successful price also logs its provenance to `_notes`:
-
-```
-FY2024 market price = mean of 247 trading sessions; range ₹198.40-₹341.75
-```
-
-A mean of ₹280 drawn from a ₹150–₹460 range is a fundamentally different data point from one drawn from ₹270–₹290, and this note preserves that distinction.
+- **Anchor guards:** fewer than `MIN_TRADING_DAYS_FOR_FY` (60) sessions in the year means the price is unavailable. Fewer than `PARTIAL_YEAR_SESSIONS` (200) means the price is used but flagged as a partial year, which is typical for recent IPOs.
+- **Benchmark:** 1 May is Maharashtra Day, a market holiday, so the nearest session within `BENCHMARK_MAX_OFFSET_DAYS` (10) is used. The date actually used is published in the *Benchmark Date* column.
+- **Robustness bases:** `--benchmark-basis mean` (mean of FY*t+1*) and `close` (last close of FY*t+1*).
+- Prices are fetched with `auto_adjust=False`. They are adjusted for splits and bonuses, but not for dividends.
 
 ---
 
-## 6. The data layer
+## 9. Data layer
 
-### 6.1 `ticker_resolver.py`
+### Ticker resolution: [`src/sources/ticker_resolver.py`](src/sources/ticker_resolver.py)
 
-Resolution order:
+The resolver tries these sources in order:
+1. **Explicit ticker** from the CSV.
+2. **`MANUAL` map** of hand-verified symbols, matched on the raw name *and* the name with suffixes such as "Limited" stripped.
+3. **Cache** in `.cache/tickers.json`.
+4. **Yahoo search**: full name, then trimmed name, then a BSE (`.BO`) preference.
 
-1. **Explicit ticker from the input CSV** — used as given. If it has no dot, `EXCHANGE_SUFFIX` is appended.
-2. **Manual map** — a small hard-coded dictionary of common names.
-3. **Yahoo search API** — `query2.finance.yahoo.com/v1/finance/search`, filtered to prefer the configured exchange, then any `.NS` or `.BO` listing.
-4. **Persistent cache** — successful lookups are written to `.cache/tickers.json` and reused indefinitely.
+Successful search results are cached. A failure becomes `TICKER NOT RESOLVED` for that company.
 
-Failure returns `None`, which becomes a `TICKER NOT RESOLVED` reason on all five of that company's rows. The company is **not** dropped from the output.
+### Yahoo extraction: [`yf_source.py`](yf_source.py)
 
-### 6.2 `yf_source.py` — the primary extraction layer
+- Downloads the income statement, balance sheet, cash flow, price history (from the start of the first FY to the end of FY+1) and the `info` block for beta. **Each download is wrapped separately.**
+- **Alias lists** resolve renamed line items. For example, `ebit` matches `EBIT` → `Operating Income` → `Total Operating Income As Reported`, and `eps` prefers Diluted over Basic.
+- **Sign normalisation:** `capex` is stored as a positive magnitude, and `delta_nwc` is positive when working capital increases.
+- **Fields per year:** `ebit, ebitda, eps, net_income, da, capex, delta_nwc, ocf, total_debt, cash, shares, tax_rate, revenue, assets, cur_liab, equity, price, price_fwd, price_bench, price_bench_date`.
+- **Effective tax rate:** `tax_provision / pretax`, clamped to [5%, 45%]. Falls back to 25.17%.
+- **Beta** is accepted only within (0.1, 3.0). Otherwise `DEFAULT_BETA` (1.0) is used.
+- **Every missing field** records a `(code, detail)` pair in `d["_diag"]`. Every provenance note goes to `d["_notes"]`.
+- Overrides are applied per FY at the end, through `overrides.apply()`.
 
-This is the most substantial module. It does four things.
+### NSE fallback: [`src/sources/nse_source.py`](src/sources/nse_source.py)
 
-**Downloads three statements and one price series.** Each download is individually wrapped; a failure records a descriptive error string rather than raising, so a company with a broken cash-flow statement still gets valued by P/E.
-
-**Resolves line items through alias lists.** Yahoo renames rows between companies and over time — operating profit may appear as `EBIT`, `Operating Income`, or `Total Operating Income As Reported`. Each field carries an ordered alias list and takes the first match:
-
-```python
-INCOME_ALIASES = {
-    "ebit":   ["EBIT", "Operating Income", "Total Operating Income As Reported"],
-    "ebitda": ["EBITDA", "Normalized EBITDA"],
-    "eps":    ["Diluted EPS", "Basic EPS"],
-    ...
-}
-```
-
-The order encodes preference: diluted EPS before basic, because diluted is the conservative figure.
-
-**Normalises signs.** Yahoo reports CapEx as a negative number (a cash outflow) and `Change In Working Capital` as its cash-flow impact (negative when working capital increases). The extractor converts both to intuitive conventions — `capex` is stored as a positive magnitude, `delta_nwc` as positive-means-NWC-increased — so the FCFF formula in `model_dcf.py` reads as it does in a textbook. **This is the single most common source of sign errors in hand-built valuation code**, and centralising it here means it's fixed in one place.
-
-**Records why each missing field is missing.** Every field that comes back `None` writes a `(code, detail)` tuple into `d["_diag"][field]`. This is what makes downstream reason messages specific rather than generic.
-
-#### Derived fields and gap-fills
-
-Some absences are recoverable:
-
-| Situation | Fallback | Note recorded |
-|---|---|---|
-| EBITDA missing, EBIT and D&A present | `ebitda = ebit + da` | "EBITDA derived as EBIT + D&A" |
-| EPS missing, net income and shares present | `eps = net_income / shares` | "EPS derived as Net Income / Shares" |
-| Shares missing from balance sheet | Current count from the info block | Flagged — ignores later dilution/buybacks |
-| Tax provision or pretax income unusable | `DEFAULT_TAX_RATE` (25.17%) | Statutory rate substituted |
-| Total debt not reported | `0.0` | "assumed zero (debt-free)" |
-| Cash not reported | `0.0` | "assumed zero" |
-| ΔNWC not reported | `0.0` | "treated as zero" |
-
-When a gap-fill succeeds, the corresponding `_diag` entry is **cleared** — the field is no longer missing, so it should no longer carry a failure reason.
-
-The zero-fills for debt and cash deserve a word. A genuinely debt-free company reports no debt line at all, so treating absence as zero is usually correct. But it is an assumption, not a fact, and it is recorded as one. If you would rather these hard-fail, delete the corresponding blocks; the reason machinery will then report `FIELD MISSING` instead.
-
-#### Effective tax rate
-
-```
-t = tax_provision / pretax_income,  clamped to [0.05, 0.45]
-fallback: 0.2517 (Indian statutory rate under the new regime)
-```
-
-The clamp guards against a loss year producing a nonsensical or negative rate.
-
-### 6.3 `nse_source.py` — the fallback
-
-Used **only** when yfinance returns no price rows at all, and **only** for price history. It never supplies fundamentals.
-
-NSE's public API requires cookie priming: a request to the homepage, then to a quote page, before `/api/historical/cm/equity` will respond. The module maintains a primed session, chunks requests into ≤350-day windows (NSE caps each call at roughly a year), extracts only the closing price from each row, and pauses between calls.
-
-> **It will not work everywhere.** NSE blocks datacentre and VPN IP ranges. On a cloud VM or behind a corporate VPN, every call returns nothing and the module silently yields `None`, at which point the price reason string says so explicitly. From a home connection it generally works. This is expected behaviour, not a defect.
+This is used only when yfinance returns no price rows, and only for closing prices. It primes NSE cookies, fetches in windows of ≤350 days, and returns `None` on any failure. **NSE blocks datacentre and VPN IP ranges**, so expect it to work only from a home connection.
 
 ---
 
-## 7. The valuation engine
+## 10. Data-sufficiency check
 
-All three models share an interface: given the company data and a financial year, return a `Result` that either holds a per-share value or holds a reason. None of them raises; all failure paths are explicit.
+[`src/sufficiency.py`](src/sufficiency.py) runs after the fetch and before estimation. It only inspects **reported or override** data.
 
-### 7.1 DCF — `model_dcf.py`
+- A year is **complete** when every field in `SUFFICIENCY_REQUIRED_FIELDS` is present: revenue, ebit, ebitda, net_income, eps, ocf, capex, shares, total_debt, cash and equity. The in-FY anchor price is also required if `SUFFICIENCY_REQUIRE_ANCHOR_PRICE` is on.
+- A company **passes** with at least `MIN_COMPLETE_FY` complete years **and** at least `MIN_BENCHMARK_FY` years that have a benchmark price. Both default to 3, and both are clamped to the window length.
+- **Modes:** `enforce` drops failing companies from the report. `report_only` flags them without dropping anyone. Disabling the check keeps everyone.
+- **Auto-relax:** if *nobody* passes, the threshold drops to the best result any company achieved, for this run only, and a loud warning is printed.
+- **Excluded companies stay in the peer medians and the ML training data by default** (`SUFFICIENCY_KEEP_IN_PEERS`, `SUFFICIENCY_KEEP_IN_ML`). Thin data is not wrong data.
+- Each record also reports how many years each traditional model *could* still have run, which helps you see near-misses.
 
-A two-stage free-cash-flow-to-firm model.
+**Why the default is 3:** a 52-company screening run on 30 Aug 2026 found that no company had more than 3 complete years, including TCS, Infosys, HUL and ITC. yfinance serves only about 4 annual periods, so the earliest years are missing for everyone. This is a limit of the data source, not a judgement on the companies.
 
-#### Free cash flow to firm
+[`src/plain_reasons.py`](src/plain_reasons.py) sorts each excluded company into exactly one plain-English category, in this order:
 
-```
-FCFF = EBIT × (1 − t) + D&A − CapEx − ΔNWC
-```
+1. *Nothing could be downloaded*
+2. *Bank or lender – these methods do not fit*
+3. *Company is too new or listed too recently*
+4. *Not enough complete years of accounts*
+5. *Not enough share-price history*
 
-Fallback when EBIT or D&A is unavailable:
+Each category comes with a short explanation and a suggested next step.
 
-```
-FCFF = Operating Cash Flow − CapEx
-```
+---
 
-The fallback is less precise — operating cash flow is already net of interest paid, so it approximates free cash flow to *equity* more than to the *firm* — but it keeps a company valuable when only the cash-flow statement survives. The choice of formula used is not currently recorded; if that matters for your audit trail, it's a one-line addition to `_notes`.
+## 11. Estimation (gap-filling) layer
 
-#### Cost of equity (CAPM)
+[`src/estimation.py`](src/estimation.py), mode `ESTIMATION_MODE = "balanced"` (`"off"` disables it).
 
-```
-Ke = Rf + β × ERP
-   = 0.0705 + β × 0.0550
-```
+For each field, the first rung of this ladder that works wins:
 
-`Rf` is the 10-year G-Sec yield; `ERP` is the India equity risk premium. Beta comes from Yahoo's info block, accepted only if it falls in (0.1, 3.0), otherwise defaulting to 1.0.
-
-> Yahoo's beta is computed against a global or US benchmark for many Indian scrips and is frequently absent for small caps. This is the weakest input in the WACC chain. If precision matters, compute beta yourself from 60 monthly returns against the NIFTY 500 — you already have the price history to do it.
-
-#### Weighted average cost of capital
-
-```
-E = mean FY price × shares outstanding
-D = total debt
-
-WACC = E/(D+E) × Ke + D/(D+E) × Kd × (1 − t)
-```
-
-with `Kd = 0.085` (pre-tax cost of debt) and `t` the effective tax rate.
-
-WACC is then floored:
-
-```
-WACC = max(WACC, g_terminal + 0.02)
-```
-
-This guarantees the terminal-value denominator stays positive and meaningfully above zero. Without it, a low-beta debt-free company can produce a WACC below the terminal growth rate, which makes the Gordon formula return a negative or explosive value.
-
-#### Growth rate
-
-The explicit-period growth rate is the CAGR of FCFF across all *positive* FCFF years at or before the year being valued:
-
-```python
-g = (FCFF_last / FCFF_first) ** (1 / n) - 1
-clamped to [MIN_GROWTH, MAX_GROWTH] = [2%, 18%]
-```
-
-Fewer than two positive observations falls back to `DEFAULT_GROWTH` (8%).
-
-The clamp is doing real work. FCFF is volatile — a single heavy-CapEx year can produce a 300% apparent CAGR off a depressed base. Winsorising to a defensible band keeps one bad year from producing an absurd valuation. Note the truncation at `fy`: valuing FY2022 never sees FY2023–25 cash flows.
-
-#### Projection and terminal value
-
-```
-FCFF_n = FCFF_0 × (1 + g)^n          for n = 1..5
-PV_n   = FCFF_n / (1 + WACC)^n
-
-TV     = FCFF_5 × (1 + g_t) / (WACC − g_t)      g_t = 5%
-PV_TV  = TV / (1 + WACC)^5
-
-EV           = Σ PV_n + PV_TV
-Equity Value = EV − (Total Debt − Cash)
-Value/share  = Equity Value / Shares Outstanding
-```
-
-> **On the 5% terminal growth rate.** This is high for a perpetuity — it assumes the company grows forever at roughly India's long-run nominal GDP growth, which no firm does indefinitely. It is defensible for a high-growth emerging market and it is the figure specified for this project, but it makes terminal value dominate: expect TV to contribute 70–85% of enterprise value. That concentration is itself a finding worth reporting. A more conservative 3–4% would shift every DCF estimate down materially, and running both is a legitimate sensitivity analysis.
-
-#### Exclusion conditions
-
-| Condition | Reason code | Message |
-|---|---|---|
-| No data assembled for the FY | `NO DATA FOR THIS FY` | — |
-| Shares outstanding missing | propagated from `_diag` | field-specific |
-| Shares ≤ 0 | `NOT MEANINGFUL` | share count as reported |
-| FCFF inputs incomplete | propagated | names the blocking field |
-| FCFF ≤ 0 | `NOT MEANINGFUL` | "a going-concern DCF cannot be run off a negative base cash flow" |
-| WACC ≤ terminal growth | `CALCULATION ERROR` | "terminal value would be infinite" |
-| Equity value ≤ 0 | `NEGATIVE EQUITY VALUE` | shows EV, net debt, WACC and growth used |
-| Any unhandled exception | `CALCULATION ERROR` | exception type and message; traceback to log |
-
-### 7.2 P/E Relative — `model_pe.py`
-
-```
-Intrinsic Value per share = EPS(FY) × benchmark P/E(FY)
-```
-
-#### Constructing the benchmark
-
-The benchmark is the **median trailing P/E of the same sector in the same financial year**, computed from the companies in your own input file.
-
-Observed P/E for each company-year:
-
-```
-P/E = mean FY price / diluted EPS      accepted only if EPS > 0 and 2.0 ≤ P/E ≤ 120
-```
-
-The bounds discard degenerate multiples — a company with near-zero EPS produces a P/E of 4,000 that would drag any median it entered.
-
-Benchmark selection, in order:
-
-1. **Median of sector peers excluding the company itself**, if at least `MIN_PEERS_FOR_MEDIAN` (2) remain. Self-exclusion is deliberate: including a company in the median used to value it makes the estimate partly self-referential and biases it toward the observed price.
-2. **Median of the sector including self**, if peers exist but too few.
-3. **Median of the company's own historical P/E** across all available years.
-
-If none of these produces a number, the result is `NO PEER BENCHMARK` with an explanation of how many peers had valid multiples.
-
-> **Sector composition drives this model.** With two companies in a sector, self-exclusion leaves one peer, fallback 2 triggers, and the estimate becomes weakly self-referential. With four or five, the median is meaningful. Aim for at least four names per sector; fewer than three and the model is largely measuring the company against itself.
-
-#### Exclusions
-
-| Condition | Reason code |
+| Rung | Method |
 |---|---|
-| No data for the FY | `NO DATA FOR THIS FY` |
-| EPS missing | propagated from `_diag` |
-| EPS ≤ 0 | `NOT MEANINGFUL` — "P/E valuation is undefined for negative earnings" |
-| No usable benchmark | `NO PEER BENCHMARK` |
+| 1 | Reported by yfinance |
+| 2 | Manual override |
+| 3 | Derived identity: `EBITDA = EBIT + D&A`, `EPS = Net income / Shares` |
+| 4 | `backcast_revenue`: nearest known year scaled by the revenue ratio |
+| 5 | `backcast_cagr`: nearest known year scaled by the company's own CAGR |
+| 6 | `sector_ratio`: revenue × sector-median margin for that sector-year (falls back to the global median) |
 
-### 7.3 EV/EBITDA — `model_ev_ebitda.py`
-
-```
-Implied Enterprise Value = EBITDA(FY) × benchmark EV/EBITDA(FY)
-Equity Value             = Implied EV − Net Debt
-Value per share          = Equity Value / Shares Outstanding
-
-where Net Debt = Total Debt − Cash
-```
-
-Observed multiple for the peer median:
-
-```
-EV = mean FY price × shares + total debt − cash
-EV/EBITDA = EV / EBITDA      accepted only if EBITDA > 0, EV > 0, 1.0 ≤ multiple ≤ 60
-```
-
-Benchmark selection follows the same three-step ladder as P/E, with the same self-exclusion logic.
-
-> **Net debt is subtracted exactly once.** A common error in worked examples is to compute net debt, subtract it, and then subtract total debt and cash separately as well — double-counting the bridge. The implementation subtracts `(total_debt − cash)` from implied enterprise value one time.
-
-#### Exclusions
-
-| Condition | Reason code |
-|---|---|
-| EBITDA missing | propagated from `_diag` |
-| EBITDA ≤ 0 | `NOT MEANINGFUL` — operating loss |
-| Shares missing or ≤ 0 | propagated or `NOT MEANINGFUL` |
-| No usable benchmark | `NO PEER BENCHMARK` |
-| Implied EV below net debt | `NEGATIVE EQUITY VALUE` — shows the implied EV and the multiple used |
-
-### 7.4 Which model suits which company
-
-| Model | Works well for | Breaks down for |
-|---|---|---|
-| DCF | Mature, cash-generative firms with stable CapEx | Loss-makers, early-stage growth, banks, heavy cyclicals in a trough year |
-| P/E Relative | Profitable firms in a well-populated sector | Loss-makers, thin sectors, companies with no true peers |
-| EV/EBITDA | Capital-intensive industrials, capital-structure-neutral comparison | Banks and NBFCs (no meaningful EBITDA), asset-light firms |
-
-**Banks and financial companies are structurally outside two of these three models.** For a lender, debt is raw material rather than financing, so enterprise value is meaningless and free cash flow is unreliable. If your sample includes banks or NBFCs, expect their EV/EBITDA and DCF columns to be reason strings. The honest treatment is to value them on P/E only and state the exclusion in your methodology — not to force a number out of a model that doesn't apply.
+- Revenue is filled first, because every ratio depends on it. Shares are carried over from the nearest year.
+- Back-casts are clamped to between `BACKCAST_MIN_RATIO` (0.33×) and `BACKCAST_MAX_RATIO` (3×) of the source value.
+- `delta_nwc` defaults to 0 and `tax_rate` to the statutory rate.
+- **Every fill is recorded** in `d["_method"][field]`. From there it flows into `Result.method`, the `*` marker in the report, and the Methods sheet.
+- `normalised(years, fy, field)` returns the median of the positive values up to FY*t*. The models use it when one year is loss-making but the company's history is profitable (`USE_NORMALISED_EARNINGS`, which needs at least 2 years).
 
 ---
 
-## 8. The error-handling architecture
+## 12. Valuation models
 
-This is the part that distinguishes the system from a script that prints `N/A`.
+All models share one contract: they **return a `Result`** (a value, or a reason code plus detail) and **never raise**. [`src/model_registry.py`](src/model_registry.py) defines the model list, the column names and the enabled flags, and every other module reads from it.
 
-### 8.1 The `Result` carrier
+### 12.1 DCF: [`model_dcf.py`](src/models/model_dcf.py)
+
+```
+FCFF   = EBIT × (1 − t) + D&A − CapEx − ΔNWC        (fallback: OCF − CapEx)
+Ke     = Rf + β × ERP = 7.05% + β × 5.50%
+WACC   = E/(D+E)·Ke + D/(D+E)·Kd·(1 − t),  Kd = 8.5%,  E = anchor price × shares
+WACC   = max(WACC, g_terminal + 2%)
+g      = CAGR of positive FCFF up to FY t, clamped to [2%, 18%]  (default 8%)
+EV     = Σ FCFF₀(1+g)ⁿ/(1+WACC)ⁿ  (n = 1..5)  +  TV/(1+WACC)⁵
+TV     = FCFF₅ × (1 + 5%) / (WACC − 5%)
+Value  = (EV − (Debt − Cash)) / Shares
+```
+
+If FCFF for the year is negative, the model uses the median of the positive FCFF years (at least 2 needed) and marks the result as estimated. Failure codes: `NOT MEANINGFUL` (shares ≤ 0, or FCFF negative with no positive history), `NEGATIVE EQUITY VALUE`, `CALCULATION ERROR`.
+
+### 12.2 P/E Relative: [`model_pe.py`](src/models/model_pe.py)
+
+```
+Value = EPS(FY) × benchmark P/E(sector, FY)
+observed P/E = anchor price / EPS,  kept only if EPS > 0 and 2 ≤ P/E ≤ 120
+```
+
+The benchmark P/E comes from the first of these that works:
+
+1. Sector median **excluding the company itself**, if there are ≥ `MIN_PEERS_FOR_MEDIAN` (2) peers.
+2. Sector median including the company.
+3. The company's own historical median.
+4. The whole-universe median for that FY.
+5. Otherwise, `NO PEER BENCHMARK`.
+
+Negative EPS is normalised when history allows it.
+
+### 12.3 EV/EBITDA: [`model_ev_ebitda.py`](src/models/model_ev_ebitda.py)
+
+```
+observed EV/EBITDA = (price × shares + debt − cash) / EBITDA,  kept if 1 ≤ x ≤ 60
+Value = (EBITDA × benchmark multiple − (Debt − Cash)) / Shares
+```
+
+The benchmark follows the same ladder as P/E. Net debt is subtracted exactly once. Banks and NBFCs never produce a usable multiple.
+
+### 12.4 Graham Number: [`model_graham.py`](src/models/model_graham.py)
+
+```
+Value = √(22.5 × EPS × Book value per share)        22.5 = P/E 15 × P/B 1.5
+```
+
+This is a conservative **ceiling price**, not a full valuation. It needs positive EPS (normalised when history allows) and positive book value. Results above `GRAHAM_MAX_MULTIPLE_OF_BVPS` (8×) book value per share are reported but flagged on the Methods sheet.
+
+### 12.4b Residual Income: [`model_residual_income.py`](src/models/model_residual_income.py)
+
+```
+Value = B₀ + RI₁ / (1 + Ke − ω)          RI₁ = (ROE* − Ke) × B₀
+```
+
+- `B₀` is book equity at FY end.
+- `ROE*` is the median ROE (on average equity) over the last `RI_ROE_LOOKBACK` (3) years up to FY*t*, clamped to [−50%, 60%].
+- `Ke` is CAPM on the **adjusted beta**.
+- `ω` (`RI_PERSISTENCE` = 0.62) is how long excess returns persist, from Ohlson's linear-information model.
+
+This model works for **banks** and **loss-makers**: a below-par ROE gives a value below book instead of a refusal. Most of its value comes from the observed book value rather than a terminal-value assumption.
+
+**Adjusted beta** ([`capital.py`](src/models/capital.py)): `β_adj = 0.67 × β_company + 0.33 × β_sector-median`. When Yahoo has no beta for the company, the sector median is used. The original DCF keeps the raw beta so that the baseline stays unchanged.
+
+### 12.4c Hybrid: [`model_hybrid.py`](src/models/model_hybrid.py)
+
+```
+Hybrid = exp( Σ_k w_k · (ln V_k − c_k) )     over the components k that apply to this company-year
+```
+
+The Hybrid runs **last**, over the whole grid, and has four layers:
+
+1. **Regime gate.** Each company-year is classed as `lender`, `loss_maker`, `young` or `mature`. `HYBRID_REGIME_WEIGHTS` sets which components apply; a 0 removes a component outright (for example, no DCF or EV/EBITDA for a lender).
+
+2. **Upgraded components:**
+   - **DCF+:** three stages. Growth starts from a blend of reinvestment rate × ROIC and the historical CAGR, holds for 5 years, then fades to the terminal rate over 5 more. The terminal value uses the value-driver formula `TV = NOPAT(1+g)(1 − g/RONIC)/(WACC − g)`, which charges for the reinvestment that growth requires. Discounted with the adjusted beta.
+   - **Residual Income.**
+   - **P/E-reg and EV-reg:** the benchmark multiple is predicted by a ridge regression on fundamentals (ROE or EBITDA margin, growth, leverage), pooled across years ≤ *t* and demeaned by year. It is then blended 50/50 with the ex-self sector median. Thin sectors borrow information from the whole sample.
+   - **Graham.**
+   - **ML consensus:** the geometric mean of the learners, counted as one vote.
+
+3. **Calibration and learned weights, all point-in-time.** For each component, the errors `ln(V/benchmark)` from earlier years in the same sector are used (falling back to the whole sample). Each component is shifted by its median miss `c_k`, shrunk by evidence `n/(n+10)`. Its weight is the inverse squared remaining error relative to the other components, also shrunk toward equal. That weight is then multiplied by the regime weight and by 0.75 if the component rests on estimated inputs. Components more than 3× from the weighted median are dropped as outliers.
+
+4. **Uncertainty.** A correlated Monte Carlo over each component's historical error, plus the disagreement between models, gives a **P10–P90 range** and a **confidence score from 0 to 100** (High ≥ 60, Medium ≥ 35). The score is a probability: the simulated chance that the market price lands within ±20% (`HYBRID_CONF_TOLERANCE`) of the Hybrid value, discounted when components are missing or rest on estimated inputs. Each run prints a **calibration check** comparing the predicted percentage with the share that actually landed within 20%.
+
+Every row's regime, component values, calibrations, weights, range and confidence are written to `output/Hybrid_Detail.csv`. Set `HYBRID_BIAS_CORRECT = False` to see the uncalibrated ensemble.
+
+**Limits:** the first year of any window has no error history, so it falls back to the regime-weighted equal mix. The weights reward closeness to the 1-May price, so the Hybrid inherits the study's own definition of "accurate".
+
+### 12.5 Machine-learning models: [`ml_common.py`](src/models/ml_common.py)
+
+**Target.** There is no ground-truth intrinsic value to train on, so the models learn a forward price ratio:
+
+```
+label = price_fwd / price            (mean price FY t+1 ÷ mean price FY t)
+IV    = price × predicted ratio
+```
+
+**Features (21 + sector one-hots):** ebitda_margin, net_margin, roe, roce, debt_to_equity, net_debt_to_ebitda, interest_free_proxy, capex_to_revenue, ocf_to_ebitda, accruals_ratio, asset_turnover, earnings_yield, book_to_price, fcf_yield, ev_ebitda, revenue/ebitda/eps 1-year growth, beta, log_market_cap, cap_tier_ord. A row needs at least `ML_MIN_FEATURES` (4) of these. Missing values are filled from the sector-year median (`ML_IMPUTE_FROM_SECTOR`).
+
+**Validation.** Each fold represents one FY:
+- `expanding`: trains only on years before *t*. This is correct, but it leaves the early years empty.
+- `loyo`: leave-one-year-out. This leaks future data, so use it for comparison only.
+- `hybrid` (default): uses expanding where there are at least `ML_MIN_TRAIN_ROWS` (25) labelled rows, and falls back to LOYO otherwise. Every LOYO prediction is marked as estimated.
+
+**Discipline:**
+- Winsorisation (1%/99%) and median fill are fitted **on the training fold only**.
+- Predicted ratios outside `ML_RATIO_BOUNDS` (0.25–4.0) are clipped and marked as estimated. With estimation off, they become `PREDICTION OUT OF BAND` instead.
+- A missing library becomes `LIBRARY NOT INSTALLED` for that model alone.
+
+| Model | Key settings |
+|---|---|
+| XGBoost | 400 trees, depth 4, lr 0.05, L2 = 2, min_child_weight 5 |
+| Random Forest | 500 trees, depth 8, min_samples_leaf 5, max_features sqrt |
+| LightGBM | 400 trees, depth 4, 15 leaves, min_child_samples 10 |
+| MLP | StandardScaler → (64, 32) ReLU, Adam, α = 1e-3, early stopping (15% validation) |
+
+All models use `random_state = ML_RANDOM_STATE` (42). The ML stage also writes `ml_metrics.csv` (RMSE, MAE and directional accuracy per fold), `ml_feature_importance.csv` and `ml_dataset.csv`.
+
+### 12.6 Which model suits which company
+
+| Model | Good for | Breaks down for |
+|---|---|---|
+| DCF | Mature, cash-generative companies | Loss-makers, early-stage companies, banks, cyclicals at the bottom of the cycle |
+| P/E Relative | Profitable companies in sectors with plenty of peers | Loss-makers, thin sectors |
+| EV/EBITDA | Capital-intensive industrials | Banks and NBFCs, asset-light companies |
+| Graham | Conservative ceiling for stable earners | Growth companies (it sits far below their price), loss-makers |
+| ML | Pattern-based re-rating signal across the panel | Small samples. Read Random Forest as the baseline. |
+
+---
+
+## 13. Error handling and reason codes
+
+[`src/result.py`](src/result.py):
 
 ```python
 @dataclass
 class Result:
-    value:  float | None
-    code:   str   | None
-    detail: str   | None
+    value: float | None
+    code: str | None       # stable reason code on failure
+    detail: str | None     # specific explanation
+    method: str | None     # set only when the value was estimated
 ```
-
-Constructed via `Result.good(v)` or `Result.bad(code, detail)`. `.ok` tests for a value; `.text()` renders the cell — a formatted currency string when there's a value, otherwise the reason.
-
-Every value that can fail travels as a `Result` from the point of failure to the spreadsheet cell. Nothing is coerced to `None` and forgotten along the way.
-
-### 8.2 The reason vocabulary
-
-Stable, greppable codes defined in `result.py`:
 
 | Code | Meaning |
 |---|---|
-| `TICKER NOT RESOLVED` | Company name matched no exchange symbol |
-| `FETCH FAILED` | Download raised an exception |
-| `SOURCE UNAVAILABLE` | A whole statement came back empty or errored |
-| `NO DATA FOR THIS FY` | No statement period matched this financial year |
-| `FIELD MISSING` | The statement exists; this line item isn't in it |
-| `PRICE UNAVAILABLE` | No price history, or too few sessions inside the FY |
-| `NOT MEANINGFUL` | The maths is defined but economically nonsensical (negative EPS, negative EBITDA, zero shares) |
+| `TICKER NOT RESOLVED` | The name matched no exchange symbol |
+| `FETCH FAILED` | The download raised an error |
+| `SOURCE UNAVAILABLE` | A whole statement came back empty |
+| `NO DATA FOR THIS FY` | No statement period matched this FY |
+| `FIELD MISSING` | The statement exists, but this line item is absent |
+| `PRICE UNAVAILABLE` | No price, or too few sessions |
+| `NOT MEANINGFUL` | The maths is defined but economically meaningless (negative EPS or EBITDA, zero shares) |
 | `NO PEER BENCHMARK` | No usable sector median and no own history |
-| `NEGATIVE EQUITY VALUE` | Enterprise value fell below net debt |
+| `NEGATIVE EQUITY VALUE` | EV is below net debt, or book value is ≤ 0 |
 | `CALCULATION ERROR` | Division by zero, NaN, or an unhandled exception |
 | `NOT COMPUTABLE` | A dependency was itself unavailable |
-| `MODEL NOT APPLICABLE` | Reserved for structural exclusions |
+| `MODEL NOT APPLICABLE` | Structural exclusion, or the ML stage is disabled |
+| `INSUFFICIENT TRAINING DATA` | The ML fold has fewer than `ML_MIN_TRAIN_ROWS` labelled rows |
+| `NO FORWARD PRICE` | No FY+1 price, so no training label |
+| `FEATURES INCOMPLETE` | Too few ML features could be computed |
+| `LIBRARY NOT INSTALLED` | The ML library is missing or broken |
+| `PREDICTION OUT OF BAND` | The ML ratio is outside the plausible range |
 
-Because the codes are stable strings, you can pivot the output spreadsheet on them, count them, or filter for a specific failure mode — which is exactly what the end-of-run tally does.
+The detail text propagates from the point of failure (for example, `yf_source`'s `_diag`) through the model to the cell. A cell can therefore say *why* EBIT was missing, not just that the DCF failed.
 
-### 8.3 Reason propagation
-
-The mechanism that makes messages specific rather than generic:
-
-```
-yf_source                model                    exporter
-    │                      │                          │
-    │ field missing        │                          │
-    ├─ _diag["ebit"] = (NO_PERIOD, "no period ending near 31-Mar-2021;
-    │                              source publishes only the latest ~4
-    │                              fiscal periods")
-    │                      │                          │
-    │                      │ require(d,"ebit",...)    │
-    │                      ├─ reads _diag, wraps in Result
-    │                      ├─ adds model context:     │
-    │                      │  "FCFF needs EBIT + D&A − CapEx; EBIT is
-    │                      │   the blocker → <original detail>"
-    │                      │                          │
-    │                      │                          ├─ Result.text()
-    │                      │                          └─► cell content
-```
-
-The cell ends up saying not just *that* the DCF failed, but that it failed because FCFF needed EBIT, that EBIT was unavailable, and that the underlying cause was a statement-depth limit at the source. That chain is reconstructed from the point of failure, not guessed at the point of display.
-
-### 8.4 Layered exception capture
-
-Five independent layers, so no single failure can take down a run:
-
-1. **Statement download** — each of the three statements is wrapped separately.
-2. **Field extraction** — every `_pick` call records rather than raises.
-3. **Whole-company fetch** — a crash produces `FETCH FAILED` on all five of that company's rows; the run continues.
-4. **Model invocation** — a `guard()` closure catches anything a model throws and converts it to `CALCULATION ERROR`.
-5. **Export and top level** — a failed XLSX write still leaves the CSV; a fatal error prints the exception and points at the log.
-
-Full tracebacks go to `output/run_log.txt` at DEBUG level. The terminal stays readable.
-
-> **Logging must be initialised first.** `setup_logging()` belongs on the first line of `main()`, before argument parsing and before input reading. If it runs later, any exception raised during input parsing is logged to a handler that doesn't exist yet, and you get a one-line message with no traceback.
-
-### 8.5 Failed companies still appear
-
-A company that can't be resolved or fetched produces its full five rows, every cell carrying the reason. It is never silently dropped.
-
-This is a research decision as much as an engineering one. A reader of your output can see the gap and its cause. If failures vanished, the sample would appear complete when it wasn't, and the reader would have no way to know.
+**Exception capture is layered:** each statement download, each field pick, the whole-company fetch, each model call (`guard()`), the export (a failed XLSX still leaves the CSV), and the top level. Full tracebacks go to `output/run_log.txt`.
 
 ---
 
-## 9. Output format
+## 14. Outputs
 
-Two files per run, written to `output/`:
+Everything is written to `output/`. The folder is git-ignored because it is regenerated on every run.
 
-- `Intrinsic_Value_Report.csv` — UTF-8 with BOM, so Excel renders ₹ correctly
-- `Intrinsic_Value_Report.xlsx` — bold wrapped header, panes frozen at `D2`, columns widened for reason strings
-
-### Layout
-
-| Company name | Sector Name | Financial Year | Market Price | (DCF) Intrinsic Value | (P/E Relative Valuation) Intrinsic Value | (EV/EBITDA Valuation) Intrinsic Value |
-|---|---|---|---|---|---|---|
-| Bharat Electronics | Defence and Aerospace | 2025 | ₹287.14 | ₹243.86 | ₹261.02 | ₹255.71 |
-| Bharat Electronics | Defence and Aerospace | 2024 | ₹198.40 | ₹211.55 | ₹224.19 | ₹207.33 |
-| Bharat Electronics | Defence and Aerospace | 2023 | ₹104.72 | ₹118.90 | ₹131.44 | ₹126.08 |
-| Bharat Electronics | Defence and Aerospace | 2022 | ₹81.35 | ₹94.27 | ₹88.61 | ₹90.15 |
-| Bharat Electronics | Defence and Aerospace | 2021 | ₹58.90 | NO DATA FOR THIS FY: no period ending near 31-Mar-2021… | NO DATA FOR THIS FY: … | NO DATA FOR THIS FY: … |
-| *(blank row)* | | | | | | |
-| Next Company | … | 2025 | … | … | … | … |
-
-Years run newest first within each company. A blank separator row sits between companies. The row count is exactly `companies × 5`, including failed companies, so the sheet is rectangular and safe to pivot on — which matters for a sector × market-cap research design.
-
-### Terminal summary
-
-```
-[export] 150 company-year rows -> output/Intrinsic_Value_Report.csv
-
-[model coverage]
-   DCF             98/150 valued
-   P/E Relative   112/150 valued
-   EV/EBITDA      104/150 valued
-   Market Price   132/150 available
-
-[why cells are blank]
-     54  NO DATA FOR THIS FY
-     31  NOT MEANINGFUL
-     18  PRICE UNAVAILABLE
-     12  NO PEER BENCHMARK
-      3  NEGATIVE EQUITY VALUE
-```
-
-The tally is the fastest diagnostic available. One dominant code means one fixable problem; five codes spread evenly means the sample itself needs rethinking.
-
-### A note on cell types
-
-Values are written as **formatted strings** (`₹1,234.56`), not numbers, because a cell must be able to hold either a value or a sentence. If you intend to chart or regress on this output, either post-process with `=IFERROR(VALUE(SUBSTITUTE(D2,"₹","")),"")` in Excel, or modify `Result.text()` to emit raw floats and move the ₹ into the workbook's number format.
-
----
-
-## 10. The screener
-
-`screener.py` is optional and runs *before* `main.py`. It screens a candidate universe on fundamental criteria and writes the survivors into `companies.csv`.
-
-```bash
-python screener.py --relax
-```
-
-### Criteria
-
-Defined in the `THRESHOLDS` dict:
-
-| Criterion | Default | Computed as |
-|---|---|---|
-| ROCE floor | 18% | `EBIT / (Total Assets − Current Liabilities)`, must hold every year checked |
-| Years of ROCE required | 4 | See the depth caveat below |
-| P/E ceiling | 20 | Trailing, or derived from latest FY EPS |
-| Drawdown from 52-week high | ≥ 25% | The "trading near the lows" condition |
-| Debt/equity ceiling | 1.0 | Latest available FY |
-| Sales CAGR floor | 5% | Across the available revenue span |
-| Complete financial years | 4 | Years with usable EBIT, revenue and assets |
-| Market cap floor | ₹300 cr | From the info block |
-
-Market-cap buckets: Large ≥ ₹50,000 cr, Mid ≥ ₹15,000 cr, Small below. These approximate AMFI's top-100 / 101-250 / 251+ rule with absolute cut-offs — state whichever definition you use.
-
-### Relaxation ladder
-
-With `--relax`, thresholds loosen in a fixed order until every sector × cap bucket fills:
-
-1. Drop the near-the-lows condition
-2. P/E ceiling → 30
-3. ROCE floor → 15%
-4. P/E ceiling → 40
-5. ROCE floor → 12%
-6. Drop the sales-growth condition
-
-Each step applied is printed and reported, so you can state in your methodology exactly which conditions had to be loosened — considerably more defensible than a hand-picked list.
-
-### Audit output
-
-`output/screening_report.csv` contains **every** candidate — passing and failing — with each metric, the per-year ROCE, the pass/fail verdict, and the specific reason for every failed criterion. This is the file to cite when asked how the sample was constructed.
-
-### Three honest limits
-
-**FII holding is not actually available.** yfinance exposes no FII/DII split for Indian listings. The `fii_pct_unverified` column carries Yahoo's generic institutional-holding field, which is frequently blank or wrong for NSE scrips. Pull real FII numbers from Screener.in or Trendlyne if that criterion matters.
-
-**ROCE runs over four years, not five.** Capital employed needs a balance sheet, and FY2021's usually isn't retrievable. `roce_min_years` defaults to 4.
-
-**The universe is a seed list of roughly 90 tickers, not the exchange.** For genuinely exhaustive coverage, run this Screener.in query and feed its CSV export in via `--universe`:
-
-```
-Average return on capital employed 5Years > 18 AND
-Return on capital employed > 18 AND
-Price to Earning < 20 AND
-Down from 52w high > 25 AND
-Market Capitalization > 300 AND
-Debt to equity < 1 AND
-Sales growth 5Years > 5
-```
-
-> **A methodological warning about using the screener at all.** Selecting companies on low P/E and price drawdown, then running a valuation study that compares intrinsic value against market price, is circular. Low P/E is simultaneously your selection filter and an input to your P/E and EV/EBITDA models — so the study will mechanically report "undervalued" for nearly every row. A dataset for this kind of comparison should be selected on grounds independent of valuation: sector, market cap, listing vintage, data availability. If you want the screened names too, keep them as a **separate labelled sub-sample** so the difference between the two groups becomes a finding rather than an artefact.
-
----
-
-## 11. Testing without a network
-
-`mock_source.py` provides a deterministic synthetic dataset that exercises every reason code in under a second.
-
-```bash
-python main.py --offline
-```
-
-### Fixtures
-
-| Company | Exercises |
+| File | Contents |
 |---|---|
-| MOCK CLEAN ALPHA / BETA / GAMMA | The happy path — three peers in one sector, all three models value cleanly |
-| MOCK DEPTH GAP | `NO DATA FOR THIS FY` for FY2021–22 |
-| MOCK LOSS MAKER | `NOT MEANINGFUL` from FY2023 on negative EPS and EBITDA |
-| MOCK NO PRICE SOLO | `PRICE UNAVAILABLE` and `NO PEER BENCHMARK` together |
-| MOCK HEAVY DEBT | `NEGATIVE EQUITY VALUE` |
-| MOCK BANK STYLE | `FIELD MISSING` where EBITDA is simply not reported |
-| MOCK ZERO SHARES | `NOT MEANINGFUL` on a zero share count |
-| MOCK GHOST CORP | `TICKER NOT RESOLVED` |
-| MOCK CRASH CORP | `FETCH FAILED` from a simulated `ConnectionError` |
+| `Intrinsic_Value_Report.csv` / `.xlsx` | **Main grid.** Company, Sector, FY, Market Price (1-May benchmark), then for each enabled model: *Intrinsic Value* and *Difference (Market − Model)*. Values are formatted `₹1,234.56`, with `*` if estimated; otherwise a reason code. |
+| `Intrinsic_Value_Data.csv` | **Numeric twin:** the same columns as plain floats, plus `FY (internal)`, `Benchmark Date` and `Valuation Anchor Price`. This is what the analyzer reads. |
+| `Intrinsic_Value_Diagnostics.csv` | One row per empty cell: model, reason code, full explanation |
+| `Intrinsic_Value_Methods.csv` | One row per filled cell: value, whether it was estimated, and the method |
+| `Intrinsic_Value_Excluded.csv` | Sufficiency verdicts: complete and benchmark FY counts, reasons, missing fields by year, models still computable, fields supplied by override |
+| `Why_Companies_Were_Left_Out.*` | Plain-English version of the exclusion sheet (summary, per company, year by year) |
+| `ml_metrics.csv`, `ml_feature_importance.csv`, `ml_dataset.csv` | ML diagnostics |
+| `metrics_overall.csv`, `metrics_by_sector.csv`, `metrics_by_year.csv`, `metrics_by_company.csv`, `metrics_win_rate.csv` | Accuracy tables |
+| `charts/*.png` | HD charts (see §15) |
+| `analysis_report.html` | HTML index of all charts and the headline summary |
+| `run_log.txt` | DEBUG log with full tracebacks |
+| `screening_report.csv` | Written by `tools/screener.py` |
 
-The pass condition is that all relevant codes appear in the tally *and* the clean trio produces real numbers in all three model columns. Exact counts shift with `config.py` assumptions; the presence of every code is what matters.
+The **workbook** contains these sheets: *Intrinsic Values*, *Diagnostics*, *Methods*, *Excluded Companies*, and the three *Left Out* sheets.
 
-There is also `companies_edgecases.csv` for live testing against real recent IPOs, loss-makers, banks, and a deliberately unresolvable name.
+**Sign convention:** `Difference = Market Price − Intrinsic Value`. A positive difference means the market is above the model, so the model says *overvalued*. A negative difference means the model says *undervalued*.
 
----
+### Console summary
 
-## 12. Configuration reference
-
-Everything in `config.py`. These are your stated assumptions — every one of them belongs in a methodology appendix.
-
-### Financial year and price
-
-| Setting | Default | Notes |
-|---|---|---|
-| `FY_LIST` | `[2021…2025]` | Years to compute |
-| `FY_START_MONTH/DAY` | 4 / 1 | Indian fiscal year start |
-| `FY_END_MONTH/DAY` | 3 / 31 | Fiscal year end |
-| `PRICE_MODE` | `"average"` | Fixed by design; not a tunable |
-| `FY_MEAN_BASIS` | `"trading"` | Or `"calendar"` |
-| `MIN_TRADING_DAYS_FOR_FY` | 60 | Below this, price is unavailable |
-| `PARTIAL_YEAR_SESSIONS` | 200 | Below this, mean is flagged as partial |
-
-### Cost of capital
-
-| Setting | Default | Notes |
-|---|---|---|
-| `RISK_FREE_RATE` | 0.0705 | 10-year G-Sec yield |
-| `EQUITY_RISK_PREMIUM` | 0.0550 | India ERP |
-| `DEFAULT_BETA` | 1.00 | When Yahoo's beta is missing or implausible |
-| `COST_OF_DEBT` | 0.0850 | Pre-tax |
-| `DEFAULT_TAX_RATE` | 0.2517 | Indian statutory, new regime |
-
-### DCF
-
-| Setting | Default | Notes |
-|---|---|---|
-| `PROJECTION_YEARS` | 5 | Explicit forecast horizon |
-| `TERMINAL_GROWTH` | 0.0500 | See the caveat in §7.1 |
-| `MIN_GROWTH` / `MAX_GROWTH` | 0.02 / 0.18 | Growth winsorisation band |
-| `DEFAULT_GROWTH` | 0.0800 | When history is too thin |
-| `WACC_SPREAD_OVER_G` | 0.0200 | Minimum WACC-minus-terminal-growth gap |
-
-### Relative valuation
-
-| Setting | Default | Notes |
-|---|---|---|
-| `PE_BOUNDS` | (2.0, 120.0) | Multiples outside this are excluded from medians |
-| `EV_EBITDA_BOUNDS` | (1.0, 60.0) | Same |
-| `MIN_PEERS_FOR_MEDIAN` | 2 | Peers required after self-exclusion |
-
-### Runtime
-
-| Setting | Default | Notes |
-|---|---|---|
-| `EXCHANGE_SUFFIX` | `".NS"` | Default suffix for bare tickers |
-| `CURRENCY_SYMBOL` | `"₹"` | |
-| `OUTPUT_DIR` / `CACHE_DIR` | `output` / `.cache` | |
-| `OUTPUT_BASENAME` | `Intrinsic_Value_Report` | |
-| `REQUEST_PAUSE` | 0.6 | Seconds between network calls |
-| `SHOW_REASONS` | `True` | `False` reverts to plain `N/A` |
-| `REASON_STYLE` | `"detailed"` | Or `"short"` for code only |
-| `LOG_FILE` | `run_log.txt` | Inside `OUTPUT_DIR` |
+At the end of a run, the console prints:
+- model coverage (valued and estimated counts per model)
+- benchmark-date statistics
+- ML fold RMSE, MAE and directional accuracy
+- a "why cells are blank" tally by reason code
+- an **IN PLAIN ENGLISH** block that counts how many company-years looked cheap, expensive or about right, using a ±`PLAIN_VERDICT_BAND` (10%) band around the average across models
 
 ---
 
-## 13. Known limitations and methodological caveats
+## 15. Analysis stage (metrics and charts)
 
-Every one of these is a real constraint on what the results can support. They belong in a limitations section, not in a footnote.
+[`src/csv_analyzer.py`](src/csv_analyzer.py) runs automatically after export. You can re-run it on its own:
 
-### 13.1 Source depth — the binding constraint
-
-**yfinance publishes roughly the latest four annual statement periods.** Not five. For a run covering FY2021–FY2025 executed in 2026, FY2021 fundamentals are typically unavailable for most companies — even though the company has filed a decade of accounts.
-
-Consequences: FY2021 valuations will be largely reason strings; the DCF growth CAGR computes over three or four points rather than five; the screener's ROCE test runs over four years.
-
-Mitigation: supply the older figures yourself. Add a `fundamentals_override.csv` keyed on `ticker,fy` with the fields listed in §6.2, read it in `fetch_company`, and let it fill any `None`. Screener.in or the annual reports have the numbers. This is the single highest-value addition to the codebase.
-
-### 13.2 Recent listings
-
-Companies that IPO'd inside the window have no price for the years before listing, and their first partial year produces a mean over fewer sessions than their peers'. In the thematic sectors this project targets — defence, renewables, semiconductors — recent listings are common; a third of a typical 30-name sample can be affected.
-
-This also degrades the peer medians. A sector where only three of six names traded in FY2021 has a median built from three observations.
-
-### 13.3 Selection bias if the screener is used
-
-Covered fully in §10. Restating because it's the most consequential threat to the study's validity: screening on low P/E and price drawdown pre-determines the finding.
-
-### 13.4 Circularity in WACC
-
-The equity weight in WACC uses market capitalisation, which uses the market price — the same quantity the intrinsic value is being compared against. This is standard practice (Damodaran and every corporate finance text weight WACC at market values), but it does mean the DCF is not fully independent of market price. A book-value weighting alternative would be independent but less defensible on other grounds. Worth one sentence in the methodology.
-
-### 13.5 Beta quality
-
-Yahoo's beta for Indian scrips is often computed against a non-Indian benchmark and is frequently missing for small caps, in which case 1.0 is substituted. Since beta drives cost of equity, drives WACC, drives the discount rate, this is a meaningful source of error — a beta of 1.8 versus 0.8 can move a DCF result by 30–40%. Computing beta from 60 monthly returns against the NIFTY 500 is the fix, and the price history needed is already being downloaded.
-
-### 13.6 Terminal-value dominance
-
-At 5% terminal growth and a 5-year horizon, terminal value typically accounts for 70–85% of enterprise value. The DCF is therefore mostly a statement about the perpetuity assumption rather than about the forecast cash flows. Reporting the TV share per company is itself a legitimate finding.
-
-### 13.7 Consolidated versus standalone
-
-The system takes whatever Yahoo returns, which is usually consolidated but is not guaranteed to be consistent across companies. For a firm with large subsidiaries this materially changes revenue, EBITDA and debt. If consistency matters, verify against the annual report and use the override file.
-
-### 13.8 No look-ahead guard on publication dates
-
-The system uses point-in-time discipline at the *financial year* level — FY2022 valuations use only FY2022-and-earlier data. It does **not** model the publication lag: FY2023 accounts aren't public on 31 March 2023, typically appearing 60–90 days later. Market data for FY2023 therefore overlaps a period when FY2023 fundamentals weren't yet known.
-
-For a retrospective valuation study this is usually acceptable and is standard in the literature. For anything resembling a trading strategy it is not. If you need the stricter treatment, add `publication_date = period_end + 90 days` and gate every fundamentals-to-price join on it.
-
-### 13.9 Banks and financials
-
-Two of the three models are structurally undefined for lenders. See §7.4.
-
-### 13.10 Not investment advice
-
-This is a research instrument. Its outputs are only as good as the assumptions in `config.py`, and those assumptions are contestable. Nothing it produces is a recommendation to buy or sell anything.
-
----
-
-## 14. Troubleshooting
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| `AttributeError: 'list' object has no attribute 'strip'` | A CSV row has more commas than the header — usually an unquoted comma in a company name | Quote the field: `"Emami, Ltd",…`. The tolerant reader in §3 reports the line number instead of crashing |
-| Every cell says `TICKER NOT RESOLVED` | No network, or Yahoo search unreachable | Supply explicit tickers in the `ticker` column |
-| All FY2021 cells blank with `NO DATA FOR THIS FY` | Source depth limit (§13.1) | Expected. Add the override file if you need FY2021 |
-| A whole sector says `NO PEER BENCHMARK` | Fewer than two peers with valid multiples | Add more companies to that sector |
-| Banks show `NOT MEANINGFUL` on EV/EBITDA | Structural — no meaningful EBITDA | Expected. Value on P/E only |
-| NSE fallback always returns nothing | NSE blocks datacentre and VPN IPs | Run from a home connection, or rely on yfinance |
-| ₹ renders as `â‚¹` in Excel | Encoding | Already handled via `utf-8-sig`; if it persists, open via Data → From Text with UTF-8 |
-| Reason strings make the sheet unwieldy | Detailed style | `--reasons short` gives codes only, which sort and pivot cleanly |
-| Error message with no traceback | `setup_logging()` running after the failing code | Move it to the first line of `main()` (§8.4) |
-| Rate-limit errors from Yahoo | Too many rapid calls | Raise `REQUEST_PAUSE` to 1.5–2.0 |
-
----
-
-## 15. Extending the system
-
-### Adding a fourth valuation model
-
-The interface is a single function:
-
-```python
-def intrinsic_value(...) -> Result
+```bash
+python tools/analyze.py
 ```
 
-Steps:
+```bash
+python tools/analyze.py output/Intrinsic_Value_Data.csv -o output/run7 --dpi 300
+```
 
-1. Create `model_<name>.py` returning `Result.good(value)` or `Result.bad(code, detail)` on every path.
-2. If it needs a peer benchmark, add a `build_*_table(universe)` function following the pattern in `model_pe.py`.
-3. In `main.py`, add the model to the `rows.append({...})` dict with a new key.
-4. In `exporter.py`, append the column name to `COLUMNS` and the `(key, column)` pair to `VALUE_KEYS`.
+**Metrics** are computed per model, and also by sector, by year and by company:
 
-Nothing else changes. Residual Income and Graham Number are the natural next additions — both need only fields already being extracted.
+| Metric | Meaning |
+|---|---|
+| MAE | Mean absolute error, in ₹ |
+| RMSE | Root mean squared error, in ₹. RMSE ≫ MAE means a few large misses. |
+| MAPE | Mean absolute percentage error, the scale-free headline figure |
+| MedAPE | Median absolute percentage error. A wide gap from MAPE means outliers dominate. |
+| Bias | Mean signed error. Negative means the model prices below the market. |
+| Hit20 | Share of estimates within ±20% of the benchmark |
+| Spearman | Rank correlation: does the model get the ordering right? |
+| Wins | How often this model was the closest of all models for a row |
 
-### Adding a data source
+**Charts**, each with its interpretation drawn into the image:
 
-Implement a module exposing `fetch_close_series(ticker, start, end)` and/or field getters, then insert it in the fallback chain in `yf_source.fetch_company`. Record its provenance in `_notes` so the audit trail shows which source supplied what.
+| Chart | What it shows |
+|---|---|
+| `sector_<name>_levels.png` | Each model's value per company over the years |
+| `sector_<name>_normalised.png` | Estimate ÷ benchmark over time |
+| `overall_model_accuracy.png` | Models ranked by MAPE and RMSE |
+| `closest_model_win_rate.png` | How often each model was closest |
+| `accuracy_by_sector.png` | MAPE heatmap, model × sector |
+| `accuracy_by_year.png` | MAPE per model across years |
+| `error_distribution.png` | Distribution of signed percentage errors |
+| `metrics_table.png` | The full metrics table as an image |
 
-### The fundamentals override file
-
-The highest-value extension, per §13.1. Read a `fundamentals_override.csv` keyed on `(ticker, fy)` at the end of the per-FY loop in `fetch_company`, fill any `None` field from it, clear the corresponding `_diag` entry, and append a note recording that the value was manually supplied.
-
-### Surfacing the audit notes
-
-`d["_notes"]` accumulates provenance for every company-year — session counts, price ranges, derived fields, substituted assumptions — and nothing currently prints it. Adding it as a second worksheet, or as an eighth column, turns the output from a results table into a fully auditable record. Recommended before submission.
-
----
-
-## 16. Glossary
-
-**Beta (β)** — sensitivity of a stock's returns to the market's. 1.0 tracks the market; 1.8 moves roughly 1.8× as far in both directions.
-
-**Capital employed** — total assets minus current liabilities. The denominator of ROCE.
-
-**CAGR** — compound annual growth rate; the constant rate that takes a starting value to an ending value over *n* periods.
-
-**CAPM** — Capital Asset Pricing Model. Cost of equity = risk-free rate + β × equity risk premium.
-
-**Enterprise value (EV)** — market capitalisation plus total debt minus cash. The value of the whole business, independent of how it's financed.
-
-**Equity risk premium (ERP)** — the excess return investors demand for holding equities over risk-free government bonds.
-
-**FCFF** — free cash flow to firm. Cash available to all capital providers, debt and equity, after operating costs, taxes, capital expenditure and working-capital investment.
-
-**Gordon Growth Model** — the perpetuity formula behind terminal value: `TV = CF × (1 + g) / (r − g)`.
-
-**Intrinsic value** — an estimate of what a share is fundamentally worth, derived from the business's economics rather than from its current price.
-
-**Net debt** — total debt minus cash and equivalents. The bridge from enterprise value to equity value.
-
-**ROCE** — return on capital employed. EBIT divided by capital employed; a measure of how efficiently a business converts capital into operating profit.
-
-**Terminal value** — the present value of all cash flows beyond the explicit forecast horizon, typically the majority of a DCF result.
-
-**Trailing twelve months (TTM)** — the most recent twelve months of reported results, as opposed to a fiscal year or a forecast.
-
-**WACC** — weighted average cost of capital. The blended required return of debt and equity holders, weighted by their share of the capital structure, used as the DCF discount rate.
-
-**Winsorisation** — clamping extreme values to a defined band rather than discarding them, to limit the influence of outliers.
+The loader tolerates blank separator rows, `#` comment lines, currency-prefixed cells and small changes in header wording.
 
 ---
 
-*End of documentation.*
+## 16. Tools
+
+### `tools/make_override_template.py`
+
+```bash
+python run.py --make-override-template
+```
+
+This fetches every company with overrides switched off and writes `data/fundamentals_override.csv`. The sheet has one row per company-year. Fetched values are pre-filled, existing override values are kept, and the gaps are left blank. Fill the blanks from Screener.in or annual reports, in **absolute rupees**, then re-run.
+
+### Auto-train: `--train-universe auto`
+
+```bash
+python run.py --train-universe auto
+```
+
+```bash
+python run.py --train-universe auto --auto-max 150 --auto-target 50 --auto-batch 5
+```
+
+This grows the ML training set **one company at a time** until the Hybrid is confident enough, then values your list as normal. In the GUI, tick **Auto-train** on the Run page.
+
+1. **Candidates:** the NIFTY Total Market (~750 companies), filtered as follows:
+   - **Listing age:** only companies whose official NSE listing date (`EQUITY_L.csv`) is at least `--auto-min-listed-years` ago (default 10).
+   - **Sector:** Financial Services is left out unless you pass `--auto-include-financials`.
+   - **Duplicates:** companies already in your list are left out.
+2. **Sectors:** the top `--auto-sectors` (default 10). With `--auto-sector-rank performance` (the default), sectors are ranked by median share-price return over the 5 years **before** the valuation window, so the ranking uses no hindsight. With `breadth`, they're ranked by the number of long-listed companies.
+3. **Order:** companies are drawn **at random** within each sector, and the sectors take turns, so stopping early still leaves a balanced sample. Every run prints its random seed, and `--auto-seed N` replays exactly the same draw. Each learned company gets its own line on screen: ticker, sector, cap, listing year, and years of accounts and prices. Fetched companies are cached in `.cache/train_cache/` for `AUTO_CACHE_DAYS` (7), so re-runs are fast.
+4. **Retraining:** every `--auto-batch` companies (default 10), the ML models are retrained and the Hybrid is re-scored on your companies. The **meter** shows the Hybrid's average confidence, meaning its predicted chance of landing within ±20% of the real price.
+5. **Stopping:** it stops at the first of these:
+   - the confidence target is reached (`--auto-target`, default 60 = "High")
+   - *(optional, off by default)* `--auto-patience N` retrains in a row each gain less than 0.5 points
+   - `--auto-max` companies have been learned (default 100)
+   - the candidates run out
+   - you stop it
+
+**Controls.** In a Windows terminal, use these keys: **P** pause/resume, **S** skip the current company, **X** skip the current sector, **R** retrain now, **+ / −** change the target by 5, **Q** stop and finish with what has been learned (Ctrl+C does the same). The GUI has the same controls as buttons.
+
+**Outputs:**
+- `data/auto_training_universe.csv`: the companies learned, in `companies.csv` format. Reuse it with `--train-universe data/auto_training_universe.csv`.
+- `output/auto_train_log.csv`: confidence, real hit rate, labelled rows and ML directional accuracy after every retrain.
+
+The console shows three labelled steps: **1**, download *your* list (the companies being valued); **2**, learn from the live market; **3**, value your list with the trained models.
+
+**Expect it to run to the company limit rather than reach "High".** More training data sharpens the ML component, but it cannot remove the genuine year-ahead uncertainty in share prices. Screener.in is not used (see `build_training_universe.py` below). All data comes from NSE's published files and Yahoo Finance.
+
+### `tools/build_training_universe.py`
+
+```bash
+python tools/build_training_universe.py
+```
+
+```bash
+python run.py --train-universe data/training_universe.csv
+```
+
+This builds `data/training_universe.csv` in the `companies.csv` format, from NSE's official index constituent files on niftyindices.com:
+- **Universe:** NIFTY 500.
+- **Cap:** Large, Mid or Small from NIFTY 100 / Midcap 150 / Smallcap 250 membership, the same split AMFI uses.
+- **Sector names** are mapped onto those in `companies.csv`.
+- **Companies already in `companies.csv`** are removed, so nothing is counted twice.
+- **Financial Services** is left out unless you pass `--include-financials`.
+
+Other flags: `--max-per-sector N` for a quicker run, and `--from-dir` to use local copies of the four CSVs. Screener.in is deliberately not scraped (its `robots.txt` and terms disallow it). To use a Screener screen, export it from your own account.
+
+### `tools/screener.py` (optional)
+
+```bash
+python tools/screener.py --relax --per-bucket 2 --out data/companies.csv
+```
+
+This screens a candidate universe on fundamentals and writes the companies that pass, plus `output/screening_report.csv` (every candidate, every metric, every pass/fail reason).
+
+| Criterion | Default |
+|---|---|
+| ROCE floor (every year checked) | 18% over 4 years |
+| P/E ceiling | 20 |
+| Down from 52-week high | ≥ 25% |
+| Debt/equity | ≤ 1.0 |
+| Sales CAGR | ≥ 5% |
+| Complete FYs | 4 |
+| Market cap | ≥ ₹300 cr |
+
+`--relax` loosens the criteria step by step: it drops the near-lows test, raises the P/E ceiling to 30, lowers the ROCE floor to 15%, raises the P/E ceiling to 40, lowers ROCE to 12%, and finally drops the sales-growth test. Cap buckets: Large ≥ ₹50,000 cr, Mid ≥ ₹15,000 cr. Other flags: `--universe CSV`, `--no-cache`, `--report-only`.
+
+> ⚠️ **Selection bias.** If you screen on low P/E and price drawdown and then compare intrinsic value with market price, the result is circular: the study will mechanically report "undervalued". Keep screened names as a separate, labelled sub-sample.
+>
+> FII holding is **not** available from yfinance. The `fii_pct_unverified` column is Yahoo's generic institutional-holding field.
+>
+> The screener's docstring still mentions `main.py` and defaults `--out` to `companies.csv` in the current directory. Pass `--out data/companies.csv` to write to the place `run.py` reads from.
+
+---
+
+## 17. Configuration reference
+
+All settings live in [`src/config.py`](src/config.py). CLI flags and the GUI write to the same values at runtime.
+
+### Financial years and prices
+
+| Setting | Default | Notes |
+|---|---|---|
+| `FY_START` / `FY_END` | 2021 / 2025 | Change them with `set_fy_range()` |
+| `FY_MIN_ALLOWED` / `FY_MAX_SPAN` | 2000 / 30 | Guards on the window |
+| `FY_MEAN_BASIS` | `"trading"` | or `"calendar"` |
+| `MIN_TRADING_DAYS_FOR_FY` | 60 | Below this, the anchor price is unavailable |
+| `PARTIAL_YEAR_SESSIONS` | 200 | Below this, the year is flagged as partial |
+| `BENCHMARK_BASIS` | `"may1"` | or `"mean"`, `"close"` |
+| `BENCHMARK_MONTH/DAY` | 5 / 1 | Benchmark target date |
+| `BENCHMARK_MAX_OFFSET_DAYS` | 10 | Maximum gap to the nearest session |
+
+### Cost of capital and DCF
+
+| Setting | Default |
+|---|---|
+| `RISK_FREE_RATE` | 0.0705 (10-year G-Sec) |
+| `EQUITY_RISK_PREMIUM` | 0.0550 |
+| `DEFAULT_BETA` | 1.00 |
+| `COST_OF_DEBT` | 0.0850 |
+| `DEFAULT_TAX_RATE` | 0.2517 |
+| `PROJECTION_YEARS` | 5 |
+| `TERMINAL_GROWTH` | 0.05 |
+| `MIN_GROWTH` / `MAX_GROWTH` / `DEFAULT_GROWTH` | 0.02 / 0.18 / 0.08 |
+| `WACC_SPREAD_OVER_G` | 0.02 |
+
+### Relative valuation and Graham
+
+| Setting | Default |
+|---|---|
+| `PE_BOUNDS` | (2.0, 120.0) |
+| `EV_EBITDA_BOUNDS` | (1.0, 60.0) |
+| `MIN_PEERS_FOR_MEDIAN` | 2 |
+| `GRAHAM_MULTIPLIER` | 22.5 |
+| `GRAHAM_MAX_MULTIPLE_OF_BVPS` | 8.0 |
+
+### Models and ML
+
+| Setting | Default |
+|---|---|
+| `MODELS_ENABLED` | all 8 `True` |
+| `ML_ENABLED` | `True` (master switch for the ML stage) |
+| `ML_SPLIT` | `"hybrid"` |
+| `ML_MIN_TRAIN_ROWS` | 25 |
+| `ML_WINSOR_PCT` | (0.01, 0.99) |
+| `ML_RATIO_BOUNDS` | (0.25, 4.0) |
+| `ML_IMPUTE_FROM_SECTOR` | `True` |
+| `ML_MIN_FEATURES` | 4 |
+| `ML_RANDOM_STATE` | 42 |
+
+### Sufficiency, estimation and output
+
+| Setting | Default |
+|---|---|
+| `SUFFICIENCY_ENABLED` / `SUFFICIENCY_MODE` | `True` / `"enforce"` |
+| `MIN_COMPLETE_FY` / `MIN_BENCHMARK_FY` | 3 / 3 |
+| `SUFFICIENCY_KEEP_IN_PEERS` / `_IN_ML` | `True` / `True` |
+| `SUFFICIENCY_AUTO_RELAX` | `True` |
+| `ESTIMATION_MODE` | `"balanced"` (`"off"`, `"aggressive"`) |
+| `ESTIMATE_MARKER` | `"*"` |
+| `BACKCAST_MIN_RATIO` / `MAX_RATIO` | 0.33 / 3.0 |
+| `USE_NORMALISED_EARNINGS` / `NORMALISED_MIN_YEARS` | `True` / 2 |
+| `USE_OVERRIDES` | `True` |
+| `SHOW_REASONS` / `REASON_STYLE` | `True` / `"code"` |
+| `FY_LABEL_STYLE` | `"range"` |
+| `ANALYSIS_ENABLED` / `CHART_DPI` | `True` / 200 |
+| `PLAIN_SUMMARY` / `PLAIN_VERDICT_BAND` | `True` / 0.10 |
+| `EXCHANGE_SUFFIX` / `CURRENCY_SYMBOL` | `".NS"` / `"₹"` |
+| `REQUEST_PAUSE` | 0.6 s between network calls |
+
+GUI settings: `GUI_LIGHT_THEMES`, `GUI_DARK_THEMES`, `GUI_WINDOW_SIZE` (`1360x880`), `GUI_MIN_SIZE`, `GUI_START_IN_DARK`, `GUI_SCROLL_STEP`.
+
+---
+
+## 18. Testing offline
+
+```bash
+python run.py --offline
+```
+
+[`src/sources/mock_source.py`](src/sources/mock_source.py) builds a deterministic synthetic universe that follows whatever FY window you choose:
+
+| Fixture | Triggers |
+|---|---|
+| MOCK CLEAN ALPHA / BETA / GAMMA | Happy path: three peers, every model values |
+| MOCK DEPTH GAP | `NO DATA FOR THIS FY` in the early years |
+| MOCK LOSS MAKER | `NOT MEANINGFUL` / normalisation paths |
+| MOCK NO PRICE SOLO | `PRICE UNAVAILABLE` + `NO PEER BENCHMARK` |
+| MOCK HEAVY DEBT (+ MOCK INFRA PEER) | `NEGATIVE EQUITY VALUE` |
+| MOCK BANK STYLE | `FIELD MISSING` (no EBIT/EBITDA) |
+| MOCK ZERO SHARES | `NOT MEANINGFUL` on zero shares |
+| MOCK GHOST CORP | `TICKER NOT RESOLVED` |
+| MOCK CRASH CORP | `FETCH FAILED` |
+
+The mock benchmark date is 2 May, which exercises the "nearest session" path. A run passes when every expected code appears in the tally and the three clean companies produce numbers in all models.
+
+---
+
+## 19. Known limitations
+
+1. **Source depth is the binding constraint.** yfinance serves only about 4 annual periods, so the earliest FY in a 5-year window is usually empty. The fix is `fundamentals_override.csv`.
+2. **Recent IPOs** have no price before listing and only a partial first year. This thins the peer medians.
+3. **Screener selection bias.** See §16.
+4. **WACC is partly circular.** The equity weight uses the market price. This is standard practice, but worth stating.
+5. **Beta quality.** Yahoo's beta is often measured against a non-Indian index, or is missing. Since beta drives the DCF, this matters.
+6. **Terminal value dominates the DCF.** At 5% terminal growth and a 5-year horizon, TV is typically 70–85% of EV.
+7. **Consolidated vs standalone** statements are not guaranteed to be consistent across companies.
+8. **Publication lag is not modelled.** FY*t* accounts are used as if they were known on 31 March. The 1-May benchmark partly mitigates this.
+9. **Banks and financial companies** fall outside DCF and EV/EBITDA by construction.
+10. **The ML sample is small.** A few hundred company-years means fold results are noisy. `hybrid` and `loyo` folds use future years and are marked accordingly.
+11. **Report cells are strings** (`₹1,234.56*`). Use `Intrinsic_Value_Data.csv` for any numerical work.
+
+---
+
+## 20. Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| Every company is `TICKER NOT RESOLVED` | No network, or Yahoo search is blocked. Add a `ticker` column. |
+| Every company shows `prices 0/5 fundamentals 0/5`; the log says `CERTIFICATE_VERIFY_FAILED` / `unable to get local issuer certificate` | An antivirus (e.g. Norton Web/Mail Shield) or a proxy is re-signing HTTPS traffic. `src/ssl_trust.py` makes Python trust the Windows certificate store and runs automatically (`USE_SYSTEM_CERTS = True`). |
+| The earliest FY is always `NO DATA FOR THIS FY` | Expected (source depth). Use the override sheet. |
+| `[gate] AUTO-ADJUSTED` | No company met `MIN_COMPLETE_FY`. Report the threshold actually used. |
+| A whole sector shows `NO PEER BENCHMARK` | Fewer than 2 valid peers. Add companies to that sector. |
+| ML cells show `INSUFFICIENT TRAINING DATA` | Too few labelled rows per fold. Use `--train-universe` with a larger list. |
+| `LIBRARY NOT INSTALLED` | `pip install xgboost lightgbm scikit-learn` |
+| `GUI unavailable: ...` | `pip install ttkbootstrap`. If `tkinter` itself is missing, repair Python with "tcl/tk and IDLE" ticked. |
+| GUI charts are not scaled | Install `Pillow` (optional) |
+| The NSE fallback never returns anything | NSE blocks VPN and datacentre IPs. Run from a home connection. |
+| Yahoo rate-limit errors | Raise `REQUEST_PAUSE` to 1.5–2.0 |
+| ₹ shows as `â‚¹` in Excel | Open the `.xlsx`, or import the CSV as UTF-8 |
+| A CSV row shifts its columns | An unquoted comma in the company name. Quote the field. |
+| CLI flags seem to have no effect | Something imported `src.config` rather than `config`. Keep the imports flat (§3). |
+| Analyzer failed but the CSVs exist | Fix the cause, then `python tools/analyze.py` |
+
+For any crash, the full traceback is in `output/run_log.txt`.
+
+---
+
+## 21. Extending the system
+
+### Add a traditional model
+
+1. Create `src/models/model_<name>.py` with `intrinsic_value(...) -> Result`. Return `Result.good(v, method=...)` or `Result.bad(code, detail)` on every path.
+2. Add a `ModelSpec` to `ALL_MODELS` in [`model_registry.py`](src/model_registry.py). This sets the key, name, column, difference column, kind and description.
+3. Add `"<key>": True` to `config.MODELS_ENABLED`.
+4. Add the call in the valuation loop in [`pipeline.py`](src/pipeline.py) (`if "<key>" in enabled: row["<key>"] = guard(...)`).
+
+The exporter, analyzer and GUI read the registry, so they pick up the new model automatically.
+
+### Add a machine-learning model
+
+1. Create `src/models/model_<name>.py` exposing `KEY`, `NAME`, `COLUMN`, `build_estimator()`, `SPEC = {"key", "name", "build"}` and `intrinsic_value(store, company, fy)`.
+2. Register it in `model_registry.ALL_MODELS` with `kind="ml"`, and in `pipeline.ML_MODULES`.
+
+### Add a data source
+
+Implement `fetch_close_series(ticker, start, end)` and/or field getters, and slot the source into the fallback chain in `yf_source.fetch_company`. Record its provenance in `_notes`.
+
+---
+
+## 22. Glossary
+
+- **Anchor price:** the in-FY mean price, used as a model input.
+- **Benchmark price:** the close nearest 1 May after FY end, used only to score models.
+- **Beta (β):** how sensitive a stock is to market moves.
+- **CAPM:** Ke = Rf + β × ERP.
+- **EBITDA:** earnings before interest, tax, depreciation and amortisation.
+- **EV (enterprise value):** market cap + debt − cash.
+- **FCFF:** free cash flow to the firm, available to both debt and equity holders.
+- **Graham Number:** √(22.5 × EPS × BVPS), Benjamin Graham's defensive price ceiling.
+- **LOYO:** leave-one-year-out cross-validation.
+- **MAPE / MedAPE:** mean / median absolute percentage error.
+- **Net debt:** total debt − cash.
+- **ROCE:** EBIT ÷ (total assets − current liabilities).
+- **Spearman ρ:** rank correlation.
+- **Terminal value:** the value of all cash flows after the forecast horizon (Gordon growth model).
+- **WACC:** weighted average cost of capital, the DCF discount rate.
+- **Winsorisation:** clamping extreme values to a percentile band.

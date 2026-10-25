@@ -159,6 +159,61 @@ GRAHAM_MULTIPLIER = 22.5
 # presented as though it were ordinary. Set to 0 to switch the note off.
 GRAHAM_MAX_MULTIPLE_OF_BVPS = 8.0
 
+# ---------------- Adjusted beta (Residual Income + Hybrid) ----------------
+# beta_adj = w x company beta + (1 - w) x sector median beta. With the sector
+# at 1.0 this is the Blume adjustment. The original DCF keeps the raw beta so
+# the baseline comparison is unchanged. See src/models/capital.py.
+BETA_SHRINK_WEIGHT = 0.67
+BETA_MIN_SECTOR_PEERS = 2
+
+# ---------------- Residual Income ----------------
+# Persistence of abnormal earnings in Ohlson's linear-information model.
+# 0.62 is the pooled estimate of Dechow, Hutton & Sloan (1999); 0 means excess
+# returns vanish after a year, 1 means they last forever.
+RI_PERSISTENCE = 0.62
+RI_ROE_LOOKBACK = 3  # years of ROE in the normalised median (point-in-time)
+RI_ROE_BOUNDS = (-0.50, 0.60)
+
+# ---------------- Hybrid ----------------
+# See src/models/model_hybrid.py for the full method.
+HYBRID_FADE_YEARS = 5  # DCF+ growth fades to terminal over these years
+HYBRID_TERMINAL_GROWTH = None  # None -> TERMINAL_GROWTH
+HYBRID_RONIC_PREMIUM = 0.02  # return on new invested capital = WACC + this
+
+HYBRID_REG_MIN_OBS = 8  # regression multiples need this many points
+HYBRID_RIDGE_LAMBDA = 1.0
+HYBRID_REG_BLEND = 0.5  # share of the regression in the final multiple
+
+HYBRID_MIN_ERR_OBS = 4  # error history needed before skill counts
+# Remove each component's typical prior-year miss (median signed log error in
+# the sector, shrunk by evidence) before blending. Point-in-time. Turn off to
+# see the raw ensemble; state in the methodology which was used.
+HYBRID_BIAS_CORRECT = True
+HYBRID_SHRINK_K = 10  # evidence needed to move halfway off equal weight
+HYBRID_ESTIMATE_PENALTY = 0.75  # weight multiplier for estimated components
+HYBRID_OUTLIER_RATIO = 3.0  # drop components > 3x away from the centre
+
+HYBRID_DEFAULT_SIGMA = 0.35  # log-error scale when a component has no history
+HYBRID_ERROR_CORR = 0.5  # assumed correlation of component errors
+HYBRID_MC_DRAWS = 2000
+HYBRID_BAND = (10, 90)  # percentiles reported as the value range
+# Confidence = predicted chance the market price lands within this tolerance
+# of the hybrid value. 60 = "better than 60% chance of being within 20%".
+HYBRID_CONF_TOLERANCE = 0.20
+HYBRID_CONF_HIGH = 60
+HYBRID_CONF_MEDIUM = 35
+
+# Which component applies to which kind of company-year. 0 removes it.
+# Graham sits at half weight everywhere: it is a ceiling for a defensive
+# buyer, not a central estimate, and the learned weights can raise it if it
+# turns out to price a sector well.
+HYBRID_REGIME_WEIGHTS = {
+    "mature": {"dcf_plus": 1.0, "ri": 1.0, "pe_reg": 1.0, "ev_reg": 1.0, "graham": 0.5, "ml": 0.75},
+    "lender": {"dcf_plus": 0.0, "ri": 1.5, "pe_reg": 1.0, "ev_reg": 0.0, "graham": 0.75, "ml": 0.75},
+    "loss_maker": {"dcf_plus": 0.75, "ri": 1.25, "pe_reg": 0.5, "ev_reg": 0.75, "graham": 0.25, "ml": 0.75},
+    "young": {"dcf_plus": 0.5, "ri": 1.0, "pe_reg": 1.25, "ev_reg": 1.25, "graham": 0.5, "ml": 0.5},
+}
+
 # ---------------- Which models run ----------------
 # Every model on by default. The Settings page writes this dictionary, and
 # model_registry.py is what the rest of the program asks - so unticking a
@@ -172,10 +227,12 @@ MODELS_ENABLED = {
     "pe": True,
     "ev": True,
     "graham": True,
+    "ri": True,
     "xgboost": True,
     "random_forest": True,
     "lightgbm": True,
     "mlp": True,
+    "hybrid": True,
 }
 
 # ---------------- Market / IO ----------------
@@ -183,6 +240,12 @@ EXCHANGE_SUFFIX = ".NS"
 CURRENCY_SYMBOL = "₹"
 REQUEST_PAUSE = 0.6
 OFFLINE = False
+
+# On Windows, let Python trust the certificates Windows trusts. Needed when an
+# antivirus (Norton, Kaspersky, Avast...) or a proxy scans HTTPS traffic -
+# otherwise every download fails with CERTIFICATE_VERIFY_FAILED. Verification
+# stays on. See src/ssl_trust.py.
+USE_SYSTEM_CERTS = True
 
 # ---------------- Overrides ----------------
 USE_OVERRIDES = True
@@ -327,6 +390,29 @@ ML_RANDOM_STATE = 42
 ML_RATIO_BOUNDS = (0.25, 4.0)
 ML_IMPUTE_FROM_SECTOR = True
 ML_MIN_FEATURES = 4
+
+# ---------------- Auto-train (python run.py --train-universe auto) ----------------
+# Fetches training companies one by one from public NSE lists + Yahoo Finance,
+# retrains the ML models every AUTO_BATCH companies, re-scores the Hybrid, and
+# stops at the FIRST of: confidence target reached, learning plateaued,
+# AUTO_MAX_COMPANIES learned, candidates exhausted, or the user says stop.
+# See src/auto_train.py.
+AUTO_TARGET = None  # None -> HYBRID_CONF_HIGH ("High")
+AUTO_MAX_COMPANIES = 100
+AUTO_SECTORS = 10  # how many of the best-ranked sectors to draw from
+AUTO_MIN_LISTED_YEARS = 10  # NSE listing date at least this long ago
+AUTO_BATCH = 10  # retrain + re-score after this many new companies
+# Optional early stop: this many retrains in a row each gaining < AUTO_MIN_GAIN.
+# 0 = off, so a run goes on to AUTO_MAX_COMPANIES unless the target is hit.
+AUTO_PATIENCE = 0
+AUTO_MIN_GAIN = 0.5  # confidence points
+# "performance": median price return over AUTO_RANK_YEARS ending at the START
+#                of the valuation window - point-in-time, no hindsight
+# "breadth":     sectors with the most long-listed companies
+AUTO_SECTOR_RANK = "performance"
+AUTO_RANK_YEARS = 5
+AUTO_INCLUDE_FINANCIALS = False
+AUTO_CACHE_DAYS = 7  # reuse a fetched training company for this long
 
 # ---------------- GUI ----------------
 # Base ttkbootstrap theme, tried in order - the first one this installation
