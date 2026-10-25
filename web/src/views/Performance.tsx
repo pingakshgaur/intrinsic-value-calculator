@@ -66,7 +66,7 @@ function Board() {
               <Panel title="Median error by financial year">
                 <ResponsiveContainer width="100%" height={280}>
                   <LineChart data={byYear} margin={{ top: 6, right: 14, bottom: 0, left: 0 }}>
-                    <CartesianGrid strokeDasharray="2 4" /><XAxis dataKey="fy" tickLine={false} axisLine={{ stroke: "#2a2b2c" }} /><YAxis unit="%" tickLine={false} axisLine={false} width={44} />
+                    <CartesianGrid strokeDasharray="2 4" /><XAxis dataKey="fy" tickLine={false} axisLine={{ stroke: "var(--line)" }} /><YAxis unit="%" tickLine={false} axisLine={false} width={44} />
                     <Tooltip content={<Tip fmt={(x) => pctUnits(x)} title={(l) => `FY ${l}`} />} /><Legend iconType="plainline" />
                     {models.map((mm) => <Line key={mm} dataKey={mm} stroke={color(mm, models)} strokeWidth={mm === "HYBRID MODEL" ? 3 : 1.3} strokeOpacity={mm === "HYBRID MODEL" ? 1 : 0.75} dot={false} connectNulls />)}
                   </LineChart>
@@ -75,8 +75,8 @@ function Board() {
               <Panel title="Win rate" meta="closest to the price">
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={wins} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
-                    <XAxis type="number" unit="%" tickLine={false} axisLine={{ stroke: "#2a2b2c" }} /><YAxis type="category" dataKey="model" width={130} tickLine={false} axisLine={false} tick={{ fill: "#c4c5c6", fontSize: 11 }} />
-                    <Tooltip content={<Tip fmt={(x) => pctUnits(x)} />} cursor={{ fill: "#ffffff06" }} />
+                    <XAxis type="number" unit="%" tickLine={false} axisLine={{ stroke: "var(--line)" }} /><YAxis type="category" dataKey="model" width={130} tickLine={false} axisLine={false} tick={{ fill: "var(--fg)", fontSize: 11 }} />
+                    <Tooltip content={<Tip fmt={(x) => pctUnits(x)} />} cursor={{ fill: "var(--hover)" }} />
                     <Bar dataKey="win" name="Win rate" fill="#57A3F8" radius={[0, 3, 3, 0]} barSize={11} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -140,7 +140,7 @@ function Explore({ d }: { d: Valuation }) {
         </div>
         <ResponsiveContainer width="100%" height={340}>
           <LineChart data={data} margin={{ top: 6, right: 16, bottom: 0, left: 4 }}>
-            <CartesianGrid strokeDasharray="2 4" /><XAxis dataKey="fy" tickLine={false} axisLine={{ stroke: "#2a2b2c" }} />
+            <CartesianGrid strokeDasharray="2 4" /><XAxis dataKey="fy" tickLine={false} axisLine={{ stroke: "var(--line)" }} />
             <YAxis scale={log ? "log" : "auto"} domain={log ? ["auto", "auto"] : [0, "auto"]} allowDataOverflow tickLine={false} axisLine={false} width={72} tickFormatter={(x) => money(x, 0)} />
             <Tooltip content={<Tip fmt={(x) => money(x)} title={(l) => `FY ${l}`} />} />
             <Line type="monotone" dataKey="price" name="1-May price" stroke="#E0B97F" strokeWidth={3} dot={{ r: 3 }} connectNulls />
@@ -189,7 +189,7 @@ function HybridDetail({ d }: { d: Valuation }) {
               {!rows.length ? <Empty icon="beaker" title="No HYBRID MODEL detail" /> : (
                 <ResponsiveContainer width="100%" height={320}>
                   <ComposedChart data={data} margin={{ top: 6, right: 16, bottom: 0, left: 4 }}>
-                    <CartesianGrid strokeDasharray="2 4" /><XAxis dataKey="fy" tickLine={false} axisLine={{ stroke: "#2a2b2c" }} /><YAxis tickLine={false} axisLine={false} width={72} tickFormatter={(x) => money(x, 0)} />
+                    <CartesianGrid strokeDasharray="2 4" /><XAxis dataKey="fy" tickLine={false} axisLine={{ stroke: "var(--line)" }} /><YAxis tickLine={false} axisLine={false} width={72} tickFormatter={(x) => money(x, 0)} />
                     <Tooltip content={<Tip fmt={(x) => (Array.isArray(x) ? `${money(x[0], 0)} – ${money(x[1], 0)}` : money(x))} title={(l) => `FY ${l}`} />} /><Legend iconType="plainline" />
                     <Area type="monotone" dataKey="band" name="P10–P90" stroke="none" fill={HM_COLOR} fillOpacity={0.18} connectNulls />
                     <Line type="monotone" dataKey="value" name="HYBRID MODEL" stroke={HM_COLOR} strokeWidth={3} dot={{ r: 3 }} connectNulls />
@@ -203,8 +203,8 @@ function HybridDetail({ d }: { d: Valuation }) {
                 <Panel title="Lens weights by year" meta="type weights × calibrated skill">
                   <ResponsiveContainer width="100%" height={250}>
                     <BarChart data={weights} margin={{ top: 4, right: 10, bottom: 0, left: 0 }}>
-                      <CartesianGrid strokeDasharray="2 4" vertical={false} /><XAxis dataKey="fy" tickLine={false} axisLine={{ stroke: "#2a2b2c" }} /><YAxis tickFormatter={(x) => pct(x, 0)} tickLine={false} axisLine={false} width={40} domain={[0, 1]} />
-                      <Tooltip content={<Tip fmt={(x) => pct(x, 0)} />} cursor={{ fill: "#ffffff06" }} /><Legend />
+                      <CartesianGrid strokeDasharray="2 4" vertical={false} /><XAxis dataKey="fy" tickLine={false} axisLine={{ stroke: "var(--line)" }} /><YAxis tickFormatter={(x) => pct(x, 0)} tickLine={false} axisLine={false} width={40} domain={[0, 1]} />
+                      <Tooltip content={<Tip fmt={(x) => pct(x, 0)} />} cursor={{ fill: "var(--hover)" }} /><Legend />
                       {LENSES.map((l) => <Bar key={l} dataKey={LENS_NAME[l]} stackId="w" fill={LENS_COLOR[l]} fillOpacity={0.9} />)}
                     </BarChart>
                   </ResponsiveContainer>
@@ -242,7 +242,7 @@ function EnsembleDetail({ d }: { d: Valuation }) {
             {!rows.length ? <Empty icon="layers" title="No Ensemble detail" /> : (
               <ResponsiveContainer width="100%" height={320}>
                 <ComposedChart data={data} margin={{ top: 6, right: 16, bottom: 0, left: 4 }}>
-                  <CartesianGrid strokeDasharray="2 4" /><XAxis dataKey="fy" tickLine={false} axisLine={{ stroke: "#2a2b2c" }} /><YAxis tickLine={false} axisLine={false} width={72} tickFormatter={(x) => money(x, 0)} />
+                  <CartesianGrid strokeDasharray="2 4" /><XAxis dataKey="fy" tickLine={false} axisLine={{ stroke: "var(--line)" }} /><YAxis tickLine={false} axisLine={false} width={72} tickFormatter={(x) => money(x, 0)} />
                   <Tooltip content={<Tip fmt={(x) => (Array.isArray(x) ? `${money(x[0], 0)} – ${money(x[1], 0)}` : money(x))} />} /><Legend iconType="plainline" />
                   <Area type="monotone" dataKey="band" name="P10–P90" stroke="none" fill="#C586C0" fillOpacity={0.16} connectNulls />
                   <Line type="monotone" dataKey="v" name="Ensemble" stroke="#C586C0" strokeWidth={2.5} dot={{ r: 3 }} connectNulls />

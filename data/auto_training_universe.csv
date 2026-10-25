@@ -1,101 +1,93 @@
 company name,sector name,market cap,ticker
-TTK Prestige Ltd.,Consumer Durables,Small,TTKPRESTIG.NS
-Rallis India Ltd.,Chemicals,Small,RALLIS.NS
-E.I.D. Parry (India) Ltd.,Fast Moving Consumer Goods,Small,EIDPARRY.NS
-Trent Ltd.,Consumer Services,Large,TRENT.NS
-Ambuja Cements Ltd.,Construction Materials,Large,AMBUJACEM.NS
-Chennai Petroleum Corporation Ltd.,Oil Gas & Consumable Fuels,Small,CHENNPETRO.NS
-Datamatics Global Services Ltd.,Information Technology,Small,DATAMATICS.NS
-Network18 Media & Investments Ltd.,Media Entertainment & Publication,Small,NETWORK18.NS
-Suven Life Sciences Ltd.,Healthcare and Medical Devices,Small,SUVEN.NS
-SPR Auto Technologies Ltd.,Automobiles and Auto Components,Small,SHRIPISTON.NS
-Kansai Nerolac Paints Ltd.,Consumer Durables,Small,KANSAINER.NS
-Gujarat State Fertilizers & Chemicals Ltd.,Chemicals,Small,GSFC.NS
-Colgate Palmolive (India) Ltd.,Fast Moving Consumer Goods,Mid,COLPAL.NS
-V2 Retail Ltd.,Consumer Services,Small,V2RETAIL.NS
-The Ramco Cements Ltd.,Construction Materials,Small,RAMCOCEM.NS
-Hindustan Petroleum Corporation Ltd.,Oil Gas & Consumable Fuels,Mid,HINDPETRO.NS
-Tata Elxsi Ltd.,Information Technology,Small,TATAELXSI.NS
-Zee Entertainment Enterprises Ltd.,Media Entertainment & Publication,Small,ZEEL.NS
-Glenmark Pharmaceuticals Ltd.,Healthcare and Medical Devices,Mid,GLENMARK.NS
-Ceat Ltd.,Automobiles and Auto Components,Small,CEATLTD.NS
-IFB Industries Ltd.,Consumer Durables,Small,IFBIND.NS
-Atul Ltd.,Chemicals,Small,ATUL.NS
-Heritage Foods Ltd.,Fast Moving Consumer Goods,Small,HERITGFOOD.NS
-BLS International Services Ltd.,Consumer Services,Small,BLS.NS
-UltraTech Cement Ltd.,Construction Materials,Large,ULTRACEMCO.NS
-Reliance Industries Ltd.,Oil Gas & Consumable Fuels,Large,RELIANCE.NS
-L&T Technology Services Ltd.,Information Technology,Mid,LTTS.NS
-Sun TV Network Ltd.,Media Entertainment & Publication,Small,SUNTV.NS
-Ajanta Pharmaceuticals Ltd.,Healthcare and Medical Devices,Mid,AJANTPHARM.NS
-MRF Ltd.,Automobiles and Auto Components,Mid,MRF.NS
-Goldiam International Ltd.,Consumer Durables,Small,GOLDIAM.NS
-Navin Fluorine International Ltd.,Chemicals,Small,NAVINFLUOR.NS
-Tilaknagar Industries Ltd.,Fast Moving Consumer Goods,Small,TI.NS
-V-Mart Retail Ltd.,Consumer Services,Small,VMART.NS
-ACC Ltd.,Construction Materials,Small,ACC.NS
-Indraprastha Gas Ltd.,Oil Gas & Consumable Fuels,Small,IGL.NS
-Birlasoft Ltd.,Information Technology,Small,BSOFT.NS
-Tips Music Ltd.,Media Entertainment & Publication,Small,TIPSMUSIC.NS
-Thyrocare Technologies Ltd.,Healthcare and Medical Devices,Small,THYROCARE.NS
-Jamna Auto Industries Ltd.,Automobiles and Auto Components,Small,JAMNAAUTO.NS
-V.I.P. Industries Ltd.,Consumer Durables,Small,VIPIND.NS
-Rain Industries Ltd,Chemicals,Small,RAIN.NS
-Tata Consumer Products Ltd.,Fast Moving Consumer Goods,Large,TATACONSUM.NS
-EIH Ltd.,Consumer Services,Small,EIHOTEL.NS
-Grasim Industries Ltd.,Construction Materials,Large,GRASIM.NS
-Coal India Ltd.,Oil Gas & Consumable Fuels,Large,COALINDIA.NS
-Intellect Design Arena Ltd.,Information Technology,Small,INTELLECT.NS
-PVR INOX Ltd.,Media Entertainment & Publication,Small,PVRINOX.NS
 NATCO Pharma Ltd.,Healthcare and Medical Devices,Small,NATCOPHARM.NS
-Bosch Ltd.,Automobiles and Auto Components,Large,BOSCHLTD.NS
-V-Guard Industries Ltd.,Consumer Durables,Small,VGUARD.NS
-Deepak Fertilisers & Petrochemicals Corp. Ltd.,Chemicals,Small,DEEPAKFERT.NS
 Godrej Consumer Products Ltd.,Fast Moving Consumer Goods,Large,GODREJCP.NS
-Aditya Birla Fashion and Retail Ltd.,Consumer Services,Small,ABFRL.NS
-Shree Cement Ltd.,Construction Materials,Mid,SHREECEM.NS
-Bharat Petroleum Corporation Ltd.,Oil Gas & Consumable Fuels,Large,BPCL.NS
-Coforge Ltd.,Information Technology,Mid,COFORGE.NS
-Saregama India Ltd,Media Entertainment & Publication,Small,SAREGAMA.NS
-Divi's Laboratories Ltd.,Healthcare and Medical Devices,Large,DIVISLAB.NS
-Tata Motors Passenger Vehicles Ltd.,Automobiles and Auto Components,Large,TMPV.NS
-Titan Company Ltd.,Consumer Durables,Large,TITAN.NS
-PCBL Chemical Ltd.,Chemicals,Small,PCBL.NS
-Jyothy Labs Ltd.,Fast Moving Consumer Goods,Small,JYOTHYLAB.NS
-Thomas Cook (India) Ltd.,Consumer Services,Small,THOMASCOOK.NS
-J.K. Cement Ltd.,Construction Materials,Mid,JKCEMENT.NS
-Oil & Natural Gas Corporation Ltd.,Oil Gas & Consumable Fuels,Large,ONGC.NS
-Tanla Platforms Ltd.,Information Technology,Small,TANLA.NS
-Prime Focus Ltd.,Media Entertainment & Publication,Small,PFOCUS.NS
-Neuland Laboratories Ltd.,Healthcare and Medical Devices,Small,NEULANDLAB.NS
-Eicher Motors Ltd.,Automobiles and Auto Components,Large,EICHERMOT.NS
-Crompton Greaves Consumer Electricals Ltd.,Consumer Durables,Small,CROMPTON.NS
-Sudarshan Chemical Industries Ltd.,Chemicals,Small,SUDARSCHEM.NS
-Avanti Feeds Ltd.,Fast Moving Consumer Goods,Small,AVANTIFEED.NS
-Jubilant Foodworks Ltd.,Consumer Services,Mid,JUBLFOOD.NS
-India Cements Ltd.,Construction Materials,Small,INDIACEM.NS
-Petronet LNG Ltd.,Oil Gas & Consumable Fuels,Mid,PETRONET.NS
-Aurionpro Solution Ltd.,Information Technology,Small,AURIONPRO.NS
-Shilpa Medicare Ltd.,Healthcare and Medical Devices,Small,SHILPAMED.NS
-Lumax Industries Ltd.,Automobiles and Auto Components,Small,LUMAXIND.NS
-Bata India Ltd.,Consumer Durables,Small,BATAINDIA.NS
-Aarti Industries Ltd.,Chemicals,Small,AARTIIND.NS
-Emami Ltd.,Fast Moving Consumer Goods,Small,EMAMILTD.NS
-Justdial Ltd.,Consumer Services,Small,JUSTDIAL.NS
-Birla Corporation Ltd.,Construction Materials,Small,BIRLACORPN.NS
-Castrol India Ltd.,Oil Gas & Consumable Fuels,Small,CASTROLIND.NS
-MphasiS Ltd.,Information Technology,Mid,MPHASIS.NS
-Healthcare Global Enterprises Ltd.,Healthcare and Medical Devices,Small,HCG.NS
-Minda Corporation Ltd.,Automobiles and Auto Components,Small,MINDACORP.NS
-Blue Star Ltd.,Consumer Durables,Mid,BLUESTARCO.NS
+Hindustan Petroleum Corporation Ltd.,Oil Gas & Consumable Fuels,Mid,HINDPETRO.NS
+Apollo Tyres Ltd.,Automobiles and Auto Components,Small,APOLLOTYRE.NS
 UPL Ltd.,Chemicals,Mid,UPL.NS
+Sun Pharmaceutical Industries Ltd.,Healthcare and Medical Devices,Large,SUNPHARMA.NS
+Balrampur Chini Mills Ltd.,Fast Moving Consumer Goods,Small,BALRAMCHIN.NS
+Oil & Natural Gas Corporation Ltd.,Oil Gas & Consumable Fuels,Large,ONGC.NS
+JBM Auto Ltd.,Automobiles and Auto Components,Small,JBMA.NS
+Gujarat State Fertilizers & Chemicals Ltd.,Chemicals,Small,GSFC.NS
+Lupin Ltd.,Healthcare and Medical Devices,Mid,LUPIN.NS
+CCL Products (I) Ltd.,Fast Moving Consumer Goods,Small,CCL.NS
+Bharat Petroleum Corporation Ltd.,Oil Gas & Consumable Fuels,Large,BPCL.NS
+Maruti Suzuki India Ltd.,Automobiles and Auto Components,Large,MARUTI.NS
+PCBL Chemical Ltd.,Chemicals,Small,PCBL.NS
+Dr. Reddy's Laboratories Ltd.,Healthcare and Medical Devices,Large,DRREDDY.NS
+United Spirits Ltd.,Fast Moving Consumer Goods,Mid,UNITDSPR.NS
+Petronet LNG Ltd.,Oil Gas & Consumable Fuels,Mid,PETRONET.NS
+TVS Motor Company Ltd.,Automobiles and Auto Components,Large,TVSMOTOR.NS
+Fertilisers and Chemicals Travancore Ltd.,Chemicals,Mid,FACT.NS
+Biocon Ltd.,Healthcare and Medical Devices,Mid,BIOCON.NS
+E.I.D. Parry (India) Ltd.,Fast Moving Consumer Goods,Small,EIDPARRY.NS
+Aegis Logistics Ltd.,Oil Gas & Consumable Fuels,Small,AEGISLOG.NS
+Bharat Forge Ltd.,Automobiles and Auto Components,Mid,BHARATFORG.NS
+Gujarat Alkalies & Chemicals Ltd.,Chemicals,Small,GUJALKALI.NS
+Jubilant Pharmova Ltd.,Healthcare and Medical Devices,Small,JUBLPHARMA.NS
+Tata Consumer Products Ltd.,Fast Moving Consumer Goods,Large,TATACONSUM.NS
+Chennai Petroleum Corporation Ltd.,Oil Gas & Consumable Fuels,Small,CHENNPETRO.NS
+Sundram Fasteners Ltd.,Automobiles and Auto Components,Small,SUNDRMFAST.NS
+Deepak Fertilisers & Petrochemicals Corp. Ltd.,Chemicals,Small,DEEPAKFERT.NS
+Ipca Laboratories Ltd.,Healthcare and Medical Devices,Mid,IPCALAB.NS
+Gillette India Ltd.,Fast Moving Consumer Goods,Small,GILLETTE.NS
+Mangalore Refinery & Petrochemicals Ltd.,Oil Gas & Consumable Fuels,Small,MRPL.NS
+Exide Industries Ltd.,Automobiles and Auto Components,Mid,EXIDEIND.NS
+Sudarshan Chemical Industries Ltd.,Chemicals,Small,SUDARSCHEM.NS
+Marksans Pharma Ltd.,Healthcare and Medical Devices,Small,MARKSANS.NS
 Britannia Industries Ltd.,Fast Moving Consumer Goods,Large,BRITANNIA.NS
-Info Edge (India) Ltd.,Consumer Services,Mid,NAUKRI.NS
-Oil India Ltd.,Oil Gas & Consumable Fuels,Mid,OIL.NS
-Black Box Ltd.,Information Technology,Small,BBOX.NS
-Alkem Laboratories Ltd.,Healthcare and Medical Devices,Mid,ALKEM.NS
-Balkrishna Industries Ltd.,Automobiles and Auto Components,Mid,BALKRISIND.NS
-Whirlpool of India Ltd.,Consumer Durables,Small,WHIRLPOOL.NS
-SRF Ltd.,Chemicals,Mid,SRF.NS
+GAIL (India) Ltd.,Oil Gas & Consumable Fuels,Large,GAIL.NS
+Tata Motors Passenger Vehicles Ltd.,Automobiles and Auto Components,Large,TMPV.NS
+Linde India Ltd.,Chemicals,Mid,LINDEINDIA.NS
+Torrent Pharmaceuticals Ltd.,Healthcare and Medical Devices,Large,TORNTPHARM.NS
+Emami Ltd.,Fast Moving Consumer Goods,Small,EMAMILTD.NS
+Indraprastha Gas Ltd.,Oil Gas & Consumable Fuels,Small,IGL.NS
+Olectra Greentech Ltd.,Automobiles and Auto Components,Small,OLECTRA.NS
+Rashtriya Chemicals & Fertilizers Ltd.,Chemicals,Small,RCF.NS
+Ajanta Pharmaceuticals Ltd.,Healthcare and Medical Devices,Mid,AJANTPHARM.NS
+Gujarat Ambuja Exports Ltd.,Fast Moving Consumer Goods,Small,GAEL.NS
+Reliance Industries Ltd.,Oil Gas & Consumable Fuels,Large,RELIANCE.NS
+Eicher Motors Ltd.,Automobiles and Auto Components,Large,EICHERMOT.NS
+Rallis India Ltd.,Chemicals,Small,RALLIS.NS
+Zydus Lifesciences Ltd.,Healthcare and Medical Devices,Large,ZYDUSLIFE.NS
+Radico Khaitan Ltd,Fast Moving Consumer Goods,Mid,RADICO.NS
+Indian Oil Corporation Ltd.,Oil Gas & Consumable Fuels,Large,IOC.NS
+Fiem Industries Ltd,Automobiles and Auto Components,Small,FIEMIND.NS
+Gujarat Narmada Valley Fertilizers and Chemicals Ltd.,Chemicals,Small,GNFC.NS
+Suven Life Sciences Ltd.,Healthcare and Medical Devices,Small,SUVEN.NS
+Heritage Foods Ltd.,Fast Moving Consumer Goods,Small,HERITGFOOD.NS
+Samvardhana Motherson International Ltd.,Automobiles and Auto Components,Large,MOTHERSON.NS
+Tata Chemicals Ltd.,Chemicals,Small,TATACHEM.NS
+Granules India Ltd.,Healthcare and Medical Devices,Small,GRANULES.NS
 India Glycols Ltd.,Fast Moving Consumer Goods,Small,INDIAGLYCO.NS
-Indian Hotels Co. Ltd.,Consumer Services,Mid,INDHOTEL.NS
+Ramkrishna Forgings Ltd.,Automobiles and Auto Components,Small,RKFORGE.NS
+SRF Ltd.,Chemicals,Mid,SRF.NS
+Divi's Laboratories Ltd.,Healthcare and Medical Devices,Large,DIVISLAB.NS
+Shree Renuka Sugars Ltd.,Fast Moving Consumer Goods,Small,RENUKA.NS
+Gabriel India Ltd.,Automobiles and Auto Components,Small,GABRIEL.NS
+Aarti Industries Ltd.,Chemicals,Small,AARTIIND.NS
+Strides Pharma Science Ltd.,Healthcare and Medical Devices,Small,STAR.NS
+Marico Ltd.,Fast Moving Consumer Goods,Mid,MARICO.NS
+Bosch Ltd.,Automobiles and Auto Components,Large,BOSCHLTD.NS
+Chambal Fertilizers & Chemicals Ltd.,Chemicals,Small,CHAMBLFERT.NS
+Cipla Ltd.,Healthcare and Medical Devices,Large,CIPLA.NS
+KRBL Ltd.,Fast Moving Consumer Goods,Small,KRBL.NS
+Lumax Industries Ltd.,Automobiles and Auto Components,Small,LUMAXIND.NS
+Atul Ltd.,Chemicals,Small,ATUL.NS
+Procter & Gamble Health Ltd.,Healthcare and Medical Devices,Small,PGHL.NS
+Dabur India Ltd.,Fast Moving Consumer Goods,Mid,DABUR.NS
+Balkrishna Industries Ltd.,Automobiles and Auto Components,Mid,BALKRISIND.NS
+Coromandel International Ltd.,Chemicals,Mid,COROMANDEL.NS
+Glaxosmithkline Pharmaceuticals Ltd.,Healthcare and Medical Devices,Mid,GLAXO.NS
+Hero MotoCorp Ltd.,Automobiles and Auto Components,Mid,HEROMOTOCO.NS
+Pidilite Industries Ltd.,Chemicals,Large,PIDILITIND.NS
+Pfizer Ltd.,Healthcare and Medical Devices,Small,PFIZER.NS
+Schaeffler India Ltd.,Automobiles and Auto Components,Mid,SCHAEFFLER.NS
+Solar Industries India Ltd.,Chemicals,Large,SOLARINDS.NS
+Aurobindo Pharma Ltd.,Healthcare and Medical Devices,Mid,AUROPHARMA.NS
+Mahindra & Mahindra Ltd.,Automobiles and Auto Components,Large,M&M.NS
+Wockhardt Ltd.,Healthcare and Medical Devices,Small,WOCKPHARMA.NS
+Amara Raja Energy & Mobility Ltd.,Automobiles and Auto Components,Small,ARE&M.NS
+Glenmark Pharmaceuticals Ltd.,Healthcare and Medical Devices,Mid,GLENMARK.NS
+Asahi India Glass Ltd.,Automobiles and Auto Components,Small,ASAHIINDIA.NS
+MRF Ltd.,Automobiles and Auto Components,Mid,MRF.NS

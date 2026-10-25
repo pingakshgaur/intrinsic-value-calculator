@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useIntel, useJobs, useMarket, useStatus } from "../lib/hooks";
+import { useLiveAlerts, useWatchlist } from "../lib/live";
+import { setTheme, useTheme } from "../lib/theme";
 import { ago, isNum, num, pct, shortName, slug } from "../lib/format";
 import { CommandPalette } from "./CommandPalette";
 import { RunMonitor } from "./JobLog";
@@ -10,11 +12,14 @@ import { AppContext, Toast } from "./workbenchContext";
 const NAV = [
   { group: "Analysis", items: [
     { to: "/", icon: "pulse", label: "Command Center", end: true },
+    { to: "/markets", icon: "graph", label: "Markets", badge: "LIVE" },
+    { to: "/watchlist", icon: "eye", label: "Watchlist" },
     { to: "/coverage", icon: "table", label: "Coverage" },
-    { to: "/studio", icon: "beaker", label: "HYBRID MODEL Studio", badge: "NEW" },
+    { to: "/studio", icon: "beaker", label: "HYBRID MODEL Studio" },
   ] },
   { group: "Models & data", items: [
     { to: "/performance", icon: "graph-line", label: "Model Performance" },
+    { to: "/learning", icon: "mortar-board", label: "Learning" },
     { to: "/universe", icon: "database", label: "Universe" },
   ] },
   { group: "Operations", items: [
@@ -32,10 +37,12 @@ const TAPE: Record<string, { k: string; fmt: (v: number) => string }> = {
   gold: { k: "GOLD", fmt: (v) => "$" + num(v, 0) },
 };
 
-export const JOB_TITLE: Record<string, string> = { agents: "Research", valuation: "Valuation report", screen: "Data check", llm_check: "AI key check" };
+export const JOB_TITLE: Record<string, string> = { agents: "Research", valuation: "Valuation report", screen: "Data check", llm_check: "AI key check", learn: "Learning feed" };
 export function jobTitle(kind: string, opts: Record<string, unknown> | null | undefined) {
   if (kind === "agents") return opts?.quick ? "Quick sweep" : "Full research";
   if (kind === "valuation" && opts?.auto_train) return "Valuation + auto-train";
+  if (kind === "valuation" && opts?.learning) return "Retrain on learning data";
+  if (kind === "learn") return opts?.retrain ? "Learning feed + retrain" : opts?.auto ? "Daily learning feed" : "Learning feed";
   return JOB_TITLE[kind] ?? kind;
 }
 
@@ -51,6 +58,23 @@ const GLOSSARY: [string, string][] = [
   ["The asterisk", "At least one input was estimated from the company's own history or its sector rather than read from a published statement."],
   ["A word of caution", "Every number here is an estimate from past accounts and public information. Methods disagree for good reasons and can all be wrong at once. Treat the output as a starting point for your own research, not a recommendation."],
 ];
+
+function ThemeToggle() {
+  const theme = useTheme();
+  const next = theme === "dark" ? "light" : "dark";
+  return (
+    <button className="tool themer" title={`Switch to ${next} mode`} aria-label={`Switch to ${next} mode`}
+      onClick={(e) => setTheme(next, e.currentTarget)}>
+      <svg className="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+        <circle cx="12" cy="12" r="4.2" />
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((a) => <line key={a} x1="12" y1="2.6" x2="12" y2="4.8" transform={`rotate(${a} 12 12)`} />)}
+      </svg>
+      <svg className="moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round">
+        <path d="M20.5 14.2A8.6 8.6 0 1 1 9.8 3.5a7 7 0 0 0 10.7 10.7z" />
+      </svg>
+    </button>
+  );
+}
 
 export function Shell() {
   const nav = useNavigate();
@@ -83,17 +107,21 @@ export function Shell() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette(true); }
       else if ((e.ctrlKey || e.metaKey) && e.key === "\\") { e.preventDefault(); setCollapsed((c) => !c); }
       else if (!typing && e.key === "?") setGlossary(true);
-      else if (e.altKey && /^[1-7]$/.test(e.key)) { e.preventDefault(); nav(NAV.flatMap((g) => g.items)[Number(e.key) - 1].to); }
+      else if (e.altKey && /^[1-9]$/.test(e.key)) { e.preventDefault(); nav(NAV.flatMap((g) => g.items)[Number(e.key) - 1].to); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [nav]);
 
   const verdicts = intel.data?.verdicts ?? [];
+  const live = useLiveAlerts();
+  const wl = useWatchlist();
+  const liveNew = (live.data ?? []).filter((a) => !a.seen);
   const alerts = useMemo(() => [
     ...verdicts.flatMap((v) => (v.red_flags ?? []).map((f) => ({ icon: "warning", tone: "down", v, text: f }))),
     ...verdicts.flatMap((v) => (v.changes ?? []).filter((c) => !c.startsWith("first")).map((c) => ({ icon: c.startsWith("label") ? "tag" : "pulse", tone: "info", v, text: c }))),
   ], [verdicts]);
+  const tracker = wl.data?.tracker;
   const keys = status.data?.keys ?? {};
   const llm = ["GROQ_API_KEY", "GEMINI_API_KEY", "NVIDIA_API_KEY"].filter((k) => keys[k]).length;
   const lastJob = jobs.data?.[0];
@@ -128,6 +156,10 @@ export function Shell() {
             <div className="r"><span className={`dot ${llm ? "ok" : ""}`} />AI providers<b>{llm}/3</b></div>
             <div className="r"><span className="dot" />Report<b>{ago(status.data?.valuation_updated)}</b></div>
             <div className="r"><span className="dot" />Research<b>{ago(status.data?.intel_updated)}</b></div>
+            <div className="r" title={tracker?.error ?? undefined}>
+              <span className={`dot ${tracker?.error ? "bad" : tracker && !tracker.paused && (wl.data?.items.length ?? 0) > 0 ? (tracker.market.state === "closed" ? "ok" : "busy") : ""}`} />Tracker
+              <b>{!tracker ? "—" : tracker.paused ? "paused" : `${wl.data?.items.length ?? 0} live`}</b>
+            </div>
             <button className="btn ghost xs" style={{ justifyContent: "flex-start", marginTop: 4, paddingLeft: 0 }} onClick={() => setCollapsed(true)}>
               <Icon name="layout-sidebar-left-off" className="sm" /> Collapse <kbd style={{ marginLeft: "auto" }}>Ctrl \</kbd>
             </button>
@@ -154,15 +186,29 @@ export function Shell() {
             {(market.data?.length ?? 0) > 0 && <div className="tape-item" style={{ borderRight: 0 }}><span className="faint xs">1-month change</span></div>}
           </div>
           <div className="top-tools">
+            <ThemeToggle />
             <button className="cmdk" onClick={() => setPalette(true)}><Icon name="search" className="sm" /><span>Search companies, actions…</span><kbd>Ctrl K</kbd></button>
             <Popover className="pop" trigger={(open, toggle) => (
               <button className={`tool ${open ? "on" : ""}`} title="Alerts" onClick={toggle}>
-                <Icon name="bell" />{alerts.length > 0 && <span className="pip">{alerts.length > 99 ? "99+" : alerts.length}</span>}
+                <Icon name="bell" />{alerts.length + liveNew.length > 0 && <span className="pip">{alerts.length + liveNew.length > 99 ? "99+" : alerts.length + liveNew.length}</span>}
               </button>
             )}>
               {(close) => (
                 <>
-                  <div className="pop-h">Alerts <span className="faint xs" style={{ marginLeft: 8 }}>from the latest research run</span></div>
+                  {liveNew.length > 0 && (
+                    <>
+                      <div className="pop-h">Live price alerts <span className="faint xs" style={{ marginLeft: 8 }}>{liveNew.length} new</span></div>
+                      <div className="feed" style={{ maxHeight: 200 }}>
+                        {liveNew.slice(0, 12).map((a) => (
+                          <div key={a.id} className="ev new" onClick={() => { close(); nav(`/watchlist?t=${encodeURIComponent(a.ticker)}`); }}>
+                            <span className="ic"><Icon name={a.kind === "above" ? "arrow-up" : a.kind === "move" ? "pulse" : "arrow-down"} className="sm warn" /></span>
+                            <div><div className="t">{a.message}</div><div className="d">{ago(a.t)}</div></div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  <div className="pop-h">Research alerts <span className="faint xs" style={{ marginLeft: 8 }}>from the latest research run</span></div>
                   {alerts.length === 0 ? <div className="empty" style={{ padding: 28 }}><Icon name="pass" className="up" /><span className="small">No red flags or changes.</span></div> : (
                     <div className="feed">
                       {alerts.slice(0, 40).map((a, i) => (
@@ -217,7 +263,7 @@ export function Shell() {
           {GLOSSARY.map(([t, d]) => (
             <div key={t}><div className="strong" style={{ marginBottom: 3 }}>{t}</div><p className="muted small" style={{ lineHeight: 1.6 }}>{d}</p></div>
           ))}
-          <div className="xs faint"><kbd>Ctrl K</kbd> search · <kbd>Alt 1–7</kbd> pages · <kbd>Ctrl \</kbd> sidebar · <kbd>?</kbd> glossary · <kbd>↑ ↓</kbd> rows in grids</div>
+          <div className="xs faint"><kbd>Ctrl K</kbd> search · <kbd>Alt 1–9</kbd> pages · <kbd>Ctrl \</kbd> sidebar · <kbd>?</kbd> glossary · <kbd>↑ ↓</kbd> rows in grids</div>
         </Drawer>
       )}
       {palette && <CommandPalette onClose={() => setPalette(false)} />}

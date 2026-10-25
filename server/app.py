@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 import server  # noqa: F401  (puts src/ on sys.path)
 from server import data as D
-from server import hybrid_api, llm_api, prefs, yaml_patch
+from server import hybrid_api, learning_api, live, llm_api, prefs, yaml_patch
 from server.jobs import JobManager
 
 SETTINGS = D.ROOT / "agent_settings.yaml"
@@ -483,6 +483,120 @@ def market():
     return _market["data"]
 
 
+# ================================================================ live market
+_bg = {"started": False}
+
+
+def _start_background():
+    """The watchlist tracker and the learning scheduler; idempotent."""
+    if _bg["started"]:
+        return
+    _bg["started"] = True
+    live.TRACKER.start()
+    jobs.on_done.append(lambda j: learning_api.after_job(j, jobs))
+    learning_api.start_scheduler(jobs)
+
+
+def _live(fn, *a):
+    _start_background()
+    try:
+        return fn(*a)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except KeyError as e:
+        raise HTTPException(404, f"not on the watchlist: {e}")
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.get("/api/live/indices")
+def live_indices():
+    return _live(live.indices)
+
+
+@app.get("/api/live/scan")
+def live_scan(refresh: bool = False):
+    return _live(live.SCANNER.snapshot, refresh)
+
+
+@app.get("/api/live/chart")
+def live_chart(ticker: str, range: str = "1d"):
+    return _live(live.chart, ticker, range)
+
+
+@app.get("/api/live/search")
+def live_search(q: str = ""):
+    return _live(live.search, q)
+
+
+@app.get("/api/live/sectors")
+def live_sectors():
+    return _live(live.sectors)
+
+
+@app.get("/api/watchlist")
+def get_watchlist():
+    return _live(live.tracked)
+
+
+class WatchAdd(BaseModel):
+    ticker: str
+    name: str | None = None
+    sector: str | None = None
+    cap: str | None = None
+
+
+@app.post("/api/watchlist")
+def add_watch(body: WatchAdd):
+    _live(live.add, body.ticker, body.name, body.sector, body.cap)
+    return live.tracked()
+
+
+@app.patch("/api/watchlist/{ticker}")
+def patch_watch(ticker: str, body: dict):
+    return _live(live.update, ticker, body)
+
+
+@app.delete("/api/watchlist/{ticker}")
+def delete_watch(ticker: str):
+    _live(live.remove, ticker)
+    return live.tracked()
+
+
+@app.put("/api/live/tracker")
+def put_tracker(body: dict):
+    s = _live(live.save_settings, body)
+    live.TRACKER.poke()
+    return s
+
+
+@app.post("/api/live/tracker/poll")
+def poll_now():
+    _start_background()
+    live.TRACKER.poke()
+    return {"ok": True}
+
+
+@app.get("/api/live/alerts")
+def live_alerts():
+    return _live(live.alerts)
+
+
+@app.post("/api/live/alerts/seen")
+def live_alerts_seen():
+    return {"ok": _live(live.mark_alerts_seen)}
+
+
+@app.get("/api/learning")
+def learning_status():
+    return _live(learning_api.status, jobs)
+
+
+@app.put("/api/learning/settings")
+def learning_settings(body: dict):
+    return _live(learning_api.save_settings, body)
+
+
 @app.get("/api/health")
 def health():
     return {"ok": True}
@@ -515,6 +629,7 @@ def serve(port=8765, open_browser=True):
     if open_browser:
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
     print(f"[web] Intrinsic Value Calculator UI on {url}  (Ctrl+C to stop)")
+    _start_background()
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
 
 

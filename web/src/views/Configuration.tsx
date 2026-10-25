@@ -157,10 +157,7 @@ function AiProviders() {
         {(d) => (
           <>
             <Panel title="Providers" meta="fast = bulk reading · smart = reasoning and writing" flush>
-              <table className="dg">
-                <thead><tr><th>Provider</th><th>Key</th><th>Fast model</th><th>Smart model</th><th className="r">Limits / min · day</th></tr></thead>
-                <tbody>{d.providers.map((p) => <ProviderRow key={p.name} p={p} onChanged={refresh} />)}</tbody>
-              </table>
+              <div className="provs">{d.providers.map((p) => <ProviderRow key={p.name} p={p} onChanged={refresh} />)}</div>
             </Panel>
             <Routes routes={d.routes} providers={d.providers} />
           </>
@@ -183,28 +180,30 @@ function ProviderRow({ p, onChanged }: { p: Provider; onChanged: () => void }) {
     catch (e) { app.toast(e instanceof Error ? e.message : String(e), "error"); }
   };
   return (
-    <tr style={{ verticalAlign: "top" }}>
-      <td style={{ paddingTop: 12 }}>
+    <section className="prov">
+      <div>
         <div className="row"><span className={`dot ${p.has_key ? "ok" : ""}`} /><b className="strong">{info.label}</b></div>
         <div className="xs faint mono" style={{ marginTop: 2 }}>{p.key_env}</div>
+        <div className="xs faint" style={{ marginTop: 2 }}>Limits <span className="mono">{p.limits.requests_per_minute ?? "—"}/min · {p.limits.requests_per_day ?? "—"}/day</span></div>
         {info.url && <a href={info.url} target="_blank" rel="noreferrer noopener" className="xs">Get a key</a>}
-      </td>
-      <td style={{ paddingTop: 10, width: 260 }}>
+      </div>
+      <div>
+        <div className="label prov-l">API key</div>
         {edit ? (
           <div className="row"><input className="inp sm mono grow" type="password" autoComplete="off" placeholder="paste API key" value={key} onChange={(e) => setKey(e.target.value)} /><button className="btn xs" disabled={!key.trim()} onClick={() => saveKey(key.trim())}>Save</button>{p.has_key && <button className="ibtn sm" onClick={() => setEdit(false)}><Icon name="close" className="xs" /></button>}</div>
         ) : (
-          <div className="row"><span className="tag up">saved</span><button className="btn xs ghost" onClick={() => setEdit(true)}>Replace</button><button className="btn xs ghost" onClick={() => saveKey("")}>Remove</button></div>
+          <div className="row" style={{ flexWrap: "wrap" }}><span className="tag up">saved</span><button className="btn xs ghost" onClick={() => setEdit(true)}>Replace</button><button className="btn xs ghost" onClick={() => saveKey("")}>Remove</button></div>
         )}
         {p.has_key && <div className="row xs faint" style={{ marginTop: 6 }}>{models.data ? `${models.data.filter((m) => m.chat).length} chat models` : models.isLoading ? "loading models…" : ""}<button className="btn xs ghost" onClick={() => setN((x) => x + 1)}><Icon name="refresh" className="xs" /></button></div>}
         {models.isError && <div style={{ marginTop: 6 }}><ErrorNote error={models.error} /></div>}
-      </td>
+      </div>
       {(["fast", "smart"] as const).map((tier) => (
-        <td key={tier} style={{ paddingTop: 10, whiteSpace: "normal", minWidth: 240 }}>
+        <div key={tier}>
+          <div className="label prov-l">{tier === "fast" ? "Fast model" : "Smart model"}</div>
           {p.has_key ? <ModelPick provider={p.name} tier={tier} current={p.models[tier] ?? ""} models={models.data ?? []} loading={models.isLoading} onSaved={onChanged} /> : <span className="faint xs">add a key first</span>}
-        </td>
+        </div>
       ))}
-      <td className="r mono xs faint" style={{ paddingTop: 12 }}>{p.limits.requests_per_minute ?? "—"} · {p.limits.requests_per_day ?? "—"}</td>
-    </tr>
+    </section>
   );
 }
 
@@ -226,7 +225,7 @@ function ModelPick({ provider, tier, current, models, loading, onSaved }: { prov
   };
   return (
     <div className="col" style={{ gap: 6 }}>
-      <select className="sel sm" value={v} disabled={loading} onChange={(e) => { setV(e.target.value); setRes(null); }}>
+      <select className="sel sm" style={{ width: "100%" }} title={v} value={v} disabled={loading} onChange={(e) => { setV(e.target.value); setRes(null); }}>
         {!known && current && <option value={current}>{current} (not offered)</option>}
         {models.filter((m) => m.chat).map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}
         <optgroup label="Probably not chat models">{models.filter((m) => !m.chat).map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}</optgroup>
@@ -236,7 +235,7 @@ function ModelPick({ provider, tier, current, models, loading, onSaved }: { prov
         <button className="btn xs" onClick={use} disabled={!v || v === current}>Use</button>
         {res && <span className={`xs ${res.ok ? "up" : "down"} ellipsis`} title={res.error ?? ""}>{res.ok ? `✓ ${res.seconds}s` : `✗ ${res.status ? `HTTP ${res.status}` : "failed"}`}</span>}
       </div>
-      {res && !res.ok && <span className="xs down" style={{ lineHeight: 1.4 }}>{res.error}</span>}
+      {res && !res.ok && <span className="xs down" style={{ lineHeight: 1.4, overflowWrap: "anywhere" }}>{res.error}</span>}
       {!known && current && !loading && models.length > 0 && !res && <span className="xs warn">Saved model not in this key's list — probably retired.</span>}
     </div>
   );

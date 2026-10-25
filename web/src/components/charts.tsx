@@ -49,21 +49,21 @@ function RangeSvg({ r, ghost, pts, W, height }: { r: HMResult; ghost?: HMResult 
       <g>
         <line x1={x(v)} x2={x(v)} y1={24} y2={74} stroke={color} strokeWidth={2} strokeDasharray={dashed ? "4 3" : undefined} />
         <text x={x(v)} y={y} textAnchor="middle" fill={color} fontSize={10.5} fontWeight={600}>{label}</text>
-        <text x={x(v)} y={y + 12} textAnchor="middle" fill="#9a9b9c" fontSize={10} fontFamily="var(--mono)">{money(v, 0)}</text>
+        <text x={x(v)} y={y + 12} textAnchor="middle" fill="var(--fg-2)" fontSize={10} fontFamily="var(--mono)">{money(v, 0)}</text>
       </g>
     ) : null;
   return (
     <svg viewBox={`-35 0 ${W + 70} ${height}`} width={W + 70} height={height} style={{ overflow: "visible", display: "block" }}>
-      <line x1={0} x2={W} y1={49} y2={49} stroke="#2a2b2c" />
+      <line x1={0} x2={W} y1={49} y2={49} stroke="var(--line)" />
       {ticks.map((t) => (
         <g key={t}>
           <line x1={x(t)} x2={x(t)} y1={44} y2={54} stroke="#3a3b3c" />
-          <text x={x(t)} y={height - 2} textAnchor="middle" fill="#6b6c6e" fontSize={9.5} fontFamily="var(--mono)">{money(t, 0)}</text>
+          <text x={x(t)} y={height - 2} textAnchor="middle" fill="var(--fg-3)" fontSize={9.5} fontFamily="var(--mono)">{money(t, 0)}</text>
         </g>
       ))}
       {isNum(r.low) && isNum(r.high) && <rect x={x(r.low)} y={57} width={Math.max(2, x(r.high) - x(r.low))} height={6} rx={3} fill={HM_COLOR} opacity={0.4}><title>P10–P90</title></rect>}
       {isNum(r.bear_value) && isNum(r.bull_value) && <rect x={x(r.bear_value)} y={38} width={Math.max(2, x(r.bull_value) - x(r.bear_value))} height={14} rx={3} fill="#57A3F8" opacity={0.2} stroke="#57A3F8" strokeOpacity={0.5}><title>Bear → bull</title></rect>}
-      {isNum(ghost?.value) && <line x1={x(ghost!.value!)} x2={x(ghost!.value!)} y1={30} y2={70} stroke="#8c8c8c" strokeWidth={2} strokeDasharray="2 3"><title>Saved: {money(ghost!.value)}</title></line>}
+      {isNum(ghost?.value) && <line x1={x(ghost!.value!)} x2={x(ghost!.value!)} y1={30} y2={70} stroke="var(--fg-3)" strokeWidth={2} strokeDasharray="2 3"><title>Saved: {money(ghost!.value)}</title></line>}
       {mark(r.buy_below, "#86CF86", "Buy-below", 11, true)}
       {mark(r.value, HM_COLOR, "HYBRID MODEL", 88)}
       {isNum(r.price) && (
@@ -85,7 +85,7 @@ export function RangeLegend({ ghost }: { ghost?: boolean }) {
       <span><i style={{ background: "#57A3F838", outline: "1px solid #57A3F8" }} />Bear → bull</span>
       <span><i style={{ background: "#AD80D766" }} />P10–P90</span>
       <span><i style={{ background: "#86CF86" }} />Buy-below</span>
-      {ghost && <span><i style={{ outline: "1px dashed #8c8c8c" }} />Saved</span>}
+      {ghost && <span><i style={{ outline: "1px dashed var(--fg-3)" }} />Saved</span>}
     </div>
   );
 }
@@ -158,7 +158,7 @@ export function Bridge({ r, height = 220 }: { r: HMResult; height?: number }) {
       {width > 0 && (
         <svg width={W} height={H} style={{ display: "block" }}>
           {niceTicks(0, top, 4).map((t) => (
-            <g key={t}><line x1={0} x2={W} y1={y(t)} y2={y(t)} stroke="#c8cacc12" /><text x={2} y={y(t) - 3} fill="#6b6c6e" fontSize={9.5} fontFamily="var(--mono)">{money(t, 0)}</text></g>
+            <g key={t}><line x1={0} x2={W} y1={y(t)} y2={y(t)} stroke="var(--c-grid)" /><text x={2} y={y(t) - 3} fill="var(--fg-3)" fontSize={9.5} fontFamily="var(--mono)">{money(t, 0)}</text></g>
           ))}
           {isNum(r.price) && (
             <g><line x1={0} x2={W} y1={y(r.price)} y2={y(r.price)} stroke="#E0B97F" strokeDasharray="4 4" /><text x={W - 4} y={y(r.price) - 4} textAnchor="end" fill="#E0B97F" fontSize={10}>price {money(r.price, 0)}</text></g>
@@ -172,9 +172,9 @@ export function Bridge({ r, height = 220 }: { r: HMResult; height?: number }) {
             return (
               <g key={i}>
                 <rect x={cx - bw / 2} y={y(a)} width={bw} height={Math.max(1.5, y(b) - y(a))} rx={2} fill={fill} opacity={s.kind === "total" ? 0.9 : 0.75} />
-                {i < steps.length - 1 && steps[i + 1].kind === "delta" && <line x1={cx + bw / 2} x2={cx + W / steps.length - bw / 2} y1={y(s.to)} y2={y(s.to)} stroke="#6b6c6e" strokeDasharray="2 2" />}
-                <text x={cx} y={y(a) - 5} textAnchor="middle" fill="#ececed" fontSize={10.5} fontFamily="var(--mono)">{s.kind === "total" ? money(s.to, 0) : (d >= 0 ? "+" : "−") + money(Math.abs(d), 0)}</text>
-                <text x={cx} y={H - 14} textAnchor="middle" fill="#9a9b9c" fontSize={10.5}>{s.label}</text>
+                {i < steps.length - 1 && steps[i + 1].kind === "delta" && <line x1={cx + bw / 2} x2={cx + W / steps.length - bw / 2} y1={y(s.to)} y2={y(s.to)} stroke="var(--fg-3)" strokeDasharray="2 2" />}
+                <text x={cx} y={y(a) - 5} textAnchor="middle" fill="var(--fg-1)" fontSize={10.5} fontFamily="var(--mono)">{s.kind === "total" ? money(s.to, 0) : (d >= 0 ? "+" : "−") + money(Math.abs(d), 0)}</text>
+                <text x={cx} y={H - 14} textAnchor="middle" fill="var(--fg-2)" fontSize={10.5}>{s.label}</text>
               </g>
             );
           })}
@@ -227,10 +227,10 @@ export function UpsideScatter({ verdicts, onPick, height = 280 }: { verdicts: Ve
     <ResponsiveContainer width="100%" height={height}>
       <ScatterChart margin={{ top: 8, right: 12, bottom: 18, left: 0 }}>
         <CartesianGrid strokeDasharray="2 4" />
-        <XAxis type="number" dataKey="x" domain={[0, 100]} tickLine={false} axisLine={{ stroke: "#2a2b2c" }} label={{ value: "Confidence", position: "insideBottomRight", offset: -8, fill: "#6b6c6e", fontSize: 10.5 }} />
-        <YAxis type="number" dataKey="y" unit="%" tickLine={false} axisLine={{ stroke: "#2a2b2c" }} width={46} />
+        <XAxis type="number" dataKey="x" domain={[0, 100]} tickLine={false} axisLine={{ stroke: "var(--line)" }} label={{ value: "Confidence", position: "insideBottomRight", offset: -8, fill: "var(--fg-3)", fontSize: 10.5 }} />
+        <YAxis type="number" dataKey="y" unit="%" tickLine={false} axisLine={{ stroke: "var(--line)" }} width={46} />
         <ZAxis type="number" dataKey="z" range={[50, 240]} />
-        <ReferenceLine y={0} stroke="#c8cacc66" />
+        <ReferenceLine y={0} stroke="var(--c-lines)" />
         <Tooltip cursor={{ strokeDasharray: "3 3", stroke: "#555" }} content={({ active, payload }) => {
           const p = payload?.[0]?.payload as (typeof data)[number] | undefined;
           if (!active || !p) return null;
@@ -245,7 +245,7 @@ export function UpsideScatter({ verdicts, onPick, height = 280 }: { verdicts: Ve
           );
         }} />
         {[...groups.entries()].map(([label, pts]) => (
-          <Scatter key={label} name={label} data={pts} fill={LABEL_HEX[label] ?? "#8c8c8c"} fillOpacity={0.85} cursor={onPick ? "pointer" : undefined} onClick={(d: { name?: string }) => d?.name && onPick?.(d.name)} />
+          <Scatter key={label} name={label} data={pts} fill={LABEL_HEX[label] ?? "var(--fg-3)"} fillOpacity={0.85} cursor={onPick ? "pointer" : undefined} onClick={(d: { name?: string }) => d?.name && onPick?.(d.name)} />
         ))}
       </ScatterChart>
     </ResponsiveContainer>
@@ -302,7 +302,7 @@ function TmCell(props: { x?: number; y?: number; width?: number; height?: number
   if (depth === 1) {
     return (
       <g>
-        <rect x={x} y={y} width={width} height={height} fill="none" stroke="#121314" strokeWidth={3} />
+        <rect x={x} y={y} width={width} height={height} fill="none" stroke="var(--bg)" strokeWidth={3} />
         {width > 80 && <text x={x + 6} y={y + 14} fill="#ececedcc" fontSize={10} fontWeight={700} letterSpacing=".04em">{name.toUpperCase().slice(0, Math.floor(width / 7))}</text>}
       </g>
     );
@@ -311,7 +311,7 @@ function TmCell(props: { x?: number; y?: number; width?: number; height?: number
   const show = width > 56 && height > 34;
   return (
     <g className="tm-cell" onClick={() => onPick(name)}>
-      <rect x={x + 1} y={y + 1} width={Math.max(0, width - 2)} height={Math.max(0, height - 2)} rx={3} fill={upColor(upside)} stroke="#121314" strokeWidth={1} />
+      <rect x={x + 1} y={y + 1} width={Math.max(0, width - 2)} height={Math.max(0, height - 2)} rx={3} fill={upColor(upside)} stroke="var(--bg)" strokeWidth={1} />
       {show && <text x={x + 7} y={y + 18} fill="#f2f2f2" fontSize={11.5} fontWeight={600}>{shortName(name).slice(0, Math.max(4, Math.floor(width / 7.2)))}</text>}
       {show && <text x={x + 7} y={y + 34} fill="#ffffffcc" fontSize={11} fontFamily="var(--mono)">{pct(upside, 0, true)}</text>}
       {show && (flags ?? 0) > 0 && <circle cx={x + width - 10} cy={y + 12} r={4} fill="#EF8773" />}

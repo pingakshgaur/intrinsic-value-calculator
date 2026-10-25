@@ -380,9 +380,15 @@ def build_queue(opts, emit):
 
 
 # ===================================================================== fetch
-def _cache_path(ticker):
-    fys = sorted(config.FY_LIST)
+def _cache_path(ticker, fy_list=None):
+    fys = sorted(fy_list or config.FY_LIST)
     return _cache_dir("train_cache") / f"{ticker}_{fys[0]}_{fys[-1]}.pkl"
+
+
+def cache_age_days(ticker, fy_list=None):
+    """Days since this company's accounts were cached; None when never."""
+    path = _cache_path(ticker, fy_list)
+    return (time.time() - path.stat().st_mtime) / 86400 if path.exists() else None
 
 
 def load_cached(ticker):

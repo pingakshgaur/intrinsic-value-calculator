@@ -13,6 +13,7 @@ Auto-train runs get a control file the browser writes commands into
 
 import csv
 import json
+import logging
 import os
 import re
 import subprocess
@@ -21,9 +22,10 @@ import threading
 import time
 import uuid
 
-from server import prefs
+from server import learning_api, prefs
 from server.data import OUTPUT, ROOT, companies
 
+log = logging.getLogger("web.jobs")
 MAX_LINES = 20000
 HISTORY = OUTPUT / "web_jobs.json"
 WORK = OUTPUT / "web_runs"
@@ -82,6 +84,19 @@ def build_args(kind, opts, job_id="x"):
                                       ("sectors", "--auto-sectors", 1, 30), ("min_listed_years", "--auto-min-listed-years", 1, 40)):
                 if auto.get(key) is not None:
                     a += [flag, str(max(lo, min(hi, int(auto[key]))))]
+        elif kind == "valuation" and not opts.get("offline"):
+            use = opts.get("learning")
+            if use is None:
+                use = learning_api.settings()["use_in_runs"]
+            if use:
+                a += ["--train-universe", learning_api.learning_csv()]
+    elif kind == "learn":
+        if opts.get("offline"):
+            raise ValueError("the learning feed downloads real companies; switch off offline test data")
+        p = prefs.load()
+        start, end = int(opts.get("start_year") or p["start_year"]), int(opts.get("end_year") or p["end_year"])
+        a += ["--learn", "--start-year", str(min(start, end)), "--end-year", str(max(start, end)),
+              "--exchange", p["exchange"]]
     elif kind == "agents":
         a.append("--agents")
         if opts.get("quick"):
@@ -134,6 +149,7 @@ class JobManager:
         self.jobs = {}
         self.order = []
         self.lock = threading.Lock()
+        self.on_done = []  # callbacks(job) after every job ends
         self._load()
 
     def _load(self):
@@ -169,6 +185,9 @@ class JobManager:
     def start(self, kind, opts):
         if self.active():
             raise RuntimeError("another job is still running - wait for it or cancel it")
+        if kind == "learn" and not (opts or {}).get("start_year"):
+            start, end = learning_api.window(self)
+            opts = {**(opts or {}), "start_year": start, "end_year": end}
         job = Job(kind, opts)
         job.args = build_args(kind, opts, job.id)
         if "--auto-control" in job.args:
@@ -208,6 +227,11 @@ class JobManager:
             job.status = "succeeded" if job.returncode == 0 else "failed"
         job.lines.append(f"[exit code {job.returncode}]")
         self._save()
+        for cb in self.on_done:
+            try:
+                cb(job)
+            except Exception:
+                log.exception("job hook failed after %s", job.id)
 
     def control(self, job_id, action, value=None):
         job = self.jobs.get(job_id)

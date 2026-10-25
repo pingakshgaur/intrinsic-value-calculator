@@ -36,12 +36,17 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       );
     const c: Cmd[] = [
       { id: "p-o", group: "Go to", label: "Command Center", icon: "pulse", hint: "Alt+1", run: go("/") },
-      { id: "p-r", group: "Go to", label: "Coverage", icon: "table", hint: "Alt+2", run: go("/coverage") },
-      { id: "p-l", group: "Go to", label: "HYBRID MODEL Studio", icon: "beaker", hint: "Alt+3", run: go("/studio") },
-      { id: "p-m", group: "Go to", label: "Model Performance", icon: "graph-line", hint: "Alt+4", run: go("/performance") },
-      { id: "p-u", group: "Go to", label: "Universe", icon: "database", hint: "Alt+5", run: go("/universe") },
-      { id: "p-run", group: "Go to", label: "Operations", icon: "server-process", hint: "Alt+6", run: go("/operations") },
-      { id: "p-s", group: "Go to", label: "Configuration", icon: "settings", hint: "Alt+7", run: go("/configuration") },
+      { id: "p-mk", group: "Go to", label: "Markets · live scanner and charts", icon: "graph", hint: "Alt+2", run: go("/markets") },
+      { id: "p-wl", group: "Go to", label: "Watchlist · live tracking", icon: "eye", hint: "Alt+3", run: go("/watchlist") },
+      { id: "p-r", group: "Go to", label: "Coverage", icon: "table", hint: "Alt+4", run: go("/coverage") },
+      { id: "p-l", group: "Go to", label: "HYBRID MODEL Studio", icon: "beaker", hint: "Alt+5", run: go("/studio") },
+      { id: "p-m", group: "Go to", label: "Model Performance", icon: "graph-line", hint: "Alt+6", run: go("/performance") },
+      { id: "p-le", group: "Go to", label: "Learning data", icon: "mortar-board", hint: "Alt+7", run: go("/learning") },
+      { id: "p-u", group: "Go to", label: "Universe", icon: "database", hint: "Alt+8", run: go("/universe") },
+      { id: "p-run", group: "Go to", label: "Operations", icon: "server-process", hint: "Alt+9", run: go("/operations") },
+      { id: "p-s", group: "Go to", label: "Configuration", icon: "settings", run: go("/configuration") },
+      { id: "r-learn", group: "Run", label: "Fetch learning data (training lists + watchlist)", icon: "cloud-download", run: job("learn") },
+      { id: "r-retrain", group: "Run", label: "Fetch learning data and retrain", icon: "sync", run: job("learn", { retrain: true }) },
       { id: "p-ai", group: "Go to", label: "Configuration · AI providers", icon: "sparkle", run: go("/configuration?section=ai") },
       { id: "p-help", group: "Go to", label: "Glossary", icon: "book", hint: "?", run: app.openHelp },
       { id: "r-full", group: "Run", label: "Full research (23 agents)", icon: "rocket", run: job("agents") },
@@ -55,6 +60,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       seen.add(v.company);
       c.push({ id: "c-" + v.company, group: "Companies", label: shortName(v.company), icon: "symbol-class", hint: v.label, run: go(`/coverage/${slug(v.company)}`) });
       c.push({ id: "l-" + v.company, group: "Open in Studio", label: shortName(v.company), icon: "beaker", run: go(`/studio?company=${slug(v.company)}`) });
+      if (v.ticker) c.push({ id: "k-" + v.company, group: "Live chart", label: shortName(v.company), icon: "graph", hint: v.ticker, run: go(`/markets?t=${encodeURIComponent(v.ticker)}`) });
     }
     for (const r of lab.data ?? []) {
       if (seen.has(r.company)) continue;

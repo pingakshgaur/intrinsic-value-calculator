@@ -96,7 +96,7 @@ export const LENS_COLOR: Record<string, string> = {
 };
 
 export const HM = "HYBRID MODEL";
-export const HM_COLOR = "#AD80D7";
+export const HM_COLOR = "var(--hm)"; // theme-aware: #AD80D7 dark, #7B3FB3 light
 
 export const scoreColor =(s: number | null | undefined) =>
   s == null ? "var(--fg-muted)" : s > 0.1 ? "var(--c-green)" : s < -0.1 ? "var(--c-red)" : "var(--fg-muted)";

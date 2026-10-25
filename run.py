@@ -309,6 +309,15 @@ def build_parser():
         help=argparse.SUPPRESS,  # the web app's channel for auto-train controls
     )
     ap.add_argument(
+        "--learn",
+        action="store_true",
+        help=(
+            "fetch and cache the accounts of every learning company (training "
+            "lists + watchlist) so the next run can train on them; see "
+            "src/learning.py"
+        ),
+    )
+    ap.add_argument(
         "--screen-only",
         action="store_true",
         help=(
@@ -516,6 +525,15 @@ def main():
 
         config.OFFLINE = True
         ticker_resolver.resolve = mock_source.resolve
+
+    if args.learn:
+        if args.offline:
+            sys.exit("--learn downloads real companies; it cannot run --offline")
+        import learning
+
+        learning.feed()
+        print(f"\nFull log: {log_path}")
+        return
 
     # ---- input ----
     try:

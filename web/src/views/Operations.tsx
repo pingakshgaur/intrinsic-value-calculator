@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useCompanies, useJobs, usePrefs, useStartJob, useStatus } from "../lib/hooks";
+import { useLearning } from "../lib/live";
 import { JobSummary } from "../lib/api";
 import { duration, when } from "../lib/format";
 import { Drawer, ErrorNote, Icon, PageHeader, Panel, Toggle } from "../components/ui";
@@ -9,11 +10,12 @@ import { RunMonitor } from "../components/JobLog";
 import { jobTitle } from "../components/Shell";
 import { useApp } from "../components/workbenchContext";
 
-type Kind = "valuation" | "screen" | "research" | "quick";
+type Kind = "valuation" | "screen" | "research" | "quick" | "learn";
 const KINDS: { id: Kind; icon: string; t: string; d: string }[] = [
   { id: "valuation", icon: "graph", t: "Valuation report", d: "All models, every year, HYBRID MODEL, workbook, metrics" },
   { id: "research", icon: "rocket", t: "Full research", d: "HYBRID MODEL + all 23 agents" },
   { id: "quick", icon: "zap", t: "Quick sweep", d: "News & market agents only" },
+  { id: "learn", icon: "mortar-board", t: "Learning feed", d: "Fetch accounts of every training & watchlist company" },
   { id: "screen", icon: "filter", t: "Data check", d: "Sufficiency screen; values nothing" },
 ];
 const EXCL = "ops.excluded.v1";
@@ -36,6 +38,10 @@ export function Operations() {
   const [noLlm, setNoLlm] = useState(false);
   const [auto, setAuto] = useState(false);
   const [ao, setAo] = useState({ target: 60, max: 100, sectors: 10, min_listed_years: 10 });
+  const learning = useLearning();
+  const [learn, setLearn] = useState<boolean | null>(null);
+  const [retrain, setRetrain] = useState(false);
+  const useLearn = learn ?? learning.data?.settings.use_in_runs ?? true;
   const [err, setErr] = useState<unknown>(null);
   useEffect(() => { try { localStorage.setItem(EXCL, JSON.stringify([...excluded])); } catch { /* ignore */ } }, [excluded]);
   useEffect(() => { if (prefs.data && from == null) { setFrom(prefs.data.values.start_year); setTo(prefs.data.values.end_year); } }, [prefs.data, from]);
@@ -58,7 +64,9 @@ export function Operations() {
     if (!included.length && !offline) return setErr(new Error("Every company is excluded — include at least one."));
     const options: Record<string, unknown> = research
       ? { offline, quick: kind === "quick", no_llm: noLlm, tickers: excluded.size ? included.map((c) => (c.ticker || "").split(".")[0]).filter(Boolean).join(",") : "" }
-      : { offline, exclude: [...excluded], start_year: from, end_year: to, ...(kind === "valuation" && auto ? { auto_train: ao } : {}) };
+      : kind === "learn" ? { start_year: from, end_year: to, retrain }
+      : { offline, exclude: [...excluded], start_year: from, end_year: to, ...(kind === "valuation" && auto ? { auto_train: ao } : {}),
+          ...(kind === "valuation" && !auto ? { learning: useLearn } : {}) };
     start.mutate({ kind: research ? "agents" : kind, options }, {
       onSuccess: (j) => { setParams({ job: j.id }); app.toast(`${jobTitle(j.kind, j.opts)} started`); },
       onError: (e) => setErr(e),
@@ -109,8 +117,15 @@ export function Operations() {
           </div>
           <div className="form-sec">
             <div className="fh"><span className="num">4</span><b>Options</b></div>
+            {kind === "learn" && (
+              <>
+                <span className="small muted">Fetches and caches the accounts of the {learning.data?.companies ?? "…"} learning companies (training lists + watchlist) for the period above, so valuation runs can train on them without downloading.</span>
+                <Toggle checked={retrain} onChange={setRetrain} label="Then retrain: run the valuation report on the learning data" />
+              </>
+            )}
             {kind === "valuation" && (
               <>
+                <Toggle checked={useLearn && !auto} disabled={auto} onChange={setLearn} label={`Train the ML models on the learning data too (${learning.data?.companies ?? "…"} more companies)`} />
                 <Toggle checked={auto} onChange={setAuto} label="Auto-train on the live market until the Ensemble is confident" />
                 {auto && (
                   <div className="fieldset">

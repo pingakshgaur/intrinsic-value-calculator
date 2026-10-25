@@ -18,6 +18,9 @@ import { Performance } from "./views/Performance";
 import { Operations } from "./views/Operations";
 import { Universe } from "./views/Universe";
 import { Configuration } from "./views/Configuration";
+import { Markets } from "./views/Markets";
+import { Watchlist } from "./views/Watchlist";
+import { Learning } from "./views/Learning";
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 15_000, refetchOnWindowFocus: true } } });
 
@@ -37,6 +40,9 @@ const router = createBrowserRouter([
     errorElement: NotFound,
     children: [
       { index: true, element: <CommandCenter /> },
+      { path: "markets", element: <Markets /> },
+      { path: "watchlist", element: <Watchlist /> },
+      { path: "learning", element: <Learning /> },
       { path: "coverage", element: <Coverage /> },
       { path: "coverage/:company", element: <Profile /> },
       { path: "studio", element: <Studio /> },

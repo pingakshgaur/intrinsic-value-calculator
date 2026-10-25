@@ -7,10 +7,34 @@ year (signals from the accounts). Overrides apply to one evaluation only;
 nothing is written until /api/hybrid/save.
 """
 
+import math
+
 import hybrid_model as HM
 from agents import settings as S
-
 from server import data as D
+
+
+def _calibration_from_verdict(v, base, sig):
+    """Research runs before the fix in agents/runner.py saved their inputs
+    without the lens calibration. The verdict still records each lens's
+    multiplier (exp(-c)) and its final weight, which is enough to rebuild it:
+    c from the multiplier, and each lens's skill as the ratio of its final
+    weight to the weight it gets with no skill weighting. Exact unless a lens
+    was dropped as an outlier: it has no final weight to recover a skill from,
+    and may still count in the bull or bear case (the value then lands within
+    a few per cent; the label is unchanged in every company tested)."""
+    mult = v.get("lens_calibration") or {}
+    final = v.get("lens_weights") or {}
+    cal = {l: {"c": -math.log(m)} for l, m in mult.items() if isinstance(m, (int, float)) and m > 0}
+    if not cal:
+        return {}
+    for l in final:  # every weighted lens, so all skills share one scale
+        cal.setdefault(l, {"c": 0.0})
+    plain = HM.evaluate({**base, "lens_calibration": cal}, sig).get("lens_weights") or {}
+    for l, entry in cal.items():
+        if plain.get(l) and final.get(l):
+            entry["skill"] = final[l] / plain[l]
+    return cal
 
 
 def _from_verdict(v):
@@ -26,6 +50,8 @@ def _from_verdict(v):
                 k: x for k, x in (v.get("confidence_parts") or {}).items() if k != "hybrid"},
             "overlay": v.get("overlay", 0.0),
         }
+    if "lens_calibration" not in base:
+        base["lens_calibration"] = _calibration_from_verdict(v, base, sig)
     return {"base": base, "signals": sig}
 
 

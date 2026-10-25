@@ -47,7 +47,10 @@ def active_ml_modules():
     return [ML_MODULES[m.key] for m in model_registry.ml_models() if m.key in ML_MODULES]
 
 
-def build_universe(companies):
+def build_universe(companies, cached=False):
+    """cached=True reuses accounts fetched in the last AUTO_CACHE_DAYS (the
+    auto-trainer's and the learning feed's cache) - used for training-only
+    companies, never for the companies being valued."""
     universe, failures = {}, {}
     for c in companies:
         name = c["name"]
@@ -76,6 +79,15 @@ def build_universe(companies):
                 import mock_source
 
                 data = mock_source.fetch_by_name(name, config.FY_LIST)
+            elif cached:
+                import auto_train
+
+                data = auto_train.load_cached(ticker)
+                if data is None:
+                    data = yf_source.fetch_company(ticker, config.FY_LIST)
+                    auto_train.save_cached(ticker, data)
+                else:
+                    print("(cached)", end=" ")
             else:
                 data = yf_source.fetch_company(ticker, config.FY_LIST)
         except Exception as e:
@@ -205,7 +217,7 @@ def run(companies, extra_training=None, auto_train=None):
 
     train_universe = dict(universe)
     if extra_training:
-        extra_uni, extra_fail = build_universe(extra_training)
+        extra_uni, extra_fail = build_universe(extra_training, cached=True)
         for k, v in extra_uni.items():
             train_universe.setdefault(k, v)
         print(

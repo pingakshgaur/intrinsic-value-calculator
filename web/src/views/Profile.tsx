@@ -243,7 +243,7 @@ function History({ company }: { company: string }) {
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={rows.map((r) => ({ ...r, when: r.date?.slice(5, 16).replace("T", " ") }))} margin={{ top: 8, right: 16, bottom: 0, left: 4 }}>
               <CartesianGrid strokeDasharray="2 4" />
-              <XAxis dataKey="when" tickLine={false} axisLine={{ stroke: "#2a2b2c" }} minTickGap={24} />
+              <XAxis dataKey="when" tickLine={false} axisLine={{ stroke: "var(--line)" }} minTickGap={24} />
               <YAxis tickLine={false} axisLine={false} width={70} tickFormatter={(x) => money(x, 0)} />
               <Tooltip content={<Tip fmt={(x) => money(x)} />} />
               <Legend iconType="plainline" />

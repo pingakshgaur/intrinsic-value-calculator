@@ -7,6 +7,10 @@
     <meta name="theme-color" content="#191A1B" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23191A1B'/%3E%3Cpath d='M3 11.5l3-3 2.2 2.2L13 5.5' stroke='%233994BC' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
     <title>INTVAL Workbench</title>
+    <script>
+      // the saved theme, applied before the first paint (no dark flash in light mode)
+      try { if (localStorage.getItem("intval.theme") === "light") { document.documentElement.dataset.theme = "light"; document.querySelector('meta[name="color-scheme"]').content = "light"; } } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

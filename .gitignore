@@ -63,3 +63,6 @@ Thumbs.db
 scratch/
 # backup written when settings are saved from the web app
 agent_settings.yaml.bak
+
+# --- Live market & learning state (watchlist, minute-bar store, alerts) ------
+data/live/

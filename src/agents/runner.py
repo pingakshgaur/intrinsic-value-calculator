@@ -192,7 +192,9 @@ def research_company(company, base, rec, feeds, board, llm, run_id, shared, quic
         return llm.complete(tier, system, user, max_tokens=max_tokens, agent="chief") if llm else None
 
     verdict = chief.decide(ctx, ask)
-    verdict["base"] = {k: v for k, v in base.items() if isinstance(v, (int, float, str, list, type(None)))}
+    # dicts too: lens_calibration is one, and a base without it re-evaluates
+    # uncalibrated (quick sweeps, the Studio, live prices)
+    verdict["base"] = {k: v for k, v in base.items() if isinstance(v, (int, float, str, list, dict, type(None)))}
     verdict["account_signals"] = ctx.account_signals
 
     for f in ctx.findings.values():
