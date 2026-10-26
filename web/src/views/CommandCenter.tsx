@@ -6,6 +6,8 @@ import { ago, isNum, isoWhen, pct, pctUnits, shortName, slug } from "../lib/form
 import { HM_COLOR, LABELS, LABEL_HEX } from "../lib/labels";
 import { Icon, Loading, PageHeader, Panel } from "../components/ui";
 import { RunButton } from "../components/RunButton";
+import { useScope } from "../lib/scope";
+import { ScopeNote } from "../components/ScopePicker";
 import { CoverageMap, UpsideScatter } from "../components/charts";
 
 function median(xs: number[]) {
@@ -21,9 +23,12 @@ export function CommandCenter() {
   const metrics = useMetrics();
   const status = useStatus();
   const nav = useNavigate();
+  const scope = useScope();
   if (intel.isLoading || val.isLoading) return <div className="page"><Loading rows={12} /></div>;
 
-  const verdicts = intel.data?.verdicts ?? [];
+  const every = intel.data?.verdicts ?? [];
+  // a watchlist in focus: only its companies, everywhere on the page
+  const verdicts = scope.list ? every.filter((v) => scope.has({ ticker: v.ticker, company: v.company })) : every;
   const meta = intel.data?.meta;
   const hasIntel = verdicts.length > 0;
   const hm = (metrics.data?.overall ?? []).find((r) => r.Model === "HYBRID MODEL");
@@ -38,6 +43,7 @@ export function CommandCenter() {
         actions={<><RunButton kind="agents" options={{ quick: true }} label="Quick sweep" icon="zap" secondary /><RunButton kind="agents" label="Run research" icon="rocket" /></>}
       />
 
+      {every.length > 0 && <ScopeNote shown={verdicts.length} total={every.length} />}
       <Band verdicts={verdicts} hm={hm} report={status.data?.valuation_updated ?? null} />
 
       {!hasIntel ? (

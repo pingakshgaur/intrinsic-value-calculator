@@ -5,6 +5,10 @@ import { api, Company } from "../lib/api";
 import { useCompanies } from "../lib/hooks";
 import { ErrorNote, Icon, PageHeader, QueryView } from "../components/ui";
 import { useApp } from "../components/workbenchContext";
+import { ExportButton } from "../components/ExportButton";
+import { ScopeNote } from "../components/ScopePicker";
+import { useScope } from "../lib/scope";
+import { useWatchlistMutations } from "../lib/live";
 
 const CAPS = ["Large", "Mid", "Small", ""];
 const TICKER = /^[A-Za-z0-9&\-_.]{0,30}$/;
@@ -44,6 +48,10 @@ function Editor({ initial }: { initial: Company[] }) {
   const [err, setErr] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
   const file = useRef<HTMLInputElement>(null);
+  const scope = useScope();
+  const lm = useWatchlistMutations();
+  // a watchlist in focus narrows what is shown (never what is saved); new blank rows always show
+  const [onlyList, setOnlyList] = useState(true);
   const qc = useQueryClient();
   const app = useApp();
   const dirty = JSON.stringify(rows.map(({ _k, ...r }) => r)) !== base;
@@ -67,7 +75,18 @@ function Editor({ initial }: { initial: Company[] }) {
   const blocking = Object.values(problems).filter((x) => x === "duplicate name" || x.startsWith("ticker")).length;
   const update = (k: number, patch: Partial<Company>) => setRows((rs) => rs.map((r) => (r._k === k ? { ...r, ...patch } : r)));
   const f = filter.trim().toLowerCase();
-  const shown = rows.filter((r) => (!f || `${r.name} ${r.sector} ${r.ticker}`.toLowerCase().includes(f)) && (!sector || r.sector === sector));
+  const scoped = !!scope.list && onlyList;
+  const inList = (r: Row) => !r.name.trim() || scope.has({ ticker: r.ticker, name: r.name });
+  const shown = rows.filter((r) => (!f || `${r.name} ${r.sector} ${r.ticker}`.toLowerCase().includes(f)) && (!sector || r.sector === sector) && (!scoped || inList(r)));
+  const listed = scope.list ? rows.filter((r) => r.name.trim() && scope.has({ ticker: r.ticker, name: r.name })).length : 0;
+  const addToList = (id: string, name: string) => {
+    const pick = rows.filter((r) => checked.has(r._k) && r.ticker.trim());
+    const skipped = rows.filter((r) => checked.has(r._k)).length - pick.length;
+    lm.addMany.mutate({ id, tickers: pick.map((r) => ({ ticker: r.ticker.trim(), name: r.name.trim(), sector: r.sector.trim() || undefined, cap: r.cap || undefined })) }, {
+      onSuccess: (res) => app.toast(`${res.added} added to “${name}”${skipped ? ` · ${skipped} without a ticker skipped` : ""}${res.failed.length ? ` · ${res.failed.length} not added` : ""}`, res.failed.length || skipped ? "info" : "ok"),
+      onError: (e) => app.toast(e instanceof Error ? e.message : String(e), "error"),
+    });
+  };
   const allOn = shown.length > 0 && shown.every((r) => checked.has(r._k));
 
   const saveAll = async () => {
@@ -80,12 +99,7 @@ function Editor({ initial }: { initial: Company[] }) {
       app.toast(`Universe saved — ${body.length} companies`, "ok");
     } catch (e) { setErr(e); } finally { setSaving(false); }
   };
-  const exportCsv = () => {
-    const lines = [["company name", "sector name", "market cap", "ticker"], ...plain(rows).map((r) => [r.name, r.sector, r.cap, r.ticker])].map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(","));
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
-    a.download = "companies.csv"; a.click(); URL.revokeObjectURL(a.href);
-  };
+  const exportTable = () => ({ head: ["company name", "sector name", "market cap", "ticker"], rows: plain(rows).map((r) => [r.name, r.sector, r.cap, r.ticker]) });
   const importCsv = async (fl: File) => {
     try {
       const parsed = parseCsv(await fl.text()).filter((r) => r.name);
@@ -104,15 +118,17 @@ function Editor({ initial }: { initial: Company[] }) {
         actions={<>
           <input ref={file} type="file" accept=".csv,text/csv" hidden onChange={(e) => { const fl = e.target.files?.[0]; if (fl) importCsv(fl); e.target.value = ""; }} />
           <button className="btn sec" onClick={() => file.current?.click()}><Icon name="cloud-upload" className="sm" />Import CSV</button>
-          <button className="btn sec" onClick={exportCsv}><Icon name="desktop-download" className="sm" />Export</button>
+          <ExportButton title="Universe" table={exportTable} label="Export data" className="btn sec" />
           <button className="btn" disabled={!dirty || saving || blocking > 0} onClick={saveAll} title={blocking ? "Fix duplicate names and bad tickers first" : undefined}><Icon name={saving ? "loading" : "save"} className={`sm ${saving ? "spin" : ""}`} />Save{dirty ? " changes" : ""}</button>
         </>} />
       {blocker.state === "blocked" && <div className="note wrn"><Icon name="warning" /><div className="grow">Unsaved changes to the universe.</div><button className="btn xs sec" onClick={() => blocker.reset?.()}>Stay</button><button className="btn xs danger" onClick={() => blocker.proceed?.()}>Discard and leave</button></div>}
       {err != null && <ErrorNote error={err} />}
+      {scope.list && onlyList && <ScopeNote shown={listed} total={rows.filter((r) => r.name.trim()).length} />}
       <section className="panel" style={{ flex: 1, minHeight: 0 }}>
         <div className="toolbar">
           <div className="search" style={{ width: 260 }}><Icon name="search" /><input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by name, sector or ticker" /></div>
           <select className="sel" value={sector} onChange={(e) => setSector(e.target.value)}><option value="">All sectors</option>{sectors.map((s) => <option key={s}>{s}</option>)}</select>
+          {scope.list && <button className={`btn sm sec ${onlyList ? "on" : ""}`} onClick={() => setOnlyList(!onlyList)} title={onlyList ? "Show the whole universe" : `Show only “${scope.list.name}”`}><Icon name="filter" className="sm" />{onlyList ? `Only ${scope.list.name}` : "Whole universe"}</button>}
           <button className="btn sec sm" onClick={() => { setFilter(""); setSector(""); setRows((rs) => [{ name: "", sector: "", cap: "Large", ticker: "", _k: ++seq }, ...rs]); }}><Icon name="add" className="sm" />Add row</button>
           {checked.size > 0 && (
             <>
@@ -120,6 +136,11 @@ function Editor({ initial }: { initial: Company[] }) {
               <select className="sel sm" value="" onChange={(e) => { const s = e.target.value; if (s) setRows((rs) => rs.map((r) => (checked.has(r._k) ? { ...r, sector: s } : r))); }}>
                 <option value="">Set sector…</option>{sectors.map((s) => <option key={s}>{s}</option>)}
               </select>
+              {scope.lists.length > 0 && (
+                <select className="sel sm" value="" disabled={lm.addMany.isPending} onChange={(e) => { const l = scope.lists.find((x) => x.id === e.target.value); if (l) addToList(l.id, l.name); }} title="Track the selected companies on a watchlist">
+                  <option value="">Add to watchlist…</option>{scope.lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+              )}
               <button className="btn danger sm" onClick={() => { setRows((rs) => rs.filter((r) => !checked.has(r._k))); setChecked(new Set()); }}><Icon name="trash" className="sm" />Delete</button>
             </>
           )}
@@ -151,7 +172,7 @@ function Editor({ initial }: { initial: Company[] }) {
               })}
             </tbody>
           </table>
-          {!shown.length && <div className="muted" style={{ padding: 28, textAlign: "center" }}>No rows match.</div>}
+          {!shown.length && <div className="muted" style={{ padding: 28, textAlign: "center" }}>{scoped && !f && !sector ? <>No universe company is on “{scope.list!.name}”. <button className="btn xs sec" onClick={() => setOnlyList(false)}>Show the whole universe</button></> : "No rows match."}</div>}
         </div>
       </section>
     </>

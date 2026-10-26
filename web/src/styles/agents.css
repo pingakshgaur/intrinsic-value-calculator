@@ -128,11 +128,24 @@
 .ev-item:hover { background: var(--raise-2); text-decoration: none; }
 .msg-kchip { display: inline-flex; gap: 4px; align-items: center; font-size: 10.5px; font-weight: 600; white-space: nowrap; opacity: .9; }
 .msg-kchip.g { margin-right: 7px; vertical-align: 1px; }
-/* hover toolbar: top-right of the message, beside the header line */
-.msg-acts { position: absolute; top: 4px; right: 12px; z-index: 3; display: none; gap: 1px; padding: 2px; border-radius: 7px; background: var(--raise); border: 1px solid var(--line-2); box-shadow: var(--shadow-pop); }
-.msg:hover .msg-acts, .msg:focus-within .msg-acts, .msg.sel .msg-acts { display: flex; }
-.msg-acts button { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 7px; border: 0; border-radius: 5px; background: none; color: var(--fg-2); font-size: 11.5px; cursor: pointer; }
+/* message actions: icon buttons at the end of the header line (their space is always kept,
+   they only fade in), or a gutter menu on follow-on messages - nothing ever covers the text */
+.msg-h { min-width: 0; }
+.msg-h .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-h .time { white-space: nowrap; }
+.msg-acts { margin-left: auto; display: inline-flex; gap: 1px; flex: none; opacity: 0; transition: opacity .12s; align-self: center; }
+.msg:hover .msg-acts, .msg-acts:focus-within { opacity: 1; }
+.msg-acts button { display: grid; place-items: center; width: 24px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--fg-3); cursor: pointer; }
 .msg-acts button:hover { background: var(--hover); color: var(--fg-1); }
+.msg-gut { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.msg-more { display: grid; place-items: center; width: 22px; height: 18px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--fg-3); cursor: pointer; opacity: 0; }
+.msg:hover .msg-more, .msg-more.on, .msg-more:focus-visible { opacity: 1; }
+.msg-more:hover, .msg-more.on { background: var(--hover); color: var(--fg-1); }
+.msg-menu { position: absolute; left: 4px; top: calc(100% + 2px); z-index: 30; min-width: 230px; display: flex; flex-direction: column; padding: 4px; border-radius: 8px;
+  background: var(--raise); border: 1px solid var(--line-2); box-shadow: var(--shadow-pop); animation: pop .1s ease; }
+.msg-menu.up { top: auto; bottom: calc(100% + 2px); }
+.msg-menu button { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border: 0; border-radius: 5px; background: none; color: var(--fg); font-size: 12px; text-align: left; cursor: pointer; white-space: nowrap; }
+.msg-menu button:hover { background: var(--accent-bg); color: var(--fg-1); }
 
 .rr-new { position: absolute; left: 50%; transform: translateX(-50%); bottom: 112px; z-index: 5; display: inline-flex; gap: 6px; align-items: center; border: 0; border-radius: 14px; padding: 5px 12px; background: var(--accent); color: #fff; font-size: 12px; cursor: pointer; box-shadow: var(--shadow-pop); }
 .rr-typing { height: 22px; display: flex; gap: 6px; align-items: center; padding: 0 18px; font-size: 11.5px; color: var(--fg-2); }

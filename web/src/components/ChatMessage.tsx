@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { agentOf, colorOf, KIND_META, Msg, Roster, timeOf } from "../lib/agents";
 import { isNum, money, pct, titleCase } from "../lib/format";
 import { AgentAvatar } from "./AgentAvatar";
@@ -36,6 +36,23 @@ export function ChatMessage({ m, roster, grouped, byMid, onAgent, onCompany, onS
   selected?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [menuUp, setMenuUp] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // near the bottom of the feed the menu opens upward instead of being cut off
+  const toggleMenu = () => {
+    const el = menuRef.current, feed = el?.closest(".rr-msgs");
+    if (el && feed && !menu) setMenuUp(feed.getBoundingClientRect().bottom - el.getBoundingClientRect().bottom < 120);
+    setMenu(!menu);
+  };
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenu(false); };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setMenu(false);
+    document.addEventListener("mousedown", close);
+    window.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", close); window.removeEventListener("keydown", esc); };
+  }, [menu]);
   const me = m.sender === "YOU";
   const a = agentOf(roster, m.sender);
   const color = me ? roster.user.color : colorOf(roster, m.sender);
@@ -43,12 +60,30 @@ export function ChatMessage({ m, roster, grouped, byMid, onAgent, onCompany, onS
   const d = m.data as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   const quoted = m.kind === "reply" && m.refs[0] ? byMid.get(m.refs[0]) : undefined;
   const ev = (d.evidence as { id: string; source: string; title: string; url: string; date: string }[] | undefined) ?? [];
+  // the message's actions: icon buttons in the header line, or a small menu in the gutter of a
+  // follow-on message - never floating over the text
+  const actions = [
+    !me && onReply && m.sender !== "OPS-00" ? { icon: "reply", label: `Reply to ${m.sender}`, run: () => onReply(m) } : null,
+    { icon: "info", label: "Details: the data it carried and what it refers to", run: () => onSelect(m) },
+    onCopy ? { icon: "copy", label: "Copy the text", run: () => onCopy(m) } : null,
+    m.company ? { icon: "filter", label: `Show only ${m.company}`, run: () => onCompany(m.company!) } : null,
+  ].filter(Boolean) as { icon: string; label: string; run: () => void }[];
   return (
     <div className={`msg k-${m.kind} ${grouped ? "grouped" : ""} ${me ? "mine" : ""} ${m.to === "YOU" ? "tome" : ""} ${selected ? "sel" : ""}`}
       style={{ ["--tc" as string]: color }}>
       <div className="msg-av">
         {!grouped && (me ? <AgentAvatar role="user" color={color} size={34} /> : <button className="av-btn" onClick={(e) => { e.stopPropagation(); onAgent(m.sender); }}><AgentAvatar role={a?.role ?? "system"} color={color} size={34} /></button>)}
-        {grouped && <span className="msg-time-g">{timeOf(m.ts).slice(0, 5)}</span>}
+        {grouped && (
+          <div className="msg-gut" ref={menuRef}>
+            <span className="msg-time-g">{timeOf(m.ts).slice(0, 5)}</span>
+            <button className={`msg-more ${menu ? "on" : ""}`} onClick={(e) => { e.stopPropagation(); toggleMenu(); }} title="Message actions" aria-haspopup="menu" aria-expanded={menu}><Icon name="ellipsis" className="xs" /></button>
+            {menu && (
+              <div className={`msg-menu ${menuUp ? "up" : ""}`} role="menu">
+                {actions.map((x) => <button key={x.icon} role="menuitem" onClick={() => { setMenu(false); x.run(); }}><Icon name={x.icon} className="xs" />{x.label}</button>)}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <div className="msg-b">
         {!grouped && (
@@ -58,6 +93,9 @@ export function ChatMessage({ m, roster, grouped, byMid, onAgent, onCompany, onS
             {m.kind !== "user" && <span className="msg-kchip" style={{ color: k.color }}><Icon name={k.icon} className="xs" />{k.label}</span>}
             {d.llm && <span className="tag hm xs" title="Written by the agent's LLM from its latest research">AI</span>}
             <span className="time">{timeOf(m.ts)}</span>
+            <span className="msg-acts" role="toolbar" aria-label="Message actions">
+              {actions.map((x) => <button key={x.icon} onClick={(e) => { e.stopPropagation(); x.run(); }} title={x.label} aria-label={x.label}><Icon name={x.icon} className="xs" /></button>)}
+            </span>
           </div>
         )}
         {quoted && (
@@ -102,12 +140,6 @@ export function ChatMessage({ m, roster, grouped, byMid, onAgent, onCompany, onS
             ))}
           </div>
         )}
-      </div>
-      <div className="msg-acts" role="toolbar" aria-label="Message actions">
-        {!me && onReply && m.sender !== "OPS-00" && <button onClick={() => onReply(m)} title={`Reply to ${m.sender}`}><Icon name="reply" className="xs" />Reply</button>}
-        <button onClick={() => onSelect(m)} title="Details: data carried and what it refers to"><Icon name="info" className="xs" />Details</button>
-        {onCopy && <button onClick={() => onCopy(m)} title="Copy the text"><Icon name="copy" className="xs" /></button>}
-        {m.company && <button onClick={() => onCompany(m.company!)} title={`Only ${m.company}`}><Icon name="filter" className="xs" /></button>}
       </div>
     </div>
   );

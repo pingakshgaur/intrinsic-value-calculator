@@ -8,8 +8,7 @@ import { bollinger, ema, heikinAshi, macd, rsi, sma, vwap } from "../lib/indicat
 import { ThemeColors, themeColors, useTheme } from "../lib/theme";
 import { isNum } from "../lib/format";
 import { Icon } from "./ui";
-import { exportCanvas } from "../lib/pdf";
-import { useApp } from "./workbenchContext";
+import { ExportButton } from "./ExportButton";
 
 // Lightweight Charts draws timestamps as UTC; shifting by +5:30 shows the
 // axis in Indian market time whatever the viewer's own time zone is.
@@ -115,7 +114,6 @@ export function TradingChart({ bars, levels = [], resetKey, intraday, ticker, he
   title?: string;
 }) {
   const theme = useTheme();
-  const app = useApp();
   const cols = useMemo(() => themeColors(), [theme]); // eslint-disable-line react-hooks/exhaustive-deps
   const [prefs, setPrefs] = usePrefs();
   const [tool, setTool] = useState<Tool>("cursor");
@@ -652,7 +650,7 @@ export function TradingChart({ bars, levels = [], resetKey, intraday, ticker, he
         <button className="tc-btn icon" title={`Remove all drawings (${drawings.length})`} disabled={!drawings.length} onClick={() => setDrawings(() => [])}><Icon name="trash" className="sm" /></button>
         <button className="tc-btn icon" title="Reset view" onClick={reset}><Icon name="screen-normal" className="sm" /></button>
         <button className="tc-btn icon" title="Save as image" onClick={snapshot}><Icon name="device-camera" className="sm" /></button>
-        <button className="tc-btn icon" title="Export to PDF" onClick={async () => { const out = await compose(); if (out) { await exportCanvas(out, `${title ?? ticker} chart`, resetKey.split("|")[1]); app.toast("Chart saved as PDF", "ok"); } }}><Icon name="file-pdf" className="sm" /></button>
+        <ExportButton title={`${title ?? ticker} chart`} canvas={compose} className="tc-btn icon" />
         <button className="tc-btn icon" title="Fullscreen" onClick={fullscreen}><Icon name={document.fullscreenElement ? "screen-normal" : "screen-full"} className="sm" /></button>
       </div>
       <div className="tc-body">
@@ -730,7 +728,6 @@ export function TradingChart({ bars, levels = [], resetKey, intraday, ticker, he
               <button onClick={() => { setPrefs({ tooltip: !prefs.tooltip }); setMenu(null); }}><Icon name={prefs.tooltip ? "check" : "blank"} className="sm" />Hover panel</button>
               <hr />
               <button onClick={() => { snapshot(); setMenu(null); }}><Icon name="device-camera" className="sm" />Save chart as image</button>
-              <button onClick={async () => { setMenu(null); const out = await compose(); if (out) await exportCanvas(out, `${title ?? ticker} chart`); }}><Icon name="file-pdf" className="sm" />Export chart to PDF</button>
               <button onClick={() => { fullscreen(); setMenu(null); }}><Icon name="screen-full" className="sm" />Fullscreen</button>
             </ContextMenu>
           )}

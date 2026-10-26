@@ -2,7 +2,10 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Area, Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useCharts, useDownloads, useEnsemble, useExcluded, useHybridDetail, useMetrics, useValuation } from "../lib/hooks";
-import { Valuation } from "../lib/api";
+import { Metrics, Valuation } from "../lib/api";
+import { computeMetrics } from "../lib/metrics";
+import { useScope } from "../lib/scope";
+import { ScopeNote } from "../components/ScopePicker";
 import { ago, bytes, isNum, money, pct, pctUnits, shortName, slug, titleCase } from "../lib/format";
 import { HM_COLOR, LENSES, LENS_COLOR, LENS_NAME, SERIES } from "../lib/labels";
 import { Empty, Icon, PageHeader, Panel, QueryView, Tabs, Tip } from "../components/ui";
@@ -16,11 +19,16 @@ export function Performance() {
   const [params, setParams] = useSearchParams();
   const tab = (params.get("tab") as Tab) || "board";
   const q = useValuation();
+  const scope = useScope();
   const setTab = (t: Tab) => { const p = new URLSearchParams(params); p.set("tab", t); setParams(p, { replace: true }); };
+  // a watchlist in focus: its companies' rows, and the metrics recomputed from them
+  const scoped = useMemo<Valuation | undefined>(() => (q.data && scope.list ? { ...q.data, rows: q.data.rows.filter((r) => scope.has({ company: r.company })) } : q.data), [q.data, scope]);
+  const allCos = q.data ? new Set(q.data.rows.map((r) => r.company)).size : 0;
+  const cos = scoped ? new Set(scoped.rows.map((r) => r.company)).size : 0;
   return (
     <div className="page">
       <PageHeader crumbs={[{ label: "Models & data" }, { label: "Model Performance" }]} title="Model Performance"
-        sub={q.data?.available ? `${new Set(q.data.rows.map((r) => r.company)).size} companies · ${q.data.models.length} models · report ${ago(q.data.updated)} · scored against the 1-May price` : "Every model, every financial year, scored against the market"}
+        sub={q.data?.available ? `${cos} companies · ${q.data.models.length} models · report ${ago(q.data.updated)} · scored against the 1-May price` : "Every model, every financial year, scored against the market"}
         actions={<><Link to="/operations" className="btn sec"><Icon name="settings" className="sm" />Run options</Link><RunButton kind="valuation" label="Run valuation report" icon="graph" /></>} />
       <Tabs<Tab> value={tab} onChange={setTab} tabs={[
         { id: "board", label: "Leaderboard", icon: "list-ordered" },
@@ -31,28 +39,34 @@ export function Performance() {
         { id: "excluded", label: "Left out", icon: "exclude" },
         { id: "files", label: "Files", icon: "files" },
       ]} />
+      {q.data?.available && <ScopeNote shown={cos} total={allCos} />}
       <QueryView q={q} rows={10}>
-        {(d) => !d.available && ["explore", "hybrid", "ensemble"].includes(tab)
+        {(all) => { const d = scoped ?? all; return scope.list && d.available && !d.rows.length && tab !== "charts" && tab !== "files"
+          ? <Panel><Empty icon="library" title={`No company on “${scope.list.name}” is in the valuation report`} action={<button className="btn sec" onClick={() => scope.set(null)}>Show every company</button>}>Add them to Coverage on the Universe page, then run the valuation report.</Empty></Panel>
+          : !d.available && ["explore", "hybrid", "ensemble"].includes(tab)
           ? <Panel><Empty icon="graph-line" title="No valuation report yet" action={<RunButton kind="valuation" label="Run valuation report" icon="graph" />}>The report values every company for every year with every model, including the HYBRID MODEL.</Empty></Panel>
           : <>
-            {tab === "board" && <Board />}
+            {tab === "board" && <Board scoped={scope.list && d.available ? d : null} />}
             {tab === "explore" && <Explore d={d} />}
             {tab === "hybrid" && <HybridDetail d={d} />}
             {tab === "ensemble" && <EnsembleDetail d={d} />}
             {tab === "charts" && <Gallery />}
             {tab === "excluded" && <Excluded />}
             {tab === "files" && <Files />}
-          </>}
+          </>; }}
       </QueryView>
     </div>
   );
 }
 
-function Board() {
+function Board({ scoped }: { scoped: Valuation | null }) {
   const q = useMetrics();
+  const local = useMemo(() => (scoped ? computeMetrics(scoped.rows, scoped.models) : null), [scoped]);
   return (
     <QueryView q={q}>
-      {(m) => {
+      {(server) => {
+        // a watchlist in focus: the same tables, recomputed for its companies
+        const m: Pick<Metrics, "overall" | "by_year" | "by_sector" | "win_rate" | "updated"> = local ? { ...local, updated: server.updated } : server;
         if (!m.overall.length) return <Panel><Empty icon="target" title="No accuracy metrics yet" action={<RunButton kind="valuation" label="Run valuation report" icon="graph" />}>A valuation run with charts switched on writes them.</Empty></Panel>;
         const models = m.overall.map((r) => String(r.Model));
         const years = [...new Set(m.by_year.map((r) => String(r["Financial Year"])))];
@@ -274,16 +288,17 @@ function Gallery() {
 
 function Excluded() {
   const q = useExcluded();
+  const scope = useScope();
   return (
     <QueryView q={q}>
-      {(d) => !d.rows.length ? <Panel><Empty icon="pass" title="Every company was used">Nobody was left out of the last report for missing data.</Empty></Panel> : (
+      {(all) => { const d = { ...all, rows: all.rows.filter((r) => scope.has({ company: String(r["Company name"] ?? "") })) }; return !d.rows.length ? <Panel><Empty icon="pass" title="Every company was used">Nobody was left out of the last report for missing data.</Empty></Panel> : (
         <Panel flush>
           <table className="dg">
             <thead><tr><th>Company</th><th>Problem</th><th>What went wrong</th><th>What you can do</th></tr></thead>
             <tbody>{d.rows.map((r, i) => <tr key={i}><td className="strong">{r["Company name"]}</td><td><span className="tag warn">{r["Type of problem"]}</span></td><td style={{ whiteSpace: "normal" }} className="small">{r["In plain words, what went wrong"]}</td><td style={{ whiteSpace: "normal" }} className="small muted">{r["What you can do about it"]}</td></tr>)}</tbody>
           </table>
         </Panel>
-      )}
+      ); }}
     </QueryView>
   );
 }

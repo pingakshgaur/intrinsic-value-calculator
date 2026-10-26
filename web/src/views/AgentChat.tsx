@@ -5,6 +5,7 @@ import {
   agentOf, colorOf, dmName, isDm, Kind, KIND_META, Msg, Roster, timeOf, useAgentRuns, useChannelStats, useLiveFeed, useRoster, workforceSize,
 } from "../lib/agents";
 import { ago } from "../lib/format";
+import { useScope } from "../lib/scope";
 import { chime } from "../lib/notify";
 import { AgentAvatar } from "../components/AgentAvatar";
 import { AgentProfile } from "../components/AgentProfile";
@@ -89,7 +90,10 @@ function Room({ roster }: { roster: Roster }) {
   const app = useApp();
   ch.setLive(!!feed.live?.active);
   const [side, setSide] = useState<Side>(() => (window.innerWidth >= 1500 ? { type: "channel" } : null));
-  const [company, setCompany] = useState<string>("");
+  const scope = useScope();
+  // "@list": only messages about the focused watchlist's companies (and general chat)
+  const [company, setCompany] = useState<string>(() => (scope.list ? "@list" : ""));
+  useEffect(() => { setCompany((c) => (scope.list ? (c === "" ? "@list" : c) : c === "@list" ? "" : c)); }, [scope.list]);
   const [kinds, setKinds] = useState<Set<Kind>>(new Set());
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -137,8 +141,9 @@ function Room({ roster }: { roster: Roster }) {
   const members = meta ? meta.members : dmPeers;
   const shown = useMemo(() => {
     const f = find.trim().toLowerCase();
-    return ch.msgs.filter((m) => (!company || m.company === company) && (!kinds.size || kinds.has(m.kind)) && (!f || m.text.toLowerCase().includes(f) || m.sender.toLowerCase().includes(f)));
-  }, [ch.msgs, company, kinds, find]);
+    const onCo = (m: Msg) => !company || (company === "@list" ? !m.company || scope.has({ company: m.company }) : m.company === company);
+    return ch.msgs.filter((m) => onCo(m) && (!kinds.size || kinds.has(m.kind)) && (!f || m.text.toLowerCase().includes(f) || m.sender.toLowerCase().includes(f)));
+  }, [ch.msgs, company, kinds, find, scope]);
   const companies = useMemo(() => [...new Set(ch.msgs.map((m) => m.company).filter(Boolean) as string[])].sort(), [ch.msgs]);
   const byMid = useMemo(() => new Map(feed.messages.concat(ch.msgs).map((m) => [m.mid, m])), [feed.messages, ch.msgs]);
   const dms = Object.keys(counts).filter(isDm).sort((a, b) => (counts[b].last ?? 0) - (counts[a].last ?? 0));
@@ -286,7 +291,9 @@ function Room({ roster }: { roster: Roster }) {
           <div className="rr-tools">
             <div className="search sm"><Icon name="search" /><input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Search" /></div>
             <select className="sel sm" value={company} onChange={(e) => setCompany(e.target.value)} style={{ maxWidth: 170 }}>
-              <option value="">All companies</option>{companies.map((c) => <option key={c}>{c}</option>)}
+              <option value="">All companies</option>
+              {scope.list && <option value="@list">On {scope.list.name}</option>}
+              {companies.map((c) => <option key={c}>{c}</option>)}
             </select>
             <Popover trigger={(o, toggle) => <button className={`ibtn ${o || kinds.size ? "on" : ""}`} onClick={toggle} title="Filter by kind"><Icon name="filter" /></button>}>
               {() => (

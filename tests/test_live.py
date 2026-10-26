@@ -39,6 +39,7 @@ def isolated(tmp_path, monkeypatch):
     for mod in (L, learning):
         monkeypatch.setattr(mod, "LIVE", live)
         monkeypatch.setattr(mod, "WATCHLIST", live / "watchlist.json")
+        monkeypatch.setattr(mod, "WATCHLISTS", live / "watchlists.json")
     monkeypatch.setattr(L, "SETTINGS", live / "tracker.json")
     monkeypatch.setattr(L, "DB", live / "market.db")
     monkeypatch.setattr(learning, "UNIVERSE_CSV", live / "learning_universe.csv")
@@ -262,3 +263,60 @@ def test_autostart_settings_and_start(monkeypatch, isolated):
     job, why = A.start_now(free)
     assert why == "started" and free.started == [("agents", {"quick": False, "no_llm": False, "auto": "startup"})]
     assert posted and "full run" in posted[0]
+
+
+def test_watchlist_libraries(monkeypatch):
+    """Several named watchlists: migration, create/edit/copy/delete, per-list companies, shared alerts."""
+    monkeypatch.setattr(L.TRACKER, "poke", lambda: None)
+    L.LIVE.mkdir(parents=True, exist_ok=True)
+    # the single watchlist of earlier versions becomes "My watchlist"
+    L.WATCHLIST.write_text(json.dumps([{"ticker": "ALPHA.NS", "name": "Alpha Ltd", "sector": "Banks", "added": 1.0,
+                                        "added_price": 10.0, "alert_below": 9.0, "alert_above": None, "note": "old"}]), encoding="utf-8")
+    lib = L.watchlists()
+    assert [x["name"] for x in lib["lists"]] == ["My watchlist"] and lib["lists"][0]["tickers"] == ["ALPHA.NS"]
+    assert L.watchlist()[0]["alert_below"] == 9.0
+
+    it = L.create_list({"name": "IT ideas", "description": "software", "tickers": ["BETA.NS", {"ticker": "GAMMA.NS", "name": "Gamma Ltd"}]})
+    assert it["id"] == "it-ideas" and it["tickers"] == ["BETA.NS", "GAMMA.NS"]
+    assert L.create_list({"name": "IT ideas"})["id"] == "it-ideas-2"      # unique ids
+    with pytest.raises(ValueError):
+        L.create_list({"name": "  "})
+    with pytest.raises(ValueError):
+        L.update_list("it-ideas", {"color": "red"})
+
+    # a company on two lists is tracked once; alerts and notes are shared
+    L.add("ALPHA.NS", list_id="it-ideas")
+    assert [w["ticker"] for w in L.watchlist()] == ["ALPHA.NS", "BETA.NS", "GAMMA.NS"]
+    L.update("ALPHA.NS", {"note": "shared"})
+    t = L.tracked("it-ideas")
+    assert t["list"]["name"] == "IT ideas" and {w["ticker"] for w in t["items"]} == {"BETA.NS", "GAMMA.NS", "ALPHA.NS"}
+    assert next(w for w in t["items"] if w["ticker"] == "ALPHA.NS")["note"] == "shared"
+    assert set(next(w for w in t["items"] if w["ticker"] == "ALPHA.NS")["lists"]) == {"my-watchlist", "it-ideas"}
+
+    # off one list only; off its last list -> no longer tracked
+    L.remove("ALPHA.NS", "it-ideas")
+    assert "ALPHA.NS" not in L.tracked("it-ideas")["list"]["tickers"] and any(w["ticker"] == "ALPHA.NS" for w in L.watchlist())
+    L.remove("GAMMA.NS", "it-ideas")
+    assert all(w["ticker"] != "GAMMA.NS" for w in L.watchlist())
+
+    edited = L.update_list("it-ideas", {"name": "Software", "description": "", "color": "#112233", "tickers": ["BETA.NS"]})
+    assert edited["name"] == "Software" and edited["id"] == "it-ideas" and edited["color"] == "#112233"
+    copy = L.duplicate_list("it-ideas")
+    assert copy["name"] == "Software (copy)" and copy["tickers"] == ["BETA.NS"]
+
+    L.delete_list("it-ideas-2")
+    L.delete_list(copy["id"])
+    L.delete_list("it-ideas")
+    assert [x["id"] for x in L.watchlists()["lists"]] == ["my-watchlist"]
+    with pytest.raises(ValueError):
+        L.delete_list("my-watchlist")  # the last one stays
+    with pytest.raises(KeyError):
+        L.tracked("nope")
+
+    # the tracking limit counts different companies across every list
+    monkeypatch.setattr(L, "MAX_TRACKED", 2)
+    L.add("BETA.NS")
+    with pytest.raises(ValueError):
+        L.add("GAMMA.NS")
+    # the learning set reads every list
+    assert {w["ticker"] for w in learning._watchlist()} == {"ALPHA.NS", "BETA.NS"}

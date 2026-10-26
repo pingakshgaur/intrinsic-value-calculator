@@ -2,8 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useIntel, useJobs, useMarket, useStatus } from "../lib/hooks";
 import { useWatchlist } from "../lib/live";
+import { ScopeProvider } from "../lib/scope";
+import { ScopePicker } from "./ScopePicker";
 import { setTheme, useTheme } from "../lib/theme";
 import { ago, isNum, num, pct } from "../lib/format";
+import { Glossary } from "./Glossary";
 import { CommandPalette } from "./CommandPalette";
 import { Notifications } from "./Notifications";
 import { RunMonitor } from "./JobLog";
@@ -14,7 +17,7 @@ const NAV = [
   { group: "Analysis", items: [
     { to: "/", icon: "pulse", label: "Command Center", end: true },
     { to: "/markets", icon: "graph", label: "Markets", badge: "LIVE" },
-    { to: "/watchlist", icon: "eye", label: "Watchlist" },
+    { to: "/watchlist", icon: "eye", label: "Watchlists" },
     { to: "/coverage", icon: "table", label: "Coverage" },
     { to: "/studio", icon: "beaker", label: "HYBRID MODEL Studio" },
   ] },
@@ -52,19 +55,6 @@ export function jobTitle(kind: string, opts: Record<string, unknown> | null | un
   if (kind === "learn") return opts?.retrain ? "Learning feed + retrain" : opts?.auto ? "Daily learning feed" : "Learning feed";
   return JOB_TITLE[kind] ?? kind;
 }
-
-const GLOSSARY: [string, string][] = [
-  ["Intrinsic value", "What the business is estimated to be worth from its published accounts, as opposed to what people are paying for the shares today. A gap means either the market knows something the accounts do not, or the shares are mispriced — the app does not say which."],
-  ["HYBRID MODEL", "The headline value: six lenses (cash flow, earnings power, asset, market, conservative, learning), each calibrated against its own earlier misses, blended by company type, adjusted for quality and governance, then run through bull, base and bear scenarios. Every constant is editable in the Studio."],
-  ["Growth-credibility gate", "Growth is only paid for when returns on capital earn it. If too much of the cash-flow lens comes from future growth rather than today's earning power, the lens is cut back; a wider moat allows more."],
-  ["Calibration", "Each lens's typical miss against the 1-May price in earlier years is removed, and lenses that have priced well count for more. A year never learns from itself."],
-  ["Confidence", "The modelled chance the price lands within 20% of the value, from the lenses' disagreement — blended, after research, with evidence coverage, validation and the team's agreement."],
-  ["Buy-below", "The HYBRID MODEL value less a margin of safety that widens as confidence falls and red flags rise. A research reference point, not an instruction."],
-  ["Ensemble", "The calculator's earlier blend (formerly “Hybrid”): improved versions of every model weighted by past accuracy. Its components feed the HYBRID MODEL."],
-  ["Comparison price", "Everything is scored against the close nearest 1 May after each financial year — a month after the accounts appear — so nothing can peek at information it should not have had."],
-  ["The asterisk", "At least one input was estimated from the company's own history or its sector rather than read from a published statement."],
-  ["A word of caution", "Every number here is an estimate from past accounts and public information. Methods disagree for good reasons and can all be wrong at once. Treat the output as a starting point for your own research, not a recommendation."],
-];
 
 function ThemeToggle() {
   const theme = useTheme();
@@ -131,12 +121,13 @@ export function Shell() {
   const wl = useWatchlist();
   const tracker = wl.data?.tracker;
   const keys = status.data?.keys ?? {};
-  const llm = ["GROQ_API_KEY", "GEMINI_API_KEY", "NVIDIA_API_KEY"].filter((k) => keys[k]).length;
+  const llm = status.data?.llm ?? { ready: ["GROQ_API_KEY", "GEMINI_API_KEY", "NVIDIA_API_KEY"].filter((k) => keys[k]).length, total: 3, keys: 0 };
   const lastJob = jobs.data?.[0];
   const offline = status.isError;
 
   return (
     <AppContext.Provider value={ctx}>
+      <ScopeProvider>
       <div className={`frame ${collapsed || narrow ? "collapsed" : ""}`}>
         <aside className="sidebar">
           <div className="sb-brand">
@@ -162,7 +153,7 @@ export function Shell() {
           <div className="sb-foot">
             <SystemStatus rows={[
               { k: "Server", v: offline ? "offline" : "local", tone: offline ? "bad" : "ok" },
-              { k: "AI providers", v: `${llm}/3`, tone: llm ? "ok" : "" },
+              { k: "AI providers", v: `${llm.ready}/${llm.total}${llm.keys > llm.ready ? ` · ${llm.keys} keys` : ""}`, tone: llm.ready ? "ok" : "" },
               { k: "Report", v: ago(status.data?.valuation_updated), tone: "" },
               { k: "Research", v: ago(status.data?.intel_updated), tone: "" },
               { k: "Tracker", v: !tracker ? "—" : tracker.paused ? "paused" : `${wl.data?.items.length ?? 0} live`, title: tracker?.error ?? undefined,
@@ -193,6 +184,7 @@ export function Shell() {
           </div>
           <div className="top-tools">
             <ThemeToggle />
+            <ScopePicker />
             <button className="cmdk" onClick={() => setPalette(true)}><Icon name="search" className="sm" /><span>Search companies, actions…</span><kbd>Ctrl K</kbd></button>
             <Notifications />
             <button className="tool" title="Glossary (?)" onClick={() => setGlossary(true)}><Icon name="question" /></button>
@@ -233,10 +225,7 @@ export function Shell() {
       )}
       {glossary && (
         <Drawer title="Glossary" icon="book" onClose={() => setGlossary(false)}>
-          {GLOSSARY.map(([t, d]) => (
-            <div key={t}><div className="strong" style={{ marginBottom: 3 }}>{t}</div><p className="muted small" style={{ lineHeight: 1.6 }}>{d}</p></div>
-          ))}
-          <div className="xs faint"><kbd>Ctrl K</kbd> search · <kbd>Alt 1–9</kbd> pages · <kbd>Ctrl \</kbd> sidebar · <kbd>?</kbd> glossary · <kbd>↑ ↓</kbd> rows in grids</div>
+          <Glossary onNavigate={() => setGlossary(false)} />
         </Drawer>
       )}
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
@@ -247,6 +236,7 @@ export function Shell() {
           </div>
         ))}
       </div>
+      </ScopeProvider>
     </AppContext.Provider>
   );
 }

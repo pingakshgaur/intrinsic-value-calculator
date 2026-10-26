@@ -488,7 +488,7 @@ function Network({ roster }: { roster: Roster }) {
   }, [fit, live, selEdge]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!menu) return;
-    const close = (e: PointerEvent) => { if (!(e.target as HTMLElement).closest(".tc-menu")) setMenu(null); };
+    const close = (e: PointerEvent) => { if (!(e.target instanceof Element && e.target.closest(".tc-menu"))) setMenu(null); };
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, [menu]);

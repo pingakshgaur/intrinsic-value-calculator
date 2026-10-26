@@ -59,6 +59,7 @@ export interface Status {
   intel_updated: Num;
   companies: number;
   keys: Record<string, boolean>;
+  llm?: { ready: number; total: number; keys: number };
   active_job: JobSummary | null;
   server_time: number;
 }
@@ -355,14 +356,29 @@ export interface ModelInfo {
   blurb: string;
 }
 
+export type LlmStyle = "openai" | "anthropic";
+export type LlmAuth = "bearer" | "x-api-key" | "api-key" | "none";
+export interface ProviderKey { env: string; set: boolean; masked: string }
+/** One AI provider (src/agents/llm_providers.py): how to reach it, its keys, its models. */
 export interface Provider {
   name: string;
+  label: string;
+  style: LlmStyle;
   base_url: string;
+  auth: LlmAuth;
+  header: string;
+  query: string;
+  enabled: boolean;
+  source: "settings" | "app" | "settings+app";
   key_env: string;
+  keys: ProviderKey[];
   has_key: boolean;
   models: Record<string, string>;
   limits: Record<string, number | null>;
+  preset?: string | null;
 }
+export interface ProviderPreset { name: string; label: string; style: LlmStyle; base_url: string; auth: LlmAuth; models: Record<string, string>; rpm: number; rpd: number; tpm: number; keys_url: string; note: string; query?: string }
+export interface ProvidersInfo { providers: Provider[]; routes: Record<string, string[]>; presets: ProviderPreset[]; styles: LlmStyle[]; auths: LlmAuth[] }
 
 export interface ModelTestResult {
   ok: boolean;
@@ -370,4 +386,5 @@ export interface ModelTestResult {
   seconds: number;
   reply?: string;
   error?: string | null;
+  key?: string;
 }

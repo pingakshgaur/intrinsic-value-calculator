@@ -25,5 +25,7 @@ uvicorn>=0.29             # serves the API and the built front end
 # --- Market intelligence agents and the HYBRID MODEL settings ---
 PyYAML>=6.0               # agent_settings.yaml
 feedparser>=6.0           # Google News RSS for the news agents
-# LLM providers (Groq, Gemini, NVIDIA) are called over plain HTTPS with
-# 'requests' above - no provider SDKs needed.
+# AI providers: OpenAI-compatible ones (Groq, Gemini, NVIDIA, OpenAI, Ollama...)
+# are called over plain HTTPS with 'requests' above; Anthropic (Claude) through
+# its official SDK.
+anthropic>=1.0

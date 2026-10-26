@@ -6,6 +6,9 @@ import { AgentAvatar } from "../components/AgentAvatar";
 import { AgentProfile } from "../components/AgentProfile";
 import { WorkforceControl } from "../components/WorkforceControl";
 import { Drawer, Empty, Icon, LabelBadge, PageHeader, Panel, QueryView } from "../components/ui";
+import { ScopeNote } from "../components/ScopePicker";
+import { useScope } from "../lib/scope";
+import { ResearchList } from "./WatchlistLibrary";
 
 const TEAM_ORDER = ["CMD", "NWS", "EQR", "IGR", "MAO", "IRV"];
 
@@ -24,6 +27,7 @@ function Overview({ roster }: { roster: Roster }) {
   const runs = useAgentRuns();
   const nav = useNavigate();
   const prof = useProfiles();
+  const scope = useScope();
   const [open, setOpen] = useState<{ cs: string; tab: "about" | "settings" } | null>(null);
   const active = !!feed.live?.active;
   const run = feed.live?.run;
@@ -34,6 +38,9 @@ function Overview({ roster }: { roster: Roster }) {
   const msgs = feed.messages.filter((m) => m.run === run?.id && m.channel !== "trace");
   const verdicts = msgs.filter((m) => m.kind === "verdict" && m.company);
   const flags = msgs.filter((m) => m.kind === "flag");
+  // a watchlist in focus: the run's output for its companies only
+  const inScope = (m: Msg) => !scope.list || (!!m.company && scope.has({ company: m.company }));
+  const myVerdicts = verdicts.filter(inScope), myFlags = flags.filter(inScope);
 
   return (
     <>
@@ -43,11 +50,13 @@ function Overview({ roster }: { roster: Roster }) {
           <span>{size.agents} agents · {size.teams} teams</span>
         </span>}
         actions={<>
+          {scope.list && <ResearchList list={scope.list} />}
           <WorkforceControl active={active} />
           <Link className="btn sec" to="/agents/network"><Icon name="type-hierarchy" className="sm" />{active ? "Watch live" : "Agent Network"}</Link>
           <Link className="btn sec" to="/agents/chat"><Icon name="comment-discussion" className="sm" />Research Room</Link>
         </>} />
 
+      {verdicts.length + flags.length > 0 && <ScopeNote shown={myVerdicts.length} total={verdicts.length} what="verdicts this run" />}
       <div className="band">
         <div>
           <div className="k">Run</div>
@@ -75,7 +84,7 @@ function Overview({ roster }: { roster: Roster }) {
         </Panel>
         <div className="col" style={{ gap: 14, minWidth: 0 }}>
           <Panel title="This run's output" meta={run ? `run #${run.id}` : undefined} flush>
-            <Highlights verdicts={verdicts} flags={flags} roster={roster} />
+            <Highlights verdicts={myVerdicts} flags={myFlags} roster={roster} />
           </Panel>
           <Panel title="Recent runs" flush>
             {(runs.data ?? []).length === 0 ? <Empty icon="history" title="No runs yet" /> : (

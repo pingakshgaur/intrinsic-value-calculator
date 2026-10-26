@@ -37,7 +37,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     const c: Cmd[] = [
       { id: "p-o", group: "Go to", label: "Command Center", icon: "pulse", hint: "Alt+1", run: go("/") },
       { id: "p-mk", group: "Go to", label: "Markets · live scanner and charts", icon: "graph", hint: "Alt+2", run: go("/markets") },
-      { id: "p-wl", group: "Go to", label: "Watchlist · live tracking", icon: "eye", hint: "Alt+3", run: go("/watchlist") },
+      { id: "p-wl", group: "Go to", label: "Watchlists · your lists, tracked live", icon: "eye", hint: "Alt+3", run: go("/watchlist") },
       { id: "p-r", group: "Go to", label: "Coverage", icon: "table", hint: "Alt+4", run: go("/coverage") },
       { id: "p-agents", group: "Go to", label: "Research workforce · overview of the agents and runs", icon: "organization", run: go("/agents") },
       { id: "p-net", group: "Go to", label: "Agent Network · live graph of the 23 agents", icon: "type-hierarchy", run: go("/agents/network") },

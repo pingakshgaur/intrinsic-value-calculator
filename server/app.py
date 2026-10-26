@@ -63,6 +63,17 @@ def _key_status():
     return {k: bool(os.environ.get(k) or f.get(k)) for k in KEY_NAMES}
 
 
+def _llm_status():
+    """How many AI providers are switched on and have a key (or need none)."""
+    from agents import llm_providers as LP
+
+    try:
+        ps = [p for p in LP.providers().values() if p["enabled"]]
+        return {"ready": sum(1 for p in ps if LP.keys(p)), "total": len(ps), "keys": sum(len(LP.keys(p)) for p in ps if p["auth"] != "none")}
+    except Exception:
+        return {"ready": 0, "total": 0, "keys": 0}
+
+
 @app.get("/api/status")
 def status():
     v = D.mtime(D.OUTPUT / "Intrinsic_Value_Data.csv")
@@ -75,6 +86,7 @@ def status():
         "intel_updated": D.mtime(latest),
         "companies": len(D.companies()),
         "keys": _key_status(),
+        "llm": _llm_status(),
         "active_job": act.summary() if act else None,
         "server_time": time.time(),
     }
@@ -288,8 +300,10 @@ def put_keys(body: Keys):
             cur[k] = v
         else:
             cur.pop(k, None)
-    lines = ["# Written by the web UI. Never commit this file.", *(f"{k}={cur[k]}" for k in KEY_NAMES if cur.get(k))]
-    ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    from agents import llm_providers as LP
+
+    # only the keys named here change; every other line of .env (extra keys, comments) is kept
+    LP.env_write({k: cur.get(k) for k in body.values}, ENV_FILE)
     return _key_status()
 
 
@@ -379,9 +393,9 @@ def llm_providers():
 
 
 @app.get("/api/llm/models")
-def llm_models(provider: str, refresh: bool = False):
+def llm_models(provider: str, refresh: bool = False, key: str | None = None):
     try:
-        return llm_api.list_models(provider, ENV_FILE, refresh)
+        return llm_api.list_models(provider, ENV_FILE, refresh, key)
     except KeyError as e:
         raise HTTPException(404, str(e).strip("'\""))
     except PermissionError as e:
@@ -393,16 +407,77 @@ def llm_models(provider: str, refresh: bool = False):
 class ModelTest(BaseModel):
     provider: str
     model: str
+    key: str | None = None
 
 
 @app.post("/api/llm/test")
 def llm_test(body: ModelTest):
     try:
-        return llm_api.test_model(body.provider, body.model, ENV_FILE)
+        return llm_api.test_model(body.provider, body.model, ENV_FILE, body.key)
     except KeyError as e:
         raise HTTPException(404, str(e).strip("'\""))
     except PermissionError as e:
         raise HTTPException(400, str(e))
+
+
+@app.put("/api/llm/providers/{name}")
+def llm_provider_save(name: str, body: dict):
+    """Add a provider or change its settings (label, dialect, URL, auth, models, limits, on/off)."""
+    from agents import llm_providers as LP
+
+    try:
+        LP.save(name, body)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, str(e))
+    return llm_api.providers(ENV_FILE)
+
+
+@app.delete("/api/llm/providers/{name}")
+def llm_provider_delete(name: str):
+    from agents import llm_providers as LP
+
+    LP.delete(name)
+    return llm_api.providers(ENV_FILE)
+
+
+class KeyAdd(BaseModel):
+    value: str
+
+
+@app.post("/api/llm/providers/{name}/keys")
+def llm_key_add(name: str, body: KeyAdd):
+    """Store one more key for a provider in .env (never sent back)."""
+    from agents import llm_providers as LP
+
+    try:
+        env = LP.add_key(name, body.value)
+    except KeyError:
+        raise HTTPException(404, f"no provider {name}")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"env": env, **llm_api.providers(ENV_FILE)}
+
+
+@app.delete("/api/llm/providers/{name}/keys/{env}")
+def llm_key_remove(name: str, env: str):
+    from agents import llm_providers as LP
+
+    try:
+        LP.remove_key(name, env)
+    except KeyError:
+        raise HTTPException(404, f"{name} has no key {env}")
+    return llm_api.providers(ENV_FILE)
+
+
+@app.post("/api/llm/providers/{name}/keys/{env}/first")
+def llm_key_first(name: str, env: str):
+    from agents import llm_providers as LP
+
+    try:
+        LP.promote_key(name, env)
+    except KeyError:
+        raise HTTPException(404, f"{name} has no key {env}")
+    return llm_api.providers(ENV_FILE)
 
 
 class Routes(BaseModel):
@@ -550,8 +625,12 @@ def live_sectors():
 
 
 @app.get("/api/watchlist")
-def get_watchlist():
-    return _live(live.tracked)
+def get_watchlist(list: str | None = None):
+    """One watchlist with live quotes (`list` = its id), or every company on any list."""
+    try:
+        return _live(live.tracked, list)
+    except KeyError as e:
+        raise HTTPException(404, str(e).strip("'\""))
 
 
 class WatchAdd(BaseModel):
@@ -559,12 +638,16 @@ class WatchAdd(BaseModel):
     name: str | None = None
     sector: str | None = None
     cap: str | None = None
+    list: str | None = None
 
 
 @app.post("/api/watchlist")
 def add_watch(body: WatchAdd):
-    _live(live.add, body.ticker, body.name, body.sector, body.cap)
-    return live.tracked()
+    try:
+        _live(live.add, body.ticker, body.name, body.sector, body.cap, body.list)
+    except KeyError as e:
+        raise HTTPException(404, str(e).strip("'\""))
+    return live.tracked(body.list)
 
 
 @app.patch("/api/watchlist/{ticker}")
@@ -573,9 +656,62 @@ def patch_watch(ticker: str, body: dict):
 
 
 @app.delete("/api/watchlist/{ticker}")
-def delete_watch(ticker: str):
-    _live(live.remove, ticker)
-    return live.tracked()
+def delete_watch(ticker: str, list: str | None = None):
+    """Off one watchlist (`list`), or off every list."""
+    _live(live.remove, ticker, list)
+    return live.tracked(list) if list else live.tracked()
+
+
+# ---------------------------------------------------------------- watchlist libraries
+@app.get("/api/watchlists")
+def get_watchlists():
+    return _live(live.watchlists)
+
+
+@app.post("/api/watchlists")
+def new_watchlist(body: dict):
+    """{name, description?, color?, tickers?: [ticker | {ticker, name, sector, cap}]}"""
+    return _live(live.create_list, body)
+
+
+@app.patch("/api/watchlists/{list_id}")
+def edit_watchlist(list_id: str, body: dict):
+    try:
+        return _live(live.update_list, list_id, body)
+    except KeyError as e:
+        raise HTTPException(404, str(e).strip("'\""))
+
+
+@app.delete("/api/watchlists/{list_id}")
+def drop_watchlist(list_id: str):
+    try:
+        return _live(live.delete_list, list_id)
+    except KeyError as e:
+        raise HTTPException(404, str(e).strip("'\""))
+
+
+@app.post("/api/watchlists/{list_id}/duplicate")
+def copy_watchlist(list_id: str, body: dict | None = None):
+    try:
+        return _live(live.duplicate_list, list_id, (body or {}).get("name"))
+    except KeyError as e:
+        raise HTTPException(404, str(e).strip("'\""))
+
+
+@app.post("/api/watchlists/{list_id}/companies")
+def add_many(list_id: str, body: dict):
+    """{tickers: [ticker | {ticker, name, sector, cap}]} - several companies at once; skips ones already on it."""
+    added, failed = 0, []
+    for t in (body.get("tickers") or [])[:200]:
+        d = t if isinstance(t, dict) else {"ticker": t}
+        try:
+            _live(live.add, d.get("ticker"), d.get("name"), d.get("sector"), d.get("cap"), list_id)
+            added += 1
+        except HTTPException as e:
+            failed.append(f"{d.get('ticker')}: {e.detail}")
+        except KeyError as e:
+            raise HTTPException(404, str(e).strip("'\""))
+    return {"added": added, "failed": failed, **live.watchlists()}
 
 
 @app.put("/api/live/tracker")

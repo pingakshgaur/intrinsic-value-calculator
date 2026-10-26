@@ -7,11 +7,15 @@ import { HM_COLOR, LABELS, LABEL_HEX, LEAD_SHORT, LENSES, LENS_COLOR, LENS_NAME,
 import { Diverge, Empty, Icon, LabelBadge, Meter, PageHeader, Panel, QueryView, RangeBar } from "../components/ui";
 import { Column, DataGrid, GridTools, useGridState } from "../components/DataGrid";
 import { RunButton } from "../components/RunButton";
+import { ExportButton } from "../components/ExportButton";
+import { useScope } from "../lib/scope";
+import { ScopeNote } from "../components/ScopePicker";
 
 const EXPORT_TITLE = "Coverage";
 
 export function Coverage() {
   const q = useIntel();
+  const scope = useScope();
   return (
     <div className="page fill">
       <QueryView q={q} rows={14}>
@@ -23,14 +27,22 @@ export function Coverage() {
                 Every company gets a HYBRID MODEL value with its range, confidence, red flags and the evidence behind each finding.
               </Empty></Panel>
             </>
-          ) : <Grid verdicts={d.verdicts} sub={`Run #${d.meta?.run_id} · ${d.meta?.mode} · ${isoWhen(d.meta?.started)}`} />
+          ) : scope.list && !d.verdicts.some((v) => scope.has({ ticker: v.ticker, company: v.company })) ? (
+            <>
+              <PageHeader crumbs={[{ label: "Analysis" }, { label: "Coverage" }]} title="Coverage" />
+              <ScopeNote shown={0} total={d.verdicts.length} />
+              <Panel><Empty icon="library" title={`No company on “${scope.list.name}” has been researched yet`} action={<button className="btn sec" onClick={() => scope.set(null)}>Show every company</button>}>
+                Open the list and use <b>Research this list</b>, or run research on the whole universe.
+              </Empty></Panel>
+            </>
+          ) : <Grid verdicts={scope.list ? d.verdicts.filter((v) => scope.has({ ticker: v.ticker, company: v.company })) : d.verdicts} total={d.verdicts.length} sub={`Run #${d.meta?.run_id} · ${d.meta?.mode} · ${isoWhen(d.meta?.started)}`} />
         }
       </QueryView>
     </div>
   );
 }
 
-function Grid({ verdicts, sub }: { verdicts: Verdict[]; sub: string }) {
+function Grid({ verdicts, total, sub }: { verdicts: Verdict[]; total: number; sub: string }) {
   const nav = useNavigate();
   const [params, setParams] = useSearchParams();
   const [text, setText] = useState("");
@@ -70,20 +82,17 @@ function Grid({ verdicts, sub }: { verdicts: Verdict[]; sub: string }) {
   const state = useGridState<Verdict>("coverage", columns, { key: "upside", asc: false });
   const sel = verdicts.find((v) => v.company === selected) ?? null;
 
-  const exportCsv = () => {
-    const head = ["Company", "Ticker", "Sector", "Label", "Price", "HYBRID MODEL", "Low", "High", "Upside", "Buy-below", "Confidence", "Red flags"];
-    const lines = rows.map((v) => [v.company, v.ticker, v.sector, v.label, v.price, v.expected_value, v.low, v.high, v.upside, v.buy_below, v.confidence, (v.red_flags ?? []).join(" | ")].map((x) => `"${String(x ?? "").replace(/"/g, '""')}"`).join(","));
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([[head.join(","), ...lines].join("\n")], { type: "text/csv" }));
-    a.download = "coverage.csv";
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
+  const exportTable = () => ({
+    head: ["Company", "Ticker", "Sector", "Label", "Price", "HYBRID MODEL", "Low", "High", "Upside", "Buy-below", "Confidence", "Red flags"],
+    rows: rows.map((v) => [v.company, v.ticker, v.sector, v.label, v.price, v.expected_value, v.low, v.high, v.upside, v.buy_below, v.confidence, (v.red_flags ?? []).join(" | ")]),
+    subtitle: sub,
+  });
 
   return (
     <>
       <PageHeader crumbs={[{ label: "Analysis" }, { label: "Coverage" }]} title="Coverage" sub={sub}
-        actions={<><button className="btn sec" onClick={exportCsv}><Icon name="desktop-download" className="sm" />Export</button><RunButton kind="agents" options={{ quick: true }} label="Quick sweep" icon="zap" secondary /><RunButton kind="agents" label="Run research" icon="rocket" /></>} />
+        actions={<><ExportButton title="Coverage" table={exportTable} label="Export data" className="btn sec" /><RunButton kind="agents" options={{ quick: true }} label="Quick sweep" icon="zap" secondary /><RunButton kind="agents" label="Run research" icon="rocket" /></>} />
+      <ScopeNote shown={verdicts.length} total={total} />
       <div className={`split ${sel ? "" : "closed"}`}>
         <section className="panel" style={{ minHeight: 0 }}>
           <div className="toolbar">

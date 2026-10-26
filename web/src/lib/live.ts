@@ -121,7 +121,25 @@ export interface WatchItem {
   note: string;
   quote: Quote | null;
   since_added: number | null;
+  /** the watchlists it is on */
+  lists?: string[];
 }
+
+/** One named watchlist in the library. */
+export interface WatchList {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  icon?: string;
+  pinned?: boolean;
+  created: number;
+  updated: number;
+  tickers: string[];
+  count: number;
+  companies: { ticker: string; name: string; sector: string }[];
+}
+export interface WatchLibrary { lists: WatchList[]; tracked: number; max_tracked: number; colors: string[] }
 
 export interface TrackerSettings { paused: boolean; poll_open: number; poll_closed: number; move_alert: number; retention_days: number }
 
@@ -224,12 +242,35 @@ export const useLiveSearch = (q: string) =>
 
 export const useSectors = () => useQuery({ queryKey: ["live-sectors"], queryFn: () => api.get<string[]>("/api/live/sectors"), staleTime: 600_000 });
 
-export const useWatchlist = () =>
+/** One watchlist with live quotes, or (no id) every company on any list. */
+export const useWatchlist = (listId?: string | null) =>
   useQuery({
-    queryKey: ["watchlist"],
-    queryFn: () => api.get<{ items: WatchItem[]; tracker: TrackerState }>("/api/watchlist"),
+    queryKey: ["watchlist", listId ?? "all"],
+    queryFn: () => api.get<{ items: WatchItem[]; tracker: TrackerState; list: WatchList | null }>(`/api/watchlist${listId ? `?list=${encodeURIComponent(listId)}` : ""}`),
     refetchInterval: (q) => (isOpen(q.state.data?.tracker.market) ? 10_000 : 60_000),
   });
+
+export const useWatchlists = () =>
+  useQuery({ queryKey: ["watchlists"], queryFn: () => api.get<WatchLibrary>("/api/watchlists"), staleTime: 5_000 });
+
+/** Create, edit, copy and delete watchlists; add many companies at once. */
+export function useWatchlistMutations() {
+  const qc = useQueryClient();
+  const done = () => {
+    qc.invalidateQueries({ queryKey: ["watchlists"] });
+    qc.invalidateQueries({ queryKey: ["watchlist"] });
+    qc.invalidateQueries({ queryKey: ["learning"] });
+  };
+  return {
+    create: useMutation({ mutationFn: (m: { name: string; description?: string; color?: string; tickers?: (string | { ticker: string; name?: string; sector?: string; cap?: string })[] }) => api.post<WatchList>("/api/watchlists", m), onSuccess: done }),
+    edit: useMutation({ mutationFn: ({ id, ...patch }: { id: string; name?: string; description?: string; color?: string; pinned?: boolean; tickers?: string[] }) => api.patch<WatchList>(`/api/watchlists/${encodeURIComponent(id)}`, patch), onSuccess: done }),
+    remove: useMutation({ mutationFn: (id: string) => api.del(`/api/watchlists/${encodeURIComponent(id)}`), onSuccess: done }),
+    duplicate: useMutation({ mutationFn: ({ id, name }: { id: string; name?: string }) => api.post<WatchList>(`/api/watchlists/${encodeURIComponent(id)}/duplicate`, { name }), onSuccess: done }),
+    /** take one company off one list (used by the list editor, which then refreshes once) */
+    removeOne: async (id: string, ticker: string) => { await api.del(`/api/watchlist/${encodeURIComponent(ticker)}?list=${encodeURIComponent(id)}`); done(); },
+    addMany: useMutation({ mutationFn: ({ id, tickers }: { id: string; tickers: (string | { ticker: string; name?: string; sector?: string; cap?: string })[] }) => api.post<{ added: number; failed: string[] }>(`/api/watchlists/${encodeURIComponent(id)}/companies`, { tickers }), onSuccess: done }),
+  };
+}
 
 export const useLiveAlerts = () =>
   useQuery({ queryKey: ["live-alerts"], queryFn: () => api.get<LiveAlert[]>("/api/live/alerts"), refetchInterval: 30_000, retry: 0 });
@@ -242,13 +283,18 @@ export function useWatchMutations() {
   const qc = useQueryClient();
   const done = () => {
     qc.invalidateQueries({ queryKey: ["watchlist"] });
+    qc.invalidateQueries({ queryKey: ["watchlists"] });
     qc.invalidateQueries({ queryKey: ["live-chart"] });
     qc.invalidateQueries({ queryKey: ["learning"] });
   };
   return {
-    add: useMutation({ mutationFn: (m: { ticker: string; name?: string; sector?: string; cap?: string }) => api.post("/api/watchlist", m), onSuccess: done }),
+    add: useMutation({ mutationFn: (m: { ticker: string; name?: string; sector?: string; cap?: string; list?: string | null }) => api.post("/api/watchlist", m), onSuccess: done }),
     update: useMutation({ mutationFn: ({ ticker, ...patch }: { ticker: string } & Record<string, unknown>) => api.patch(`/api/watchlist/${encodeURIComponent(ticker)}`, patch), onSuccess: done }),
-    remove: useMutation({ mutationFn: (ticker: string) => api.del(`/api/watchlist/${encodeURIComponent(ticker)}`), onSuccess: done }),
+    /** off one list (`{ticker, list}`) or off every list (a bare ticker) */
+    remove: useMutation({ mutationFn: (t: string | { ticker: string; list?: string | null }) => {
+      const { ticker, list } = typeof t === "string" ? { ticker: t, list: null } : t;
+      return api.del(`/api/watchlist/${encodeURIComponent(ticker)}${list ? `?list=${encodeURIComponent(list)}` : ""}`);
+    }, onSuccess: done }),
     tracker: useMutation({ mutationFn: (patch: Partial<TrackerSettings>) => api.put("/api/live/tracker", patch), onSuccess: done }),
     poll: useMutation({ mutationFn: () => api.post("/api/live/tracker/poll", {}), onSuccess: () => window.setTimeout(done, 2500) }),
   };

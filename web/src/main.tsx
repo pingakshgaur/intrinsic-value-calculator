@@ -21,7 +21,8 @@ import { Operations } from "./views/Operations";
 import { Universe } from "./views/Universe";
 import { Configuration } from "./views/Configuration";
 import { Markets } from "./views/Markets";
-import { Watchlist } from "./views/Watchlist";
+import { WatchlistDetail } from "./views/Watchlist";
+import { Watchlist } from "./views/WatchlistLibrary";
 import { Learning } from "./views/Learning";
 import { AgentChat } from "./views/AgentChat";
 import { AgentNetwork } from "./views/AgentNetwork";
@@ -47,6 +48,7 @@ const router = createBrowserRouter([
       { index: true, element: <CommandCenter /> },
       { path: "markets", element: <Markets /> },
       { path: "watchlist", element: <Watchlist /> },
+      { path: "watchlist/:id", element: <WatchlistDetail /> },
       { path: "learning", element: <Learning /> },
       { path: "agents/network", element: <AgentNetwork /> },
       { path: "agents/chat", element: <AgentChat /> },

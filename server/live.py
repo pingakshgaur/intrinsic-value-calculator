@@ -34,12 +34,15 @@ from server import data as D
 logging.getLogger("yfinance").setLevel(logging.CRITICAL)  # failed symbols are reported, not printed
 
 LIVE = D.DATA / "live"
-WATCHLIST = LIVE / "watchlist.json"
+WATCHLIST = LIVE / "watchlist.json"          # before watchlist libraries; migrated once
+WATCHLISTS = LIVE / "watchlists.json"
 SETTINGS = LIVE / "tracker.json"
 DB = LIVE / "market.db"
 IST = timezone(timedelta(hours=5, minutes=30))
 TICKER = re.compile(r"^[A-Za-z0-9&^._\-=]{1,25}$")
-MAX_TRACKED = 60
+MAX_TRACKED = 100   # companies across every watchlist (the tracker polls them all)
+MAX_LISTS = 50
+COLORS = ("#3994bc", "#86cf86", "#e0b97f", "#ad80d7", "#ef8773", "#4ec9b0", "#c586c0", "#d7ba7d", "#9cdcfe")
 LISTS = (("coverage", D.COMPANIES_CSV), ("training", D.DATA / "training_universe.csv"),
          ("training", D.DATA / "auto_training_universe.csv"))
 INDICES = [("NIFTY 50", "^NSEI"), ("SENSEX", "^BSESN"), ("NIFTY BANK", "^NSEBANK"), ("NIFTY IT", "^CNXIT"),
@@ -187,11 +190,147 @@ def save_settings(patch):
     return s
 
 
-_wl_lock = threading.Lock()
+_wl_lock = threading.RLock()
+
+# Watchlist libraries. One file holds every list and the companies on them:
+#   items  {ticker: {name, sector, cap, added, added_price, alerts, note}} - shared, because
+#          price alerts and notes belong to the company, whichever lists it is on
+#   lists  [{id, name, description, color, created, updated, tickers: [...]}]
+# The tracker follows every company on any list.
+
+
+def _slug(name, taken):
+    base = re.sub(r"[^a-z0-9]+", "-", (name or "list").lower()).strip("-")[:32] or "list"
+    sid, n = base, 2
+    while sid in taken:
+        sid, n = f"{base}-{n}", n + 1
+    return sid
+
+
+def _book():
+    """The whole library, migrating the single watchlist of earlier versions on first use."""
+    b = _read_json(WATCHLISTS, None)
+    if isinstance(b, dict) and isinstance(b.get("lists"), list) and isinstance(b.get("items"), dict):
+        b["lists"] = [x for x in b["lists"] if isinstance(x, dict) and x.get("id")]
+        return b
+    old = [w for w in _read_json(WATCHLIST, []) if isinstance(w, dict) and w.get("ticker")]
+    now = time.time()
+    b = {"version": 2, "items": {w["ticker"]: {k: v for k, v in w.items()} for w in old},
+         "lists": [{"id": "my-watchlist", "name": "My watchlist", "description": "The companies you follow day to day.",
+                    "color": COLORS[0], "created": min((w.get("added") or now for w in old), default=now), "updated": now,
+                    "tickers": [w["ticker"] for w in old]}]}
+    _write_json(WATCHLISTS, b)
+    return b
+
+
+def _save_book(b):
+    # drop companies no list holds any more (their minute bars stay in the database)
+    held = {t for x in b["lists"] for t in x["tickers"]}
+    b["items"] = {t: v for t, v in b["items"].items() if t in held}
+    _write_json(WATCHLISTS, b)
 
 
 def watchlist():
-    return [w for w in _read_json(WATCHLIST, []) if isinstance(w, dict) and w.get("ticker")]
+    """Every company on any watchlist, once each, in the order they were first listed."""
+    b = _book()
+    seen, out = set(), []
+    for x in b["lists"]:
+        for t in x["tickers"]:
+            if t not in seen and t in b["items"]:
+                seen.add(t)
+                out.append({"ticker": t, **b["items"][t]})
+    return out
+
+
+def _find_list(b, list_id):
+    hit = next((x for x in b["lists"] if x["id"] == list_id), None)
+    if not hit:
+        raise KeyError(f"no watchlist {list_id}")
+    return hit
+
+
+def _list_view(b, x):
+    return {k: x.get(k) for k in ("id", "name", "description", "color", "icon", "created", "updated", "pinned")} | {
+        "tickers": list(x["tickers"]), "count": len(x["tickers"]),
+        "companies": [{"ticker": t, "name": b["items"].get(t, {}).get("name", t), "sector": b["items"].get(t, {}).get("sector", "")} for t in x["tickers"]],
+    }
+
+
+def watchlists():
+    b = _book()
+    return {"lists": [_list_view(b, x) for x in b["lists"]], "tracked": len(watchlist()), "max_tracked": MAX_TRACKED, "colors": list(COLORS)}
+
+
+def _clean_meta(patch, current=None):
+    out = {}
+    if "name" in patch:
+        name = str(patch.get("name") or "").strip()[:60]
+        if not name:
+            raise ValueError("a watchlist needs a name")
+        out["name"] = name
+    if "description" in patch:
+        out["description"] = str(patch.get("description") or "").strip()[:400]
+    if "color" in patch:
+        c = str(patch.get("color") or "")
+        if not re.fullmatch(r"#[0-9a-fA-F]{6}", c):
+            raise ValueError("a colour is #rrggbb")
+        out["color"] = c
+    if "icon" in patch:
+        out["icon"] = re.sub(r"[^a-z0-9\-]", "", str(patch.get("icon") or ""))[:40]
+    if "pinned" in patch:
+        out["pinned"] = bool(patch.get("pinned"))
+    return out
+
+
+def create_list(patch):
+    with _wl_lock:
+        b = _book()
+        if len(b["lists"]) >= MAX_LISTS:
+            raise ValueError(f"up to {MAX_LISTS} watchlists")
+        meta = _clean_meta({"name": patch.get("name"), "description": patch.get("description", ""),
+                            "color": patch.get("color") or COLORS[len(b["lists"]) % len(COLORS)], **({"icon": patch["icon"]} if "icon" in patch else {})})
+        now = time.time()
+        x = {"id": _slug(meta["name"], {y["id"] for y in b["lists"]}), **meta, "created": now, "updated": now, "tickers": []}
+        b["lists"].append(x)
+        _save_book(b)
+    for t in patch.get("tickers") or []:
+        if isinstance(t, dict):
+            add(t.get("ticker"), t.get("name"), t.get("sector"), t.get("cap"), list_id=x["id"])
+        else:
+            add(t, list_id=x["id"])
+    return _list_view(_book(), _find_list(_book(), x["id"]))
+
+
+def update_list(list_id, patch):
+    with _wl_lock:
+        b = _book()
+        x = _find_list(b, list_id)
+        x.update(_clean_meta(patch, x))
+        if "tickers" in patch:  # a new order, same companies
+            order = [t for t in patch["tickers"] if t in x["tickers"]]
+            x["tickers"] = order + [t for t in x["tickers"] if t not in order]
+        x["updated"] = time.time()
+        _save_book(b)
+        return _list_view(b, x)
+
+
+def delete_list(list_id):
+    with _wl_lock:
+        b = _book()
+        _find_list(b, list_id)
+        if len(b["lists"]) <= 1:
+            raise ValueError("keep at least one watchlist - empty it instead")
+        b["lists"] = [x for x in b["lists"] if x["id"] != list_id]
+        _save_book(b)
+    TRACKER.poke()
+    return watchlists()
+
+
+def duplicate_list(list_id, name=None):
+    b = _book()
+    x = _find_list(b, list_id)
+    return create_list({"name": name or f"{x['name']} (copy)", "description": x.get("description", ""), "color": x.get("color"),
+                        "tickers": list(x["tickers"])})
 
 
 def universe():
@@ -531,11 +670,12 @@ class Tracker:
                 self._alerts(w, q, s)
         if changed:
             with _wl_lock:
-                cur = {x["ticker"]: x for x in watchlist()}
+                b = _book()
                 for w in wl:
-                    if w["ticker"] in cur and cur[w["ticker"]].get("added_price") is None:
-                        cur[w["ticker"]]["added_price"] = w.get("added_price")
-                _write_json(WATCHLIST, list(cur.values()))
+                    it = b["items"].get(w["ticker"])
+                    if it is not None and it.get("added_price") is None:
+                        it["added_price"] = w.get("added_price")
+                _save_book(b)
         self.last_poll, self.polls = now, self.polls + 1
 
     @staticmethod
@@ -593,40 +733,53 @@ class Tracker:
 TRACKER = Tracker()
 
 
-def tracked():
-    """The watchlist joined with the tracker's latest quotes."""
+def tracked(list_id=None):
+    """A watchlist (or every company on any list) joined with the tracker's latest quotes."""
+    b = _book()
+    if list_id:
+        x = _find_list(b, list_id)
+        rows = [{"ticker": t, **b["items"][t]} for t in x["tickers"] if t in b["items"]]
+    else:
+        rows = watchlist()
     out = []
-    for w in watchlist():
+    for w in rows:
         q = TRACKER.quotes.get(w["ticker"]) or {}
         since = (q["last"] / w["added_price"] - 1) if q.get("last") and w.get("added_price") else None
-        out.append({**w, "quote": q or None, "since_added": since})
-    return D.clean({"items": out, "tracker": TRACKER.state()})
+        lists = [y["id"] for y in b["lists"] if w["ticker"] in y["tickers"]]
+        out.append({**w, "quote": q or None, "since_added": since, "lists": lists})
+    view = _list_view(b, _find_list(b, list_id)) if list_id else None
+    return D.clean({"items": out, "tracker": TRACKER.state(), "list": view})
 
 
-def add(ticker, name=None, sector=None, cap=None):
+def add(ticker, name=None, sector=None, cap=None, list_id=None):
+    """Put a company on a watchlist (the first one when none is named)."""
     ticker = (ticker or "").strip()
     if not TICKER.match(ticker):
         raise ValueError("not a ticker symbol")
     with _wl_lock:
-        wl = watchlist()
-        if any(w["ticker"] == ticker for w in wl):
-            return wl
-        if len(wl) >= MAX_TRACKED:
-            raise ValueError(f"the watchlist holds up to {MAX_TRACKED} companies")
-        meta = universe().get(ticker) or {}
-        wl.append({"ticker": ticker, "name": (name or meta.get("name") or ticker).strip()[:120],
-                   "sector": (sector or meta.get("sector") or "Unclassified").strip()[:80],
-                   "cap": (cap or meta.get("cap") or "").strip()[:10], "added": time.time(),
-                   "added_price": None, "alert_below": None, "alert_above": None, "note": ""})
-        _write_json(WATCHLIST, wl)
+        b = _book()
+        x = _find_list(b, list_id) if list_id else b["lists"][0]
+        if ticker in x["tickers"]:
+            return watchlist()
+        if ticker not in b["items"]:
+            if len({t for y in b["lists"] for t in y["tickers"]}) >= MAX_TRACKED:
+                raise ValueError(f"the watchlists track up to {MAX_TRACKED} different companies")
+            meta = universe().get(ticker) or {}
+            b["items"][ticker] = {"name": (name or meta.get("name") or ticker).strip()[:120],
+                                  "sector": (sector or meta.get("sector") or "Unclassified").strip()[:80],
+                                  "cap": (cap or meta.get("cap") or "").strip()[:10], "added": time.time(),
+                                  "added_price": None, "alert_below": None, "alert_above": None, "note": ""}
+        x["tickers"].append(ticker)
+        x["updated"] = time.time()
+        _save_book(b)
     TRACKER.poke()
-    return wl
+    return watchlist()
 
 
 def update(ticker, patch):
     with _wl_lock:
-        wl = watchlist()
-        hit = next((w for w in wl if w["ticker"] == ticker), None)
+        b = _book()
+        hit = b["items"].get(ticker)
         if not hit:
             raise KeyError(ticker)
         for k in ("alert_below", "alert_above"):
@@ -646,17 +799,24 @@ def update(ticker, patch):
             hit["note"] = str(patch["note"] or "")[:500]
         if patch.get("sector"):
             hit["sector"] = str(patch["sector"])[:80]
-        _write_json(WATCHLIST, wl)
+        _save_book(b)
     TRACKER.poke()
-    return hit
+    return {"ticker": ticker, **hit}
 
 
-def remove(ticker):
+def remove(ticker, list_id=None):
+    """Take a company off one watchlist, or off every list when none is named."""
     with _wl_lock:
-        wl = [w for w in watchlist() if w["ticker"] != ticker]
-        _write_json(WATCHLIST, wl)
-    TRACKER.quotes.pop(ticker, None)
-    return wl
+        b = _book()
+        for x in b["lists"]:
+            if (list_id is None or x["id"] == list_id) and ticker in x["tickers"]:
+                x["tickers"] = [t for t in x["tickers"] if t != ticker]
+                x["updated"] = time.time()
+        _save_book(b)
+        still = ticker in b["items"]
+    if not still:
+        TRACKER.quotes.pop(ticker, None)
+    return watchlist()
 
 
 def tracked_chart(ticker, days=30, bucket=300):

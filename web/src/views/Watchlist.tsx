@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useCompanies } from "../lib/hooks";
-import { isOpen, TrackerState, useLiveAlerts, useLiveSearch, useSectors, useWatchlist, useWatchMutations, WatchItem } from "../lib/live";
+import { isOpen, TrackerState, useLiveAlerts, useLiveSearch, useSectors, useWatchlist, useWatchlistMutations, useWatchlists, useWatchMutations, WatchItem, WatchList } from "../lib/live";
+import { useScope } from "../lib/scope";
+import { ListEditor, ResearchList } from "./WatchlistLibrary";
 import { ago, isNum, money, num, pct, shortName, when } from "../lib/format";
 import { HM_COLOR, LABELS } from "../lib/labels";
 import { Empty, ErrorNote, Icon, LabelBadge, PageHeader, Panel, Popover, QueryView, Toggle } from "../components/ui";
@@ -14,21 +16,29 @@ import { useApp } from "../components/workbenchContext";
 import { chime } from "../lib/notify";
 
 
-export function Watchlist() {
-  const q = useWatchlist();
+/** One watchlist from the library, opened: its companies live, with charts, alerts and notes. */
+export function WatchlistDetail() {
+  const { id = "" } = useParams();
+  const q = useWatchlist(id);
+  const lib = useWatchlists();
   const [params, setParams] = useSearchParams();
   const sel = params.get("t");
   const pick = (t: string | null) => { const p = new URLSearchParams(params); if (t) p.set("t", t); else p.delete("t"); setParams(p, { replace: true }); };
+  if (q.isError && /404|no watchlist/i.test(String((q.error as Error)?.message))) {
+    return <div className="page"><Panel><Empty icon="library" title="This watchlist no longer exists" action={<Link className="btn sec" to="/watchlist">All watchlists</Link>}>It may have been deleted or renamed.</Empty></Panel></div>;
+  }
   return (
     <div className="page">
       <QueryView q={q} rows={10}>
-        {(d) => <Board items={d.items} tracker={d.tracker} sel={sel} pick={pick} />}
+        {(d) => d.list ? <Board items={d.items} tracker={d.tracker} list={d.list} max={lib.data?.max_tracked ?? 100} tracked={lib.data?.tracked ?? d.items.length} sel={sel} pick={pick} /> : null}
       </QueryView>
     </div>
   );
 }
 
-function Board({ items, tracker, sel, pick }: { items: WatchItem[]; tracker: TrackerState; sel: string | null; pick: (t: string | null) => void }) {
+function Board({ items, tracker, list, max, tracked, sel, pick }: { items: WatchItem[]; tracker: TrackerState; list: WatchList; max: number; tracked: number; sel: string | null; pick: (t: string | null) => void }) {
+  const [editing, setEditing] = useState(false);
+  const scope = useScope();
   const [view, setView] = useState<"tiles" | "table">(() => { try { return (localStorage.getItem("wl.view") as "tiles" | "table") || "tiles"; } catch { return "tiles"; } });
   // one sort for both views: set by the table's column headers, or the column buttons above the tiles
   const sortState = useGridState<WatchItem>("watch", WATCH_COLUMNS, { key: "chg", asc: false });
@@ -43,7 +53,7 @@ function Board({ items, tracker, sel, pick }: { items: WatchItem[]; tracker: Tra
   const q = items.map((w) => w.quote).filter((x) => x && isNum(x.chg_pct));
   const today = new Date().toISOString().slice(0, 10);
   const band = [
-    { k: "Tracked", v: String(items.length), s: `of 60 · ${tracker.stored_bars?.toLocaleString("en-IN") ?? 0} minute bars stored` },
+    { k: "Companies", v: String(items.length), s: `${tracked} of ${max} tracked across every list · ${tracker.stored_bars?.toLocaleString("en-IN") ?? 0} minute bars` },
     { k: "Advancing / declining", v: `${q.filter((x) => x!.chg_pct! > 0).length} / ${q.filter((x) => x!.chg_pct! < 0).length}`, s: "last session" },
     { k: "Average change", v: q.length ? pct(q.reduce((a, x) => a + x!.chg_pct!, 0) / q.length, 2, true) : "—", s: "equal-weighted" },
     { k: "Below buy-below", v: String(items.filter((w) => w.quote?.hm?.buy_below && (w.quote.last ?? Infinity) <= w.quote.hm.buy_below).length), s: "HYBRID MODEL at the live price" },
@@ -52,8 +62,10 @@ function Board({ items, tracker, sel, pick }: { items: WatchItem[]; tracker: Tra
 
   return (
     <>
-      <PageHeader crumbs={[{ label: "Analysis" }, { label: "Watchlist" }]} title="Watchlist"
+      <PageHeader crumbs={[{ label: "Analysis" }, { label: "Watchlists", to: "/watchlist" }, { label: list.name }]}
+        title={<span className="row" style={{ gap: 10 }}><i className="wl-sw" style={{ background: list.color }} />{list.name}</span>}
         sub={<span className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+          {list.description && <span className="wl-desc">{list.description}</span>}
           <span className={`live-dot ${open && !tracker.paused ? "on" : ""}`}>{tracker.paused ? "Tracking paused" : open ? "Tracking live" : "Market closed"}</span>
           <span>polling every {tracker.interval >= 60 ? `${Math.round(tracker.interval / 60)} min` : `${tracker.interval} s`}{open ? "" : " until the open"}</span>
           <span className="faint">· last update {ago(tracker.last_poll)}{tracker.error ? "" : ""}</span>
@@ -62,10 +74,15 @@ function Board({ items, tracker, sel, pick }: { items: WatchItem[]; tracker: Tra
           <TrackerSettings tracker={tracker} />
           <button className="btn sec" onClick={() => m.tracker.mutate({ paused: !tracker.paused })}><Icon name={tracker.paused ? "debug-start" : "debug-pause"} className="sm" />{tracker.paused ? "Resume" : "Pause"}</button>
           <button className="btn sec" onClick={() => m.poll.mutate()} disabled={tracker.paused || !items.length}><Icon name={m.poll.isPending ? "loading" : "refresh"} className={`sm ${m.poll.isPending ? "spin" : ""}`} />Update now</button>
-          <AddCompany count={items.length} />
+          <button className={`btn sec ${scope.id === list.id ? "on" : ""}`} onClick={() => scope.set(scope.id === list.id ? null : list.id)} title="Show only this list's companies across the app">
+            <Icon name="target" className="sm" />{scope.id === list.id ? "App focused here" : "Focus the app"}</button>
+          <ResearchList list={list} />
+          <button className="btn sec" onClick={() => setEditing(true)}><Icon name="edit" className="sm" />Edit list</button>
+          <AddCompany count={tracked} max={max} listId={list.id} listName={list.name} />
         </>} />
+      {editing && <ListEditor list={list} onClose={() => setEditing(false)} />}
       {tracker.error && <div className="note err"><Icon name="error" /><div>Last poll failed: {tracker.error}. The tracker keeps trying.</div></div>}
-      {!items.length ? <EmptyWatch /> : (
+      {!items.length ? <EmptyWatch list={list} /> : (
         <>
           <div className="band">{band.map((b) => <div key={b.k}><div className="k">{b.k}</div><div className="v">{b.v}</div><div className="s">{b.s}</div></div>)}</div>
           <div className={`split wl ${current ? "" : "closed"}`}>
@@ -80,7 +97,7 @@ function Board({ items, tracker, sel, pick }: { items: WatchItem[]; tracker: Tra
                 <div className="tiles">{sorted.map((w) => <Tile key={w.ticker} w={w} on={w.ticker === sel} onClick={() => pick(w.ticker === sel ? null : w.ticker)} />)}</div>
               ) : <WatchTable items={items} sel={sel} pick={pick} state={sortState} />}
             </section>
-            {current && <Detail w={current} onClose={() => pick(null)} />}
+            {current && <Detail w={current} list={list} onClose={() => pick(null)} />}
           </div>
           <AlertsPanel />
         </>
@@ -181,7 +198,7 @@ function WatchTable({ items, sel, pick, state }: { items: WatchItem[]; sel: stri
   );
 }
 
-function Detail({ w, onClose }: { w: WatchItem; onClose: () => void }) {
+function Detail({ w, list, onClose }: { w: WatchItem; list: WatchList; onClose: () => void }) {
   const m = useWatchMutations();
   const app = useApp();
   const [below, setBelow] = useState(w.alert_below?.toString() ?? "");
@@ -211,8 +228,9 @@ function Detail({ w, onClose }: { w: WatchItem; onClose: () => void }) {
           <div className="row">
             <button className="btn sm" disabled={!dirty || m.update.isPending} onClick={save}>Save</button>
             <span className="spacer" />
-            <button className="btn sm ghost" onClick={() => { if (confirm(`Stop tracking ${w.name}? Its stored minute bars are kept.`)) m.remove.mutate(w.ticker, { onSuccess: onClose }); }}><Icon name="trash" className="xs" />Remove</button>
+            <button className="btn sm ghost" onClick={() => { if (confirm(`Take ${w.name} off “${list.name}”?${(w.lists?.length ?? 1) > 1 ? " It stays on your other lists." : " Its stored minute bars are kept."}`)) m.remove.mutate({ ticker: w.ticker, list: list.id }, { onSuccess: onClose }); }}><Icon name="trash" className="xs" />Remove from list</button>
           </div>
+          {(w.lists?.length ?? 0) > 1 && <WatchedOn ids={w.lists!} current={list.id} />}
           <div className="xs faint">Added {when(w.added)}{isNum(w.added_price) ? ` at ${num(w.added_price)}` : ""} · {w.sector} · <Link to={`/markets?t=${encodeURIComponent(w.ticker)}`}>Open in Markets</Link></div>
         </div>
       </div>
@@ -220,7 +238,7 @@ function Detail({ w, onClose }: { w: WatchItem; onClose: () => void }) {
   );
 }
 
-function AddCompany({ count }: { count: number }) {
+function AddCompany({ count, max, listId, listName }: { count: number; max: number; listId: string; listName: string }) {
   const [text, setText] = useState("");
   const [sector, setSector] = useState("");
   const s = useLiveSearch(text);
@@ -228,12 +246,12 @@ function AddCompany({ count }: { count: number }) {
   const m = useWatchMutations();
   const app = useApp();
   const add = (ticker: string, name?: string, sec?: string, cap?: string, close?: () => void) =>
-    m.add.mutate({ ticker, name, sector: sec || sector || undefined, cap }, {
-      onSuccess: () => { app.toast(`Tracking ${name ?? ticker}`, "ok"); setText(""); close?.(); },
+    m.add.mutate({ ticker, name, sector: sec || sector || undefined, cap, list: listId }, {
+      onSuccess: () => { app.toast(`${name ?? ticker} added to “${listName}”`, "ok"); setText(""); close?.(); },
       onError: (e) => app.toast(e instanceof Error ? e.message : String(e), "error"),
     });
   return (
-    <Popover className="pop" trigger={(open, toggle) => <button className={`btn ${open ? "on" : ""}`} onClick={toggle} disabled={count >= 60}><Icon name="add" className="sm" />Add company</button>}>
+    <Popover className="pop" trigger={(open, toggle) => <button className={`btn ${open ? "on" : ""}`} onClick={toggle} title={count >= max ? `The watchlists already track ${max} companies` : `Add a company to “${listName}”`}><Icon name="add" className="sm" />Add company</button>}>
       {(close) => (
         <div style={{ width: 380 }}>
           <div className="search" style={{ margin: 10 }}><Icon name="search" /><input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Company name or NSE symbol" /></div>
@@ -280,27 +298,35 @@ function TrackerSettings({ tracker }: { tracker: TrackerState }) {
   );
 }
 
-function EmptyWatch() {
+function EmptyWatch({ list }: { list: WatchList }) {
   const companies = useCompanies();
-  const m = useWatchMutations();
+  const lm = useWatchlistMutations();
   const app = useApp();
-  const [busy, setBusy] = useState(false);
-  const qc = useQueryClient();
-  const list = (companies.data ?? []).filter((c) => c.ticker);
-  const addAll = async () => {
-    setBusy(true);
-    try {
-      for (const c of list.slice(0, 60)) await api.post("/api/watchlist", { ticker: c.ticker, name: c.name, sector: c.sector, cap: c.cap });
-      app.toast(`Tracking ${Math.min(60, list.length)} companies`, "ok");
-    } catch (e) { app.toast(e instanceof Error ? e.message : String(e), "error"); }
-    finally { setBusy(false); qc.invalidateQueries({ queryKey: ["watchlist"] }); m.poll.mutate(); }
-  };
+  const list_ = (companies.data ?? []).filter((c) => c.ticker);
+  const addAll = () => lm.addMany.mutate({ id: list.id, tickers: list_.map((c) => ({ ticker: c.ticker, name: c.name, sector: c.sector, cap: c.cap })) }, {
+    onSuccess: (r) => app.toast(`${r.added} companies added${r.failed.length ? ` · ${r.failed.length} not added (${r.failed[0]})` : ""}`, r.failed.length ? "info" : "ok"),
+    onError: (e) => app.toast(e instanceof Error ? e.message : String(e), "error"),
+  });
   return (
     <Panel>
-      <Empty icon="eye" title="Nothing tracked yet" action={<div className="row">{list.length > 0 && <button className="btn" onClick={addAll} disabled={busy}><Icon name={busy ? "loading" : "add"} className={`sm ${busy ? "spin" : ""}`} />Track my {list.length} companies</button>}<Link className="btn sec" to="/markets">Find companies in Markets</Link></div>}>
-        Add companies to follow their price live. While the market is open the tracker polls every 30 seconds, stores every minute bar on this computer, re-values covered companies at the live price, and alerts you on the levels you set.
+      <Empty icon="eye" title={`“${list.name}” is empty`} action={<div className="row">{list_.length > 0 && <button className="btn" onClick={addAll} disabled={lm.addMany.isPending}><Icon name={lm.addMany.isPending ? "loading" : "add"} className={`sm ${lm.addMany.isPending ? "spin" : ""}`} />Add my {list_.length} covered companies</button>}<Link className="btn sec" to="/markets">Find companies in Markets</Link></div>}>
+        Add companies with <b>Add company</b> above. While the market is open the tracker polls every 30 seconds, stores every minute bar on this computer, re-values covered companies at the live price, and alerts you on the levels you set.
       </Empty>
     </Panel>
+  );
+}
+
+/** The other lists a company is on, as chips that open them. */
+function WatchedOn({ ids, current }: { ids: string[]; current: string }) {
+  const lib = useWatchlists();
+  const nav = useNavigate();
+  const others = (lib.data?.lists ?? []).filter((l) => ids.includes(l.id) && l.id !== current);
+  if (!others.length) return null;
+  return (
+    <div className="row xs" style={{ gap: 4, flexWrap: "wrap" }}>
+      <span className="faint">Also on</span>
+      {others.map((l) => <button key={l.id} className="wl-chip" style={{ ["--wc" as string]: l.color }} onClick={() => nav(`/watchlist/${encodeURIComponent(l.id)}`)}><i />{l.name}</button>)}
+    </div>
   );
 }
 

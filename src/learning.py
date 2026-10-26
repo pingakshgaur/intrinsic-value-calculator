@@ -24,7 +24,8 @@ import config
 
 LIVE = config.DATA_DIR / "live"
 UNIVERSE_CSV = LIVE / "learning_universe.csv"
-WATCHLIST = LIVE / "watchlist.json"
+WATCHLIST = LIVE / "watchlist.json"      # before watchlist libraries
+WATCHLISTS = LIVE / "watchlists.json"
 LISTS = (
     ("training list", config.DATA_DIR / "training_universe.csv"),
     ("auto-train", config.DATA_DIR / "auto_training_universe.csv"),
@@ -41,6 +42,12 @@ def _read(path):
 
 
 def _watchlist():
+    """Every company on any watchlist (the web app's libraries, or the old single list)."""
+    try:
+        b = json.loads(WATCHLISTS.read_text(encoding="utf-8"))
+        return [{"ticker": t, **v} for t, v in (b.get("items") or {}).items()]
+    except (OSError, ValueError, AttributeError):
+        pass
     try:
         return json.loads(WATCHLIST.read_text(encoding="utf-8"))
     except (OSError, ValueError):

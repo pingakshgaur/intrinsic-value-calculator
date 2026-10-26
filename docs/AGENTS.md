@@ -156,15 +156,19 @@ LLM safeguards:
 
 ## Free-tier LLM routing
 
-`src/agents/llm.py` speaks the OpenAI-compatible API that Groq, Gemini and
-NVIDIA all offer, so no SDKs are needed.
+`src/agents/llm.py` routes every call; `src/agents/llm_providers.py` speaks two
+dialects: the OpenAI-compatible API (Groq, Gemini, NVIDIA, OpenRouter, Mistral,
+local Ollama and most others) over plain HTTP, and Anthropic's Messages API
+through the official `anthropic` SDK. Add, edit or remove providers and keys in
+the web app (Configuration → AI providers).
 
 | Feature | What it does |
 |---|---|
 | Tiers | `fast` (bulk classification) and `smart` (reasoning and writing), each with an ordered provider list in `llm.routes` |
 | Pacing | Stays under each provider's requests-per-minute and tokens-per-minute limits. The daily count is stored in the database, so separate cloud jobs on the same day share it |
 | Fall-through | A 429 error, server error, timeout, bad JSON or spent quota moves the request to the next provider |
-| Bad key | The provider is switched off for the rest of the run, not retried |
+| Several keys | Each provider can hold several keys (`NAME`, `NAME_2`, … in `.env`); a 429 moves to the next key before the next provider |
+| Bad key | That key is skipped for the rest of the run; when every key is rejected the provider is switched off |
 | Cache | Identical prompts within `llm.cache_hours` cost nothing |
 | Budget | `llm.max_calls_per_run` caps one run |
 

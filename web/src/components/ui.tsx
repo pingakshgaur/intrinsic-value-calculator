@@ -52,7 +52,7 @@ export function PageHeader({ crumbs, title, sub, actions }: { crumbs?: { label: 
       </div>
       <div className="acts">
         {actions}
-        <ExportButton title={name} target={() => (ref.current?.closest(".page") as HTMLElement | null) ?? null} label="PDF" className="btn sec" tip={`Export the whole ${name} page to PDF`} />
+        <ExportButton title={name} kind="page" target={() => (ref.current?.closest(".page") as HTMLElement | null) ?? null} label="Export page" className="btn sec" tip={`Export the whole ${name} page (PDF or Word)`} />
       </div>
     </div>
   );

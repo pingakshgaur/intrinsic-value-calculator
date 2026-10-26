@@ -11,7 +11,7 @@ import {
   LabCompany,
   Metrics,
   ModelInfo,
-  Provider,
+  ProvidersInfo,
   RunPrefs,
   Status,
   Valuation,
@@ -69,7 +69,7 @@ export const useModels = () => useQuery({ queryKey: ["models"], queryFn: () => a
 export const useProviders = () =>
   useQuery({
     queryKey: ["providers"],
-    queryFn: () => api.get<{ providers: Provider[]; routes: Record<string, string[]> }>("/api/llm/providers"),
+    queryFn: () => api.get<ProvidersInfo>("/api/llm/providers"),
   });
 
 export interface Tick {

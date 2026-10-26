@@ -1,13 +1,14 @@
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AgentSettings, api, ModelTestResult, Provider, RunPrefs } from "../lib/api";
-import { useKeys, useModels, usePrefs, useProviders, useSettings } from "../lib/hooks";
+import { useQueryClient } from "@tanstack/react-query";
+import { AgentSettings, api, RunPrefs } from "../lib/api";
+import { useModels, usePrefs, useSettings } from "../lib/hooks";
 import { ago, titleCase } from "../lib/format";
 import { AGENT_NAME } from "../lib/labels";
 import { ErrorNote, Icon, Loading, PageHeader, Panel, QueryView, Toggle } from "../components/ui";
 import { useApp } from "../components/workbenchContext";
 import { NotifySettings } from "../components/NotifySettings";
+import { AiProviders } from "../components/AiProviders";
 
 const SECTIONS = [
   { id: "run", label: "Run settings", icon: "settings" },
@@ -33,7 +34,7 @@ export function Configuration() {
         </nav>
         <div className="col" style={{ gap: 14, minWidth: 0 }}>
           {section === "run" && <RunSettings />}
-          {section === "ai" && <AiProviders />}
+          {section === "ai" && <><AiProviders /><YamlFields kind="llm" /></>}
           {section === "agents" && <YamlFields kind="agents" />}
           {section === "macro" && <YamlFields kind="macro" />}
           {section === "notify" && <Panel title="Notifications & sounds" meta="saved in this browser"><NotifySettings wide /></Panel>}
@@ -138,138 +139,6 @@ function RunSettings() {
         </div>
       )}
     </>
-  );
-}
-
-// ================================================================ AI providers
-const INFO: Record<string, { label: string; url: string }> = {
-  groq: { label: "Groq", url: "https://console.groq.com/keys" },
-  gemini: { label: "Google Gemini", url: "https://aistudio.google.com/apikey" },
-  nvidia: { label: "NVIDIA NIM", url: "https://build.nvidia.com" },
-};
-
-function AiProviders() {
-  const q = useProviders();
-  const keys = useKeys();
-  const qc = useQueryClient();
-  const refresh = () => { qc.invalidateQueries({ queryKey: ["providers"] }); keys.refetch(); qc.invalidateQueries({ queryKey: ["status"] }); };
-  return (
-    <>
-      <div className="note inf"><Icon name="shield" /><div>Keys are stored in this project's <span className="mono">.env</span> (git-ignored) and never sent back to the page. Providers retire models often — choose from each provider's <b>live</b> list and press <b>Test</b>.</div></div>
-      <QueryView q={q}>
-        {(d) => (
-          <>
-            <Panel title="Providers" meta="fast = bulk reading · smart = reasoning and writing" flush>
-              <div className="provs">{d.providers.map((p) => <ProviderRow key={p.name} p={p} onChanged={refresh} />)}</div>
-            </Panel>
-            <Routes routes={d.routes} providers={d.providers} />
-          </>
-        )}
-      </QueryView>
-      <YamlFields kind="llm" />
-    </>
-  );
-}
-
-function ProviderRow({ p, onChanged }: { p: Provider; onChanged: () => void }) {
-  const info = INFO[p.name] ?? { label: titleCase(p.name), url: "" };
-  const [key, setKey] = useState("");
-  const [edit, setEdit] = useState(!p.has_key);
-  const app = useApp();
-  const [n, setN] = useState(0);
-  const models = useQuery({ queryKey: ["llm-models", p.name, p.has_key, n], queryFn: () => api.get<{ id: string; chat: boolean }[]>(`/api/llm/models?provider=${p.name}${n ? "&refresh=true" : ""}`), enabled: p.has_key, retry: 0 });
-  const saveKey = async (v: string) => {
-    try { await api.put("/api/settings/keys", { values: { [p.key_env]: v } }); setKey(""); setEdit(!v); onChanged(); app.toast(v ? `${info.label} key saved` : `${info.label} key removed`, "ok"); }
-    catch (e) { app.toast(e instanceof Error ? e.message : String(e), "error"); }
-  };
-  return (
-    <section className="prov">
-      <div>
-        <div className="row"><span className={`dot ${p.has_key ? "ok" : ""}`} /><b className="strong">{info.label}</b></div>
-        <div className="xs faint mono" style={{ marginTop: 2 }}>{p.key_env}</div>
-        <div className="xs faint" style={{ marginTop: 2 }}>Limits <span className="mono">{p.limits.requests_per_minute ?? "—"}/min · {p.limits.requests_per_day ?? "—"}/day</span></div>
-        {info.url && <a href={info.url} target="_blank" rel="noreferrer noopener" className="xs">Get a key</a>}
-      </div>
-      <div>
-        <div className="label prov-l">API key</div>
-        {edit ? (
-          <div className="row"><input className="inp sm mono grow" type="password" autoComplete="off" placeholder="paste API key" value={key} onChange={(e) => setKey(e.target.value)} /><button className="btn xs" disabled={!key.trim()} onClick={() => saveKey(key.trim())}>Save</button>{p.has_key && <button className="ibtn sm" onClick={() => setEdit(false)}><Icon name="close" className="xs" /></button>}</div>
-        ) : (
-          <div className="row" style={{ flexWrap: "wrap" }}><span className="tag up">saved</span><button className="btn xs ghost" onClick={() => setEdit(true)}>Replace</button><button className="btn xs ghost" onClick={() => saveKey("")}>Remove</button></div>
-        )}
-        {p.has_key && <div className="row xs faint" style={{ marginTop: 6 }}>{models.data ? `${models.data.filter((m) => m.chat).length} chat models` : models.isLoading ? "loading models…" : ""}<button className="btn xs ghost" onClick={() => setN((x) => x + 1)}><Icon name="refresh" className="xs" /></button></div>}
-        {models.isError && <div style={{ marginTop: 6 }}><ErrorNote error={models.error} /></div>}
-      </div>
-      {(["fast", "smart"] as const).map((tier) => (
-        <div key={tier}>
-          <div className="label prov-l">{tier === "fast" ? "Fast model" : "Smart model"}</div>
-          {p.has_key ? <ModelPick provider={p.name} tier={tier} current={p.models[tier] ?? ""} models={models.data ?? []} loading={models.isLoading} onSaved={onChanged} /> : <span className="faint xs">add a key first</span>}
-        </div>
-      ))}
-    </section>
-  );
-}
-
-function ModelPick({ provider, tier, current, models, loading, onSaved }: { provider: string; tier: string; current: string; models: { id: string; chat: boolean }[]; loading: boolean; onSaved: () => void }) {
-  const [v, setV] = useState(current);
-  const [res, setRes] = useState<ModelTestResult | null>(null);
-  const [busy, setBusy] = useState(false);
-  const app = useApp();
-  useEffect(() => setV(current), [current]);
-  const known = models.some((m) => m.id === current);
-  const test = async () => {
-    setBusy(true); setRes(null);
-    try { setRes(await api.post<ModelTestResult>("/api/llm/test", { provider, model: v })); }
-    catch (e) { setRes({ ok: false, status: null, seconds: 0, error: e instanceof Error ? e.message : String(e) }); } finally { setBusy(false); }
-  };
-  const use = async () => {
-    try { await api.patch("/api/settings/agents", { values: { [`llm.providers.${provider}.models.${tier}`]: v } }); onSaved(); app.toast(`${provider} ${tier} → ${v}`, "ok"); }
-    catch (e) { app.toast(e instanceof Error ? e.message : String(e), "error"); }
-  };
-  return (
-    <div className="col" style={{ gap: 6 }}>
-      <select className="sel sm" style={{ width: "100%" }} title={v} value={v} disabled={loading} onChange={(e) => { setV(e.target.value); setRes(null); }}>
-        {!known && current && <option value={current}>{current} (not offered)</option>}
-        {models.filter((m) => m.chat).map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}
-        <optgroup label="Probably not chat models">{models.filter((m) => !m.chat).map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}</optgroup>
-      </select>
-      <div className="row" style={{ gap: 4 }}>
-        <button className="btn xs sec" onClick={test} disabled={!v || busy}><Icon name={busy ? "loading" : "beaker"} className={`xs ${busy ? "spin" : ""}`} />Test</button>
-        <button className="btn xs" onClick={use} disabled={!v || v === current}>Use</button>
-        {res && <span className={`xs ${res.ok ? "up" : "down"} ellipsis`} title={res.error ?? ""}>{res.ok ? `✓ ${res.seconds}s` : `✗ ${res.status ? `HTTP ${res.status}` : "failed"}`}</span>}
-      </div>
-      {res && !res.ok && <span className="xs down" style={{ lineHeight: 1.4, overflowWrap: "anywhere" }}>{res.error}</span>}
-      {!known && current && !loading && models.length > 0 && !res && <span className="xs warn">Saved model not in this key's list — probably retired.</span>}
-    </div>
-  );
-}
-
-function Routes({ routes, providers }: { routes: Record<string, string[]>; providers: Provider[] }) {
-  const [r, setR] = useState(routes);
-  const qc = useQueryClient();
-  const app = useApp();
-  useEffect(() => setR(routes), [routes]);
-  const move = (tier: string, i: number, dlt: number) => { const l = [...(r[tier] ?? [])]; const j = i + dlt; if (j < 0 || j >= l.length) return; [l[i], l[j]] = [l[j], l[i]]; setR({ ...r, [tier]: l }); };
-  const dirty = JSON.stringify(r) !== JSON.stringify(routes);
-  const save = async () => { try { await api.put("/api/llm/routes", r); qc.invalidateQueries({ queryKey: ["providers"] }); app.toast("Routing order saved", "ok"); } catch (e) { app.toast(e instanceof Error ? e.message : String(e), "error"); } };
-  const has = (s: string) => providers.find((p) => p.name === s.split(":")[0])?.has_key;
-  return (
-    <Panel title="Fail-over order" meta="first provider with a key answers; on a limit or error the next takes over" tools={<button className="btn xs" disabled={!dirty} onClick={save}>Save order</button>}>
-      <div className="grid c2">
-        {(["fast", "smart"] as const).map((tier) => (
-          <div key={tier}>
-            <div className="label" style={{ marginBottom: 6 }}>{tier}</div>
-            {(r[tier] ?? []).map((s, i) => (
-              <div key={s} className="row" style={{ padding: "5px 0", borderTop: i ? "1px solid var(--line-soft)" : undefined }}>
-                <span className="mono faint" style={{ width: 16 }}>{i + 1}</span><span className={`dot ${has(s) ? "ok" : ""}`} /><span className="grow">{titleCase(s.split(":")[0])}</span>
-                <button className="ibtn sm" onClick={() => move(tier, i, -1)} disabled={i === 0}><Icon name="arrow-up" className="xs" /></button>
-                <button className="ibtn sm" onClick={() => move(tier, i, 1)} disabled={i === (r[tier]?.length ?? 0) - 1}><Icon name="arrow-down" className="xs" /></button>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-    </Panel>
   );
 }
 

@@ -8,10 +8,12 @@ import { AGENT_NAME, HM_COLOR, LEAD_ICON, LEAD_SHORT, scoreColor } from "../lib/
 import { Diverge, Empty, Icon, LabelBadge, Meter, Panel, QueryView, Tip } from "../components/ui";
 import { Bridge, LensContribution, RangeLegend, RateStack, ValueRange } from "../components/charts";
 import { RunButton } from "../components/RunButton";
+import { ModelForecasts } from "../components/ModelForecasts";
 
 const SECTIONS = [
   { id: "summary", label: "Summary", icon: "note" },
   { id: "valuation", label: "Valuation", icon: "symbol-operator" },
+  { id: "forecast", label: "Forecasts", icon: "graph-line" },
   { id: "drivers", label: "Drivers & risk", icon: "pulse" },
   { id: "agents", label: "Agents & evidence", icon: "organization" },
   { id: "cases", label: "Bull vs bear", icon: "law" },
@@ -54,7 +56,8 @@ function useScrollSpy(ids: readonly string[]) {
     const check = () => {
       if (pinned.current && performance.now() < pinned.current.until) return;
       pinned.current = null;
-      const top = root.getBoundingClientRect().top + 120;
+      const bar = root.querySelector(".profile-bar");
+      const top = (bar ? bar.getBoundingClientRect().bottom : root.getBoundingClientRect().top + 76) + 44;
       let cur = ids[0];
       for (const id of ids) { const el = document.getElementById(id); if (el && el.getBoundingClientRect().top <= top) cur = id; }
       if (root.scrollHeight - root.scrollTop - root.clientHeight < 4) cur = ids[ids.length - 1];
@@ -76,10 +79,20 @@ function useScrollSpy(ids: readonly string[]) {
 function Body({ v, prev, next }: { v: Verdict; prev?: string; next?: string }) {
   const nav = useNavigate();
   const { on, go } = useScrollSpy(SECTION_IDS);
+  // the sticky bar wraps on narrower screens: the section nav and headings sit below whatever height it has
+  const bar = useRef<HTMLDivElement>(null);
+  const [barH, setBarH] = useState(76);
+  useEffect(() => {
+    const el = bar.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setBarH(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const ticker = (v.ticker || "").split(".")[0];
   return (
     <>
-      <div className="profile-bar">
+      <div className="profile-bar" ref={bar}>
         <div className="id">
           <div className="row xs faint" style={{ marginBottom: 2 }}><Link to="/coverage">Coverage</Link><Icon name="chevron-right" className="xs" /><span>{v.sector}</span></div>
           <h1>{shortName(v.company)}</h1>
@@ -100,7 +113,7 @@ function Body({ v, prev, next }: { v: Verdict; prev?: string; next?: string }) {
         </div>
       </div>
 
-      <div className="profile" style={{ marginTop: 16 }}>
+      <div className="profile" style={{ marginTop: 16, ["--pb-h" as string]: `${barH}px` }}>
         <nav className="anchors" aria-label="Sections">
           {SECTIONS.map((s) => <a key={s.id} href={`#${s.id}`} className={on === s.id ? "on" : ""} onClick={(e) => { e.preventDefault(); go(s.id); }}><Icon name={s.icon} className="sm" />{s.label}</a>)}
         </nav>
@@ -146,6 +159,8 @@ function Body({ v, prev, next }: { v: Verdict; prev?: string; next?: string }) {
               </table>
             </Panel>
           </Section>
+
+          <Section id="forecast" title="Model forecasts"><ModelForecasts v={v} /></Section>
 
           <Section id="drivers" title="Drivers & risk">
             <div className="grid c3">

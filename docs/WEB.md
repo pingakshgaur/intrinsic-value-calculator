@@ -16,24 +16,25 @@ The colours are VS Code's **Dark 2026** theme; the layout, type (Inter and JetBr
 
 An analyst workspace:
 - **Side navigation:** grouped into Analysis, Models & data and Operations, with live status for the server, AI providers, last report and last research. Collapse it with `Ctrl+\`.
-- **Top bar:** a live market tape (Nifty 50, India VIX, USD/INR, Brent, US 10Y, gold, with 1-month change), global search (`Ctrl+K`), an alerts inbox (red flags and changes), the glossary (`?`), and a run indicator that opens the runs drawer.
+- **Top bar:** a live market tape (Nifty 50, India VIX, USD/INR, Brent, US 10Y, gold, with 1-month change), the watchlist focus picker, global search (`Ctrl+K`), an alerts inbox (red flags and changes), the glossary (`?`), and a run indicator that opens the runs drawer.
 
 | Page | |
 |---|---|
 | **Command Center** | Metric band; coverage treemap (tile size = market cap, colour = upside); signals feed; upside vs confidence; label mix and extremes; model leaderboard |
 | **Markets** | Live index cards (Nifty 50, Sensex, Bank, IT, Midcap 50, Financial Services, VIX) with intraday sparklines and a sector heat strip. A scanner over every company the app knows (about 425): top gainers and losers, most active, volume spikes, near 52-week high or low, RSI extremes, and covered companies below their buy-below price. Candlestick or line charts from 1 day to the full history, with the HYBRID MODEL value and buy-below drawn on the chart. Look up any NSE or BSE symbol |
-| **Watchlist** | The companies you track, as tiles or a table: live price, change, intraday sparkline, day range, the HYBRID MODEL re-valued at the live price, and change since you added it. Each company has a live chart (including every minute bar the tracker stored), price alerts and a note. An alerts feed lists level crossings, buy-below crossings and big daily moves |
+| **Watchlists** | A library of named lists, each with a description and colour, shown as cards with their companies and today's moves. Create (empty, from your coverage, from a sector or as a copy), edit, reorder, pin, duplicate, delete, focus the app on a list, or start research on its covered companies. A company can be on several lists; up to 100 companies are tracked across all of them |
+| **A watchlist** | The companies on one list, as tiles or a table: live price, change, intraday sparkline, day range, the HYBRID MODEL re-valued at the live price, and change since you added it. Each company has a live chart (including every minute bar the tracker stored), price alerts and a note. An alerts feed lists level crossings, buy-below crossings and big daily moves |
 | **Research workforce** | Overview of the 23 agents: run status, every team and agent with live status, this run's verdicts and red flags, recent runs, and each agent's profile and settings |
 | **Agent Network** | The agents as a full-screen live map: info-bits travel the edges as they exchange work; replay any run; layers, views and tools to simplify, focus, annotate and rearrange the map |
 | **Research Room** | The agents' chat: team channels, direct exchanges, live status. Talk to any agent: it answers, keeps your instructions and acts on requests |
 | **Learning** | How many extra companies train the ML models, how many are cached, the switches for daily feeding and retraining, and a record of every valuation run (training rows, HYBRID MODEL confidence and error), so you can see whether more data helped |
 | **Coverage** | Sortable data grid with a column chooser and density toggle, inline range bars and CSV export. Selecting a row opens an inspector; `↑ ↓` move between rows and `Enter` opens the profile |
-| **Equity profile** | Sticky figures bar and a section index that follows your scrolling. Sections: summary, valuation (lens contribution, bridge, build-up), drivers and risk, agents and evidence, bull vs bear, history |
+| **Equity profile** | Sticky figures bar and a section index that follows your scrolling. Sections: summary, valuation (lens contribution, bridge, build-up), model forecasts, drivers and risk, agents and evidence, bull vs bear, history |
 | **HYBRID MODEL Studio** | Parameter tree on the left. In the centre, a live canvas with figures, range, bridge and lens contribution. On the right, an inspector with sensitivity, changes and inputs. Named scenario sets, a portfolio mode, and **Commit** to save. **Discard** drops uncommitted edits; **Defaults** loads the shipped value (`agent_settings.defaults.yaml`) of every constant you changed, to review and commit. The page scrolls as a whole while the parameter list and inspector stay in view |
 | **Model Performance** | Leaderboard, error by year, win rate, sector × model matrix, company explorer, HYBRID MODEL and Ensemble detail, chart gallery, companies left out, files |
-| **Universe** | Editable grid of the company list: bulk select, delete or set sector, CSV import and export, checks |
+| **Universe** | Editable grid of the company list: bulk select, delete, set sector or add to a watchlist, CSV import, export, checks |
 | **Operations** | New-job form (type, scope, period, options, auto-train) beside a live job detail (stage timeline, auto-train controls, log) and the jobs table |
-| **Configuration** | Run settings (everything the old desktop app had), AI providers (key, live model picker, Test for each provider, fail-over order), research agents, macro inputs, the settings file |
+| **Configuration** | Run settings (everything the old desktop app had), AI providers (any OpenAI-compatible service or Anthropic, several keys each, live model picker, Test for each key, fail-over order), research agents, macro inputs, the settings file |
 
 Shortcuts:
 
@@ -155,12 +156,51 @@ it re-runs in quick sweeps, and standing instructions added to every AI prompt
 it sends. **Defaults** puts an agent back. Settings are stored in
 `agent_profiles.json` next to the blackboard and apply from the next run.
 
-## Export to PDF
+## Export
 
 Every titled panel, every page header, every data grid, each price chart, the
-agent graph, the chat and the notifications panel has a PDF button. One click
-downloads the file: lists become real text tables across as many pages as
-needed; charts, graphs and panels become images exactly as they look.
+agent graph, the chat and the notifications panel has an **Export** menu that
+offers only the formats that suit what it holds:
+
+| What | Formats |
+|---|---|
+| Data (grids, lists, tables) | Excel (XLSX), CSV, Word (DOCX), Markdown, PDF |
+| A chart, graph or panel | PNG, PDF, Word |
+| A whole page | PDF, Word |
+
+Choosing a format opens a short editor with a preview before anything is
+saved: title, note and file name; for data, the columns, a row limit, sheet
+name, frozen header and filter (Excel), separator (CSV), page size,
+orientation, text size and striped rows (PDF and Word); for pictures, screen
+or light colours, sharpness, margin and a title band. Lists become real text
+tables across as many pages as needed; charts and panels become images
+exactly as they look.
+
+## Watchlist focus
+
+The picker in the top bar focuses the app on one watchlist. Coverage, the
+Command Center, Universe (display only: saving still writes the whole list),
+Model Performance (its tables recomputed for the list's companies), the
+workforce overview and the Research Room then show only that list's
+companies, with a thin bar naming the list and a **Show all** button. The
+choice is remembered in this browser; **All companies** brings everything
+back exactly as before.
+
+## Model forecasts
+
+Each company profile shows every model's predicted price over days, months
+and years, and a table at 1 week, 1 month, 1 quarter, 6 months, 1, 3 and 5
+years. Each path starts at today's price and closes the gap to the model's
+value as fast as the market has historically followed that model — the share
+of the gap closed in a year is fitted on every company-year pair in the
+valuation report — while the value grows at the company's long-run rate.
+Hovering a price shows its range (one historical spread either side).
+
+**Conviction** (0–100) is how strongly a model believes its prediction: how
+well its gaps foretold the next year's move (35%), its hit rate within ±20%
+(25%), how steady its view of this company has been (20%) and how close it
+sits to the other models (20%). These are projections from history, not
+advice.
 
 ## Light and dark
 
@@ -230,6 +270,16 @@ original defaults worked. So:
   error. For example: "reached its end of life", or "Function not found for
   account" (NVIDIA lists some models that a free key cannot call).
 - A saved model that is no longer offered is flagged.
+- **Any provider.** Add one from 16 presets (Groq, Gemini, NVIDIA, Anthropic,
+  OpenAI, OpenRouter, Mistral, DeepSeek, Together, Fireworks, Cerebras, xAI,
+  Perplexity, Azure OpenAI, Ollama, LM Studio) or as a custom
+  OpenAI-compatible endpoint. Edit its address, key header, limits and models,
+  switch it off, or remove it. Web-app providers are saved in
+  `llm_providers.json` on top of `agent_settings.yaml`.
+- **Several keys per provider**, stored in `.env` as `NAME`, `NAME_2`, ….
+  They are tried in order: a rate-limited key hands over to the next, a
+  rejected key is skipped for the rest of the run. Test, reorder or remove
+  each key; only the last four characters are ever shown.
 
 ## Why it doesn't break
 

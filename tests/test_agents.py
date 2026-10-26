@@ -39,6 +39,10 @@ def settings(tmp_path, monkeypatch):
     for k in ("GROQ_API_KEY", "GEMINI_API_KEY", "NVIDIA_API_KEY"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.delenv("AGENT_STATE_DIR", raising=False)
+    # keys and providers from this test only, never the project's .env or llm_providers.json
+    from agents import llm_providers as LP
+    monkeypatch.setattr(LP, "env_file", lambda: tmp_path / ".env")
+    monkeypatch.setenv("LLM_PROVIDERS_FILE", str(tmp_path / "llm_providers.json"))
     yield
     S.load(ROOT / "agent_settings.yaml")
 
@@ -275,7 +279,7 @@ def test_router_falls_through_and_caches(tmp_path, monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "k2")
     calls = []
 
-    def fake_post(self, p, model, messages, max_tokens, json_mode):
+    def fake_post(self, p, model, system, user, max_tokens, json_mode, tier="smart"):
         calls.append(model)
         if "groq" in p["base_url"]:
             return None, 0, 503
@@ -453,3 +457,105 @@ def test_chat_api_answers_commands(monkeypatch):
         A.post("trace", "hi")
     with pytest.raises(ValueError):
         A.post("not-a-channel", "hi")
+
+
+def test_llm_providers_any_service_and_several_keys(tmp_path, monkeypatch):
+    """Providers from the settings file and the web app, keys in .env, rotation on limits and bad keys."""
+    from agents import llm_providers as LP
+    from agents.llm import LLMRouter
+
+    env = tmp_path / ".env"
+    env.write_text("# keep me\nOTHER=1\n", encoding="utf-8")
+    monkeypatch.setattr(LP, "env_file", lambda: env)
+    monkeypatch.setenv("LLM_PROVIDERS_FILE", str(tmp_path / "llm_providers.json"))
+    for k in ("GROQ_API_KEY", "GEMINI_API_KEY", "NVIDIA_API_KEY", "LOCAL_API_KEY", "LOCAL_API_KEY_2"):
+        monkeypatch.delenv(k, raising=False)
+
+    # a new OpenAI-compatible provider, two keys; .env keeps its other lines
+    LP.save("local", {"label": "Local", "style": "openai", "base_url": "http://localhost:9/v1", "auth": "bearer",
+                      "models": {"fast": "m-fast", "smart": "m-smart"}, "rpm": 100})
+    assert LP.add_key("local", "key-one-AAAA") == "LOCAL_API_KEY"
+    assert LP.add_key("local", "key-two-BBBB") == "LOCAL_API_KEY_2"
+    text = env.read_text(encoding="utf-8")
+    assert "# keep me" in text and "OTHER=1" in text and "LOCAL_API_KEY_2=key-two-BBBB" in text
+    with pytest.raises(ValueError):
+        LP.add_key("local", "key-one-AAAA")
+    p = LP.providers()["local"]
+    assert [e for e, _ in LP.keys(p)] == ["LOCAL_API_KEY", "LOCAL_API_KEY_2"]
+    assert LP.mask("key-two-BBBB").endswith("BBBB") and "key-two" not in LP.mask("key-two-BBBB")
+    LP.promote_key("local", "LOCAL_API_KEY_2")
+    assert LP.providers()["local"]["key_envs"][0] == "LOCAL_API_KEY_2"
+    for bad in ({"style": "soap"}, {"base_url": "ftp://x"}, {"auth": "magic"}, {"rpm": "x"}):
+        with pytest.raises((ValueError, TypeError)):
+            LP.save("local", bad)
+    with pytest.raises(ValueError):
+        LP.save("Bad Name", {})
+
+    # the router rotates keys: the first key is rate-limited, the second answers
+    seen = []
+
+    def fake_chat(p, key, model, system, user, **kw):
+        seen.append(key)
+        if key == "key-two-BBBB":
+            raise LP.CallError(429, "slow down")
+        return '{"ok": true}', 10
+
+    monkeypatch.setattr(LP, "chat", fake_chat)
+    S.data()["llm"] = {"enabled": True, "routes": {"fast": ["local:fast"]}, "providers": {}, "retries": 2}
+    r = LLMRouter(None, enabled=True)
+    assert r.enabled and "local" in r.providers
+    assert r.complete("fast", "sys", "hi", json_mode=True) == {"ok": True}
+    assert seen == ["key-two-BBBB", "key-one-AAAA"]
+
+    # a rejected key is skipped for the rest of the run; all rejected -> provider off, None returned
+    def all_bad(p, key, model, system, user, **kw):
+        raise LP.CallError(401, "bad key")
+
+    monkeypatch.setattr(LP, "chat", all_bad)
+    r2 = LLMRouter(None, enabled=True)
+    assert r2.complete("fast", "sys", "hello again", json_mode=True) is None
+    assert "local" in r2._dead
+
+    # switched off -> not used; removed -> gone; a key needing no auth works without one
+    LP.save("local", {"enabled": False})
+    assert "local" not in LLMRouter(None, enabled=True).providers
+    LP.save("ollama", {"style": "openai", "base_url": "http://localhost:11434/v1", "auth": "none"})
+    assert LP.keys(LP.providers()["ollama"]) == [("", "")]
+    LP.remove_key("local", "LOCAL_API_KEY")
+    assert "LOCAL_API_KEY=" not in env.read_text(encoding="utf-8")
+    LP.delete("ollama")
+    assert "ollama" not in LP.providers()
+
+
+def test_anthropic_dialect_uses_the_sdk(monkeypatch):
+    """The Anthropic dialect goes through the official SDK: no temperature, effort by tier, refusals fail over."""
+    import types
+
+    from agents import llm_providers as LP
+
+    calls = {}
+
+    class Messages:
+        def create(self, **kw):
+            calls.update(kw)
+            if "decline" in kw["messages"][0]["content"]:
+                return types.SimpleNamespace(stop_reason="refusal", content=[], usage=types.SimpleNamespace(input_tokens=1, output_tokens=0))
+            block = types.SimpleNamespace(type="text", text='{"ok": true}')
+            return types.SimpleNamespace(stop_reason="end_turn", content=[block], usage=types.SimpleNamespace(input_tokens=5, output_tokens=3))
+
+    class Client:
+        def __init__(self, **kw):
+            calls["client"] = kw
+            self.messages = Messages()
+
+    import anthropic
+
+    monkeypatch.setattr(anthropic, "Anthropic", Client)
+    p = LP.normalise("anthropic", {"style": "anthropic", "base_url": "https://api.anthropic.com", "auth": "x-api-key"})
+    text, tokens = LP.chat(p, "k", "claude-haiku-5-5", "sys", "hello", max_tokens=300, tier="fast")
+    assert text == '{"ok": true}' and tokens == 8
+    assert "temperature" not in calls and calls["output_config"] == {"effort": "low"} and calls["max_tokens"] >= 2048
+    assert calls["client"]["max_retries"] == 0 and calls["system"] == "sys"
+    with pytest.raises(LP.CallError) as e:
+        LP.chat(p, "k", "claude-opus-5-5", "sys", "please decline", tier="smart")
+    assert e.value.status == 422

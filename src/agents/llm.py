@@ -1,10 +1,13 @@
 """
-LLM router for free API tiers (Groq, Gemini, NVIDIA NIM, any OpenAI-compatible).
+LLM router for free API tiers - and any other provider (llm_providers.py).
 
 DESIGNED FOR FREE TIERS
 
-    one client       every provider speaks the OpenAI /chat/completions
-                     dialect, so there is one HTTP path and no SDKs to install
+    any provider     OpenAI-compatible services over plain HTTP, Anthropic
+                     through its SDK; providers are defined in the settings
+                     file or added in the web app
+    several keys     a provider can hold more than one key; a rate-limited,
+                     spent or rejected key hands over to the next
     routes           each task asks for a TIER ("fast" for bulk classification,
                      "smart" for reasoning and writing); agent_settings.yaml
                      maps a tier to an ordered list of provider:model slots
@@ -20,21 +23,20 @@ DESIGNED FOR FREE TIERS
     off switch       no keys, llm.enabled false or --no-llm -> complete()
                      returns None and every agent uses its rule-based path
 
-Keys come from the environment only (GROQ_API_KEY, GEMINI_API_KEY,
-NVIDIA_API_KEY, ...). They are never logged, cached or written to reports.
+Keys come from the environment only (GROQ_API_KEY, GROQ_API_KEY_2, ...,
+held in .env or cloud secrets). They are never logged, cached or written to
+reports.
 """
 
 import collections
 import hashlib
 import json
 import logging
-import os
 import re
 import threading
 import time
 
-import requests
-
+from agents import llm_providers as LP
 from agents import settings as S
 
 log = logging.getLogger("agents.llm")
@@ -113,18 +115,18 @@ class LLMRouter:
         self._lock = threading.Lock()
         self._dead = set()  # providers that rejected the key this run
         self.providers = {}
-        for name, p in S.section("llm.providers").items():
-            if not isinstance(p, dict):
+        for name, p in LP.providers().items():
+            if not p["enabled"]:
                 continue
-            key = os.environ.get(p.get("key_env", ""), "").strip()
-            if not key:
+            ks = LP.keys(p)
+            if not ks:
                 continue
             self.providers[name] = {
-                "base_url": str(p.get("base_url", "")).rstrip("/"),
-                "key": key,
-                "models": p.get("models", {}) or {},
-                "rpd": int(p.get("requests_per_day", 1000)),
-                "pacer": _Pacer(p.get("requests_per_minute", 10), p.get("tokens_per_minute", 6000)),
+                **p,
+                "keys": ks,           # [(env name, key)], tried in order
+                "ki": 0,              # the key in use
+                "dead_keys": set(),   # rejected this run
+                "pacer": _Pacer(p["rpm"], p["tpm"]),
             }
         if not self.providers:
             self.enabled = False
@@ -185,17 +187,18 @@ class LLMRouter:
 
         if json_mode:
             system = system + "\nReply with valid JSON only. No prose outside the JSON."
-        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
         est = _estimate_tokens(system + user) + max_tokens
 
         for prov, model in self._slots(tier):
             p = self.providers[prov]
-            if self.board is not None and self.board.usage_today(prov)[0] >= p["rpd"]:
+            if self.board is not None and self.board.usage_today(prov)[0] >= p["rpd"] * max(1, len(p["keys"])):
                 self.failures[f"{prov} daily quota"] += 1
                 continue
-            for attempt in range(self.retries):
+            for attempt in range(self.retries + len(p["keys"]) - 1):
+                if prov in self._dead:
+                    break
                 p["pacer"].wait(est)
-                text, tokens, status = self._post(p, model, messages, max_tokens, json_mode)
+                text, tokens, status = self._post(p, model, system, user, max_tokens, json_mode, tier)
                 if text is not None:
                     if self.board is not None:
                         self.board.add_usage(prov, tokens)
@@ -209,12 +212,15 @@ class LLMRouter:
                         break  # a different model may format better
                     return text
                 if status in (401, 403):
-                    log.error("%s rejected the API key - provider disabled this run", prov)
-                    self._dead.add(prov)
-                    break
-                if status == 400 and json_mode:
+                    # this key is rejected: the next one, or the next provider
+                    if not self._next_key(prov, dead=True):
+                        log.error("%s rejected every key - provider disabled this run", prov)
+                        self._dead.add(prov)
+                        break
+                    continue
+                if status == 400 and json_mode and p["style"] == "openai":
                     # some models refuse response_format; retry once without it
-                    text, tokens, status = self._post(p, model, messages, max_tokens, False)
+                    text, tokens, status = self._post(p, model, system, user, max_tokens, False, tier)
                     if text is not None:
                         parsed = parse_json(text)
                         if parsed is not None:
@@ -225,6 +231,8 @@ class LLMRouter:
                             return parsed
                     break
                 if status == 429:
+                    if self._next_key(prov):  # another key may have quota left
+                        continue
                     time.sleep(min(20, 4 * (attempt + 1)))
                 elif status and status >= 500:
                     time.sleep(2 * (attempt + 1))
@@ -234,58 +242,49 @@ class LLMRouter:
         self.failures["unanswered"] += 1
         return None
 
-    def _post(self, p, model, messages, max_tokens, json_mode):
-        body = {
-            "model": model,
-            "messages": messages,
-            "max_tokens": int(max_tokens),
-            "temperature": self.temperature,
-        }
-        if json_mode:
-            body["response_format"] = {"type": "json_object"}
+    def _next_key(self, prov, dead=False):
+        """Move to this provider's next usable key. -> False when none is left."""
+        p = self.providers[prov]
+        if dead:
+            p["dead_keys"].add(p["ki"])
+        for step in range(1, len(p["keys"]) + 1):
+            i = (p["ki"] + step) % len(p["keys"])
+            if i not in p["dead_keys"] and i != p["ki"]:
+                p["ki"] = i
+                return True
+        return False
+
+    def _post(self, p, model, system, user, max_tokens, json_mode, tier="smart"):
+        """-> (text, tokens, status); text None on failure."""
+        env, key = p["keys"][p["ki"]]
         try:
-            r = requests.post(
-                p["base_url"] + "/chat/completions",
-                headers={"Authorization": f"Bearer {p['key']}", "Content-Type": "application/json"},
-                json=body,
-                timeout=self.timeout,
-            )
-        except requests.RequestException as e:
-            log.warning("LLM request failed (%s): %s", model, type(e).__name__)
-            return None, 0, None
-        if r.status_code != 200:
-            log.warning("LLM %s returned HTTP %s: %s", model, r.status_code, r.text[:200])
-            return None, 0, r.status_code
-        try:
-            data = r.json()
-            text = data["choices"][0]["message"]["content"]
-            tokens = (data.get("usage") or {}).get("total_tokens", 0)
+            text, tokens = LP.chat(p, key, model, system, user, max_tokens=max_tokens, json_mode=json_mode,
+                                   timeout=self.timeout, temperature=self.temperature, tier=tier)
             return text, tokens, 200
-        except (ValueError, KeyError, IndexError, TypeError):
-            return None, 0, 502
+        except LP.CallError as e:
+            log.warning("LLM %s via %s (%s) failed: %s %s", model, p["name"], env or "no key", e.status, str(e)[:200])
+            return None, 0, e.status
 
     # ------------------------------------------------------------ check
     def check(self):
-        """Ping every configured provider once. -> list of (provider, model, ok, note)."""
+        """Ping every configured provider once, on each of its keys. -> list of (provider, model, ok, note)."""
         out = []
-        configured = S.section("llm.providers")
-        for name, p in configured.items():
+        for name, p in LP.providers().items():
             if name not in self.providers:
-                out.append((name, "-", False, f"no key in ${p.get('key_env', '?')}"))
+                note = "switched off" if not p["enabled"] else f"no key in ${', $'.join(p['key_envs'])}"
+                out.append((name, "-", False, note))
                 continue
+            q = self.providers[name]
             for tier in ("fast", "smart"):
-                model = self.providers[name]["models"].get(tier)
+                model = q["models"].get(tier)
                 if not model:
                     continue
-                t0 = time.time()
-                text, _, status = self._post(
-                    self.providers[name],
-                    model,
-                    [{"role": "user", "content": 'Reply with {"ok": true}'}],
-                    20,
-                    False,
-                )
-                ok = text is not None
-                note = f"{time.time() - t0:.1f}s" if ok else f"HTTP {status}"
-                out.append((name, model, ok, note))
+                for i, (env, _) in enumerate(q["keys"]):
+                    q["ki"] = i
+                    t0 = time.time()
+                    text, _, status = self._post(q, model, "Reply with JSON only.", 'Reply with {"ok": true}', 20, False, tier)
+                    ok = text is not None
+                    note = f"{time.time() - t0:.1f}s" if ok else f"HTTP {status}"
+                    out.append((name, f"{model} [{env or 'no key'}]", ok, note))
+            q["ki"] = 0
         return out
