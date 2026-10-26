@@ -27,7 +27,7 @@ import time
 
 import config
 
-from agents import chief, comms, protocol
+from agents import chief, comms, profiles, protocol
 from agents import settings as S
 from agents.base import Finding
 from agents.blackboard import Blackboard
@@ -191,7 +191,7 @@ def research_company(company, base, rec, feeds, board, llm, run_id, shared, quic
             protocol.assign(bus, lead, [c.KEY for c in active], ctx, SLOW_AGENTS & set(reuse) if quick else ())
         for cls in active:
             cs = comms.BY_KEY.get(cls.KEY)
-            if quick and cls.KEY in SLOW_AGENTS:
+            if quick and cls.KEY in SLOW_AGENTS and not profiles.by_key(cls.KEY)["rerun_quick"]:
                 if cls.KEY in reuse:
                     f = Finding.from_dict(reuse[cls.KEY])
                     f.notes.append("re-used from the last full run")
@@ -209,7 +209,7 @@ def research_company(company, base, rec, feeds, board, llm, run_id, shared, quic
 
     lead, team = REVIEW
     for cls in team:
-        if chief.analyst_weight(lead, cls.KEY) <= 0 and cls.KEY != "research_validation_analyst":
+        if (chief.analyst_weight(lead, cls.KEY) <= 0 and cls.KEY != "research_validation_analyst") or not profiles.by_key(cls.KEY)["enabled"]:
             continue
         if bus and cls.KEY == "bull_case_analyst":
             protocol.cases(bus, ctx)  # bull and bear both ask the leads before writing
@@ -225,7 +225,10 @@ def research_company(company, base, rec, feeds, board, llm, run_id, shared, quic
     reports = protocol.team_reports(bus, ctx, mids) if bus else {}
 
     def ask(tier, system, user, max_tokens=600):
-        return llm.complete(tier, system, user, max_tokens=max_tokens, agent="chief") if llm else None
+        tier = profiles.llm_tier("chief", tier)
+        if not llm or tier is None:
+            return None
+        return llm.complete(tier, system + profiles.instructions_for(callsign="CMD-00"), user, max_tokens=max_tokens, agent="chief")
 
     if bus:
         bus.start("CMD-00", ctx.name, f"Deciding {ctx.name}")

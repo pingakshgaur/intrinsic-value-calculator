@@ -137,6 +137,12 @@ class Agent:
             f.summary = f"{self.NAME} could not complete: {type(e).__name__}: {e}"
         f.score = clamp(float(f.score or 0.0), -1.0, 1.0)
         f.confidence = clamp(float(f.confidence or 0.0), 0.0, 1.0)
+        try:
+            from agents import profiles
+
+            profiles.apply(f)
+        except Exception:  # a bad profile never costs a finding
+            log.exception("agent profile for %s not applied", self.KEY)
         if f.status == "ok" and not f.evidence:
             f.status = "no_data"
             f.confidence = min(f.confidence, 0.1)
@@ -148,8 +154,13 @@ class Agent:
         """-> parsed reply or None. None also when LLMs are off or exhausted."""
         if self.llm is None:
             return None
+        from agents import profiles
+
+        tier = profiles.llm_tier(self.KEY, tier)
+        if tier is None:  # told to stay rule-based
+            return None
         return self.llm.complete(
-            tier, system, user, max_tokens=max_tokens, json_mode=json_mode, agent=self.KEY
+            tier, system + profiles.instructions_for(self.KEY), user, max_tokens=max_tokens, json_mode=json_mode, agent=self.KEY
         )
 
 

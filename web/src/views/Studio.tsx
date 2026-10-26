@@ -14,6 +14,7 @@ import { useApp } from "../components/workbenchContext";
 type Overrides = Record<string, number | boolean>;
 const CUR = "studio.overrides.v1";
 const SETS = "studio.sets.v1";
+const PANELS = "studio.panels.v1";
 
 function load<T>(k: string, d: T): T { try { const v = JSON.parse(localStorage.getItem(k) || "null"); return v ?? d; } catch { return d; } }
 function save(k: string, v: unknown) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } }
@@ -22,6 +23,8 @@ function useDebounced<T>(v: T, ms: number) {
   useEffect(() => { const t = window.setTimeout(() => setD(v), ms); return () => window.clearTimeout(t); }, [v, ms]);
   return d;
 }
+const same = (a: unknown, b: unknown) => (isNum(a) && isNum(b) ? Math.abs(a - b) < 1e-9 : a === b);
+
 function show(p: ParamDef | undefined, v: unknown) {
   if (typeof v === "boolean") return v ? "on" : "off";
   if (!isNum(v)) return "—";
@@ -42,6 +45,29 @@ export function Studio() {
   const app = useApp();
   useEffect(() => save(CUR, overrides), [overrides]);
   useEffect(() => save(SETS, sets), [sets]);
+  // the side panels open and close; the canvas takes the room they leave
+  const [panels, setPanels] = useState<{ left: boolean; right: boolean }>(() => ({ left: true, right: true, ...load(PANELS, {}) }));
+  useEffect(() => save(PANELS, panels), [panels]);
+  const toggle = (side: "left" | "right", v?: boolean) => setPanels((p) => ({ ...p, [side]: v ?? !p[side] }));
+  const leftOpen = useRef(panels.left);
+  leftOpen.current = panels.left;
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || (e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable]"))) return;
+      if (e.key === "[") toggle("left");
+      else if (e.key === "]") toggle("right");
+    };
+    // a click in the sensitivity chart focuses a parameter: open the parameter panel first
+    const f = (e: Event) => {
+      if (leftOpen.current) return;
+      toggle("left", true);
+      const path = (e as CustomEvent<string>).detail;
+      window.setTimeout(() => window.dispatchEvent(new CustomEvent("studio:focus", { detail: path })), 120);
+    };
+    window.addEventListener("keydown", k);
+    window.addEventListener("studio:focus", f);
+    return () => { window.removeEventListener("keydown", k); window.removeEventListener("studio:focus", f); };
+  }, []);
 
   const mode = params.get("mode") === "portfolio" ? "portfolio" : "company";
   const list = companies.data ?? [];
@@ -60,6 +86,21 @@ export function Studio() {
     return o;
   }, [overrides, byPath]);
   const dirty = Object.keys(effective).length;
+  // constants whose saved value (or pending change) differs from the shipped default
+  const offDefault = useMemo(() => {
+    const o: Overrides = {};
+    for (const p of Object.values(byPath)) {
+      if (p.default == null) continue;
+      const cur = p.path in overrides ? overrides[p.path] : p.value;
+      if (!same(cur, p.default)) o[p.path] = p.default;
+    }
+    return o;
+  }, [byPath, overrides]);
+  const restoreDefaults = () => {
+    const n = Object.keys(offDefault).length;
+    setOverrides({ ...overrides, ...offDefault });
+    app.toast(`${n} constant(s) set back to their defaults. Review the effect, then Commit to save.`, "ok");
+  };
 
   const commit = async () => {
     setSaving(true);
@@ -74,19 +115,27 @@ export function Studio() {
   };
 
   return (
-    <div className="page fill">
+    <div className="page fill studio-page">
       <PageHeader
         crumbs={[{ label: "Analysis" }, { label: "HYBRID MODEL Studio" }]}
         title={<span className="row" style={{ gap: 10 }}>HYBRID MODEL Studio <span className="tag hm">live</span></span>}
         sub="Change any constant and see the value, range, lenses and bridge respond instantly. Nothing is written until you commit."
         actions={
           <>
+            <div className="seg" aria-label="Panels">
+              <button className={panels.left ? "on" : ""} onClick={() => toggle("left")} title={`${panels.left ? "Hide" : "Show"} the parameters ([)`}><Icon name="layout-sidebar-left" className="sm" /></button>
+              <button className={panels.right ? "on" : ""} onClick={() => toggle("right")} title={`${panels.right ? "Hide" : "Show"} the inspector (])`}><Icon name="layout-sidebar-right" className="sm" /></button>
+            </div>
             <div className="seg">
               <button className={mode === "company" ? "on" : ""} onClick={() => setQ("mode", "company")}><Icon name="symbol-class" className="sm" />Company</button>
               <button className={mode === "portfolio" ? "on" : ""} onClick={() => setQ("mode", "portfolio")}><Icon name="layers" className="sm" />Portfolio</button>
             </div>
             <ScenarioMenu sets={sets} setSets={setSets} current={effective} onLoad={(o) => setOverrides(o)} />
-            <button className="btn ghost" disabled={!dirty} onClick={() => setOverrides({})}><Icon name="discard" className="sm" />Reset</button>
+            <button className="btn ghost" disabled={!dirty} onClick={() => setOverrides({})} title="Discard the changes you have not committed"><Icon name="discard" className="sm" />Discard</button>
+            <button className="btn sec" disabled={!Object.keys(offDefault).length} onClick={restoreDefaults}
+              title="Load the shipped default for every constant you changed - preview first, nothing is written until you commit">
+              <Icon name="history" className="sm" />Defaults{Object.keys(offDefault).length ? ` (${Object.keys(offDefault).length})` : ""}
+            </button>
             {confirm ? (
               <>
                 <span className="small muted">Write {dirty} change(s) to agent_settings.yaml?</span>
@@ -101,13 +150,21 @@ export function Studio() {
       {companies.isLoading || schema.isLoading ? <Loading rows={12} /> : !list.length ? (
         <Panel><Empty icon="beaker" title="Nothing to model yet" action={<RunButton kind="valuation" label="Run valuation report" icon="graph" />}>The Studio needs each company's HYBRID MODEL inputs, written by the valuation report or a research run.</Empty></Panel>
       ) : (
-        <div className="studio">
-          <section>
-            <div className="pane-h"><h3>Parameters</h3><span className="spacer" />{dirty > 0 && <span className="tag hm">{dirty} changed</span>}</div>
-            <ParamTree groups={schema.data ?? []} overrides={overrides} effective={effective} setOverrides={setOverrides} />
-          </section>
+        <div className={`studio ${panels.left ? "" : "no-left"} ${panels.right || mode !== "company" ? "" : "no-right"}`}>
+          {panels.left ? (
+            <section>
+              <div className="pane-h"><h3>Parameters</h3><span className="spacer" />{dirty > 0 && <span className="tag hm">{dirty} changed</span>}
+                <button className="ibtn sm" onClick={() => toggle("left", false)} title="Hide the parameters ([)"><Icon name="chevron-left" className="xs" /></button></div>
+              <ParamTree groups={schema.data ?? []} overrides={overrides} effective={effective} setOverrides={setOverrides} />
+            </section>
+          ) : (
+            <button className="studio-tab" onClick={() => toggle("left", true)} title="Show the parameters ([)">
+              <Icon name="chevron-right" className="xs" /><span>Parameters</span>{dirty > 0 && <b className="tag hm">{dirty}</b>}
+            </button>
+          )}
           {mode === "company"
-            ? <CompanyCanvas company={company} list={list} onPick={(c) => setQ("company", c)} overrides={effective} byPath={byPath} setOverrides={setOverrides} />
+            ? <CompanyCanvas company={company} list={list} onPick={(c) => setQ("company", c)} overrides={effective} byPath={byPath} setOverrides={setOverrides}
+                right={panels.right} setRight={(v) => toggle("right", v)} />
             : <Portfolio overrides={effective} />}
         </div>
       )}
@@ -202,12 +259,18 @@ function Param({ p, value, modified, onChange, onReset }: { p: ParamDef; value: 
           onChange={(e) => { const v = Number(e.target.value); onChange(p.kind === "int" ? Math.round(v) : Math.round(v * 1e6) / 1e6); }} aria-label={p.label} />
       )}
       {modified && <span className="was">saved {show(p, p.value)}</span>}
+      {p.default != null && !same(value, p.default) && (
+        <button className="was dflt" onClick={() => onChange(p.default as number | boolean)} title="Set this constant back to its shipped default">
+          <Icon name="history" className="xs" />default {show(p, p.default)}
+        </button>
+      )}
     </div>
   );
 }
 
-function CompanyCanvas({ company, list, onPick, overrides, byPath, setOverrides }: {
+function CompanyCanvas({ company, list, onPick, overrides, byPath, setOverrides, right, setRight }: {
   company: string; list: { company: string; source: string }[]; onPick: (c: string) => void; overrides: Overrides; byPath: Record<string, ParamDef>; setOverrides: (o: Overrides) => void;
+  right: boolean; setRight: (v: boolean) => void;
 }) {
   const debounced = useDebounced(overrides, 200);
   const [sim, setSim] = useState<Simulation | null>(null);
@@ -255,18 +318,25 @@ function CompanyCanvas({ company, list, onPick, overrides, byPath, setOverrides 
               </div>
               <div className="cv-block"><h4>Valuation range<span className="spacer" /><RangeLegend ghost={changed} /></h4><ValueRange r={live} ghost={changed ? saved : null} /></div>
               <div className="cv-block"><h4>Bridge</h4><Bridge r={live} height={210} /></div>
-              <div className="cv-block" style={{ padding: 0 }}><h4 style={{ padding: "14px 18px 0" }}>Lens contribution</h4><LensContribution r={live} /></div>
+              <div className="cv-block" style={{ padding: 0 }}><h4 style={{ padding: "18px 2px 0" }}>Lens contribution</h4><LensContribution r={live} /></div>
               {live.gate && live.gate.after < live.gate.before && <div style={{ padding: 14 }}><div className="note inf"><Icon name="filter" /><div>Growth gate active: growth was {pct(live.gate.pvgo_share, 0)} of the cash-flow lens (allowed {pct(live.gate.allowed, 0)}), cut from {money(live.gate.before, 0)} to {money(live.gate.after, 0)}.</div></div></div>}
             </>
           )}
         </div>
       </section>
+      {!right ? (
+        <button className="studio-tab r" onClick={() => setRight(true)} title="Show the inspector (])">
+          <Icon name="chevron-left" className="xs" /><span>Sensitivity · Changes · Inputs</span>{changed && <b className="tag hm">{Object.keys(overrides).length}</b>}
+        </button>
+      ) : (
       <section className="insp-pane">
         <div className="pane-h" style={{ padding: 0 }}>
           <div className="tabs" style={{ border: 0, margin: 0, width: "100%" }}>
             {([["sens", "Sensitivity"], ["diff", `Changes${changed ? ` (${Object.keys(overrides).length})` : ""}`], ["inputs", "Inputs"]] as const).map(([k, l]) => (
               <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)} style={{ height: 39 }}>{l}</button>
             ))}
+            <span className="spacer" />
+            <button className="ibtn sm" onClick={() => setRight(false)} title="Hide the inspector (])" style={{ alignSelf: "center", marginRight: 6 }}><Icon name="chevron-right" className="xs" /></button>
           </div>
         </div>
         <div className="pane-b" style={{ padding: 14 }}>
@@ -300,6 +370,7 @@ function CompanyCanvas({ company, list, onPick, overrides, byPath, setOverrides 
           )}
         </div>
       </section>
+      )}
     </>
   );
 }
@@ -344,7 +415,7 @@ function Portfolio({ overrides }: { overrides: Overrides }) {
   const avg = ch.length ? ch.reduce((a, b) => a + b, 0) / ch.length : null;
   const moved = rows.filter((r) => r.saved_label !== r.live_label).length;
   return (
-    <section style={{ gridColumn: "2 / -1" }}>
+    <section className="portfolio-pane" style={{ gridColumn: "2 / -1" }}>
       <div className="band" style={{ borderRadius: 0, border: 0, borderBottom: "1px solid var(--line)" }}>
         <div><div className="k">Companies</div><div className="v">{rows.length}</div></div>
         <div><div className="k">Average change</div><div className={`v ${isNum(avg) ? (avg >= 0 ? "up" : "down") : ""}`}>{pct(avg, 1, true)}</div></div>

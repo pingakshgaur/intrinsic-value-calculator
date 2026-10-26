@@ -32,6 +32,7 @@ import statistics
 
 import hybrid_model as HM
 from agents import settings as S
+from agents import profiles
 from agents.base import cited, clamp, weighted_mean
 
 LEAD_NAMES = {
@@ -44,16 +45,18 @@ LEAD_NAMES = {
 
 
 def analyst_weight(lead, agent):
+    """The analyst's weight in its lead's report: the settings file x its profile (0 when switched off)."""
     w = S.section(f"agents.{lead}").get(agent)
     try:
-        return float(w) if w is not None else 1.0
+        base = float(w) if w is not None else 1.0
     except (TypeError, ValueError):
-        return 1.0
+        base = 1.0
+    return base * profiles.weight(agent)
 
 
 def lead_report(ctx, lead):
     rows = [f for f in ctx.findings.values() if f.lead == lead]
-    use = [f for f in rows if f.status == "ok" and f.validated is not False]
+    use = [f for f in rows if f.status == "ok" and f.validated is not False and not profiles.below_floor(f)]
     pairs = [(f.score, analyst_weight(lead, f.agent) * f.confidence) for f in use]
     score = weighted_mean(pairs)
     conf = statistics.mean(f.confidence for f in use) if use else 0.0

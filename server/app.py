@@ -501,6 +501,11 @@ def _start_background():
     if _bg["started"]:
         return
     _bg["started"] = True
+    if not jobs.active():
+        try:
+            agents_api.close_interrupted()
+        except Exception:  # never block the server on bookkeeping
+            pass
     live.TRACKER.start()
     jobs.on_done.append(lambda j: learning_api.after_job(j, jobs))
     learning_api.start_scheduler(jobs)
@@ -649,6 +654,43 @@ def agents_post(body: AgentPost):
         raise HTTPException(409, str(e))
 
 
+@app.get("/api/agents/profiles")
+def agents_profiles():
+    """Every agent's tuning (src/agents/profiles.py), defaults filled in."""
+    from agents import profiles
+
+    return {"profiles": profiles.all_profiles(list(comms_roster())), "default": profiles.DEFAULT,
+            "llm_modes": list(profiles.LLM_MODES), "stances": list(profiles.STANCES)}
+
+
+@app.put("/api/agents/profiles/{callsign}")
+def agents_profile_put(callsign: str, body: dict):
+    from agents import comms, profiles
+
+    if callsign not in comms.ROSTER or comms.ROSTER[callsign]["role"] == "system":
+        raise HTTPException(404, f"no agent {callsign}")
+    if comms.ROSTER[callsign]["role"] != "analyst" and body.get("enabled") is False:
+        raise HTTPException(400, "leads and the chief always take part")
+    try:
+        return profiles.save(callsign, body)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/agents/profiles/{callsign}")
+def agents_profile_reset(callsign: str):
+    from agents import profiles
+
+    profiles.reset(None if callsign == "all" else callsign)
+    return {"ok": True}
+
+
+def comms_roster():
+    from agents import comms
+
+    return comms.ROSTER
+
+
 @app.get("/api/agents/autostart")
 def get_autostart():
     return {"settings": autostart.settings(), "state": autostart.state}
@@ -702,8 +744,11 @@ def spa(path: str):
         )
     target = (DIST / path).resolve()
     if path and target.is_file() and DIST.resolve() in target.parents:
-        return FileResponse(target)
-    return FileResponse(DIST / "index.html")
+        # hashed bundles never change; everything else is checked on every load
+        immutable = target.parent.name == "assets"
+        return FileResponse(target, headers={"Cache-Control": "public, max-age=31536000, immutable" if immutable else "no-cache"})
+    # the page itself must be revalidated, or a rebuilt app keeps loading the old bundle
+    return FileResponse(DIST / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 def serve(port=8765, open_browser=True):

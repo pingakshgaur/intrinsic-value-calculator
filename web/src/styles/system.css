@@ -112,7 +112,19 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .sb-item.active .codicon { color: var(--accent-2); }
 .sb-item .count { margin-left: auto; font-size: 11px; color: var(--fg-3); font-variant-numeric: tabular-nums; }
 .sb-item .tagnew { margin-left: auto; font-size: 9.5px; font-weight: 700; color: var(--hm); border: 1px solid #ad80d766; border-radius: 4px; padding: 0 5px; letter-spacing: .05em; }
-.sb-foot { border-top: 1px solid var(--line); padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; flex: none; }
+.sb-foot { border-top: 1px solid var(--line); padding: 8px 10px; display: flex; align-items: center; gap: 6px; font-size: 11.5px; flex: none; }
+/* system status: one line of dots; the details open in a small panel above it */
+.sb-sys { position: relative; flex: 1; min-width: 0; }
+.sb-sys-btn { display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--fg-2); font-size: 11.5px; cursor: pointer; }
+.sb-sys-btn:hover, .sb-sys-btn.on { background: var(--hover); color: var(--fg-1); border-color: var(--line-2); }
+.sb-sys-btn .dots { display: inline-flex; gap: 4px; }
+.sb-sys-btn .dots .dot { width: 6px; height: 6px; box-shadow: none; }
+.sb-sys-btn .t { flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-sys-pop { position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 40; display: flex; flex-direction: column; gap: 7px; padding: 10px 12px;
+  background: var(--raise); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: var(--shadow-pop); animation: pop .12s ease; }
+.sb-sys-pop .r { display: flex; align-items: center; gap: 8px; color: var(--fg-2); }
+.sb-sys-pop .r b { margin-left: auto; color: var(--fg-1); font-weight: 500; }
+.sb-collapse { flex: none; }
 .sb-foot .r { display: flex; align-items: center; gap: 8px; color: var(--fg-2); }
 .sb-foot .r b { margin-left: auto; color: var(--fg-1); font-weight: 500; }
 .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; display: inline-block; background: var(--fg-3); }

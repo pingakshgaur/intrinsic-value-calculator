@@ -279,6 +279,8 @@ export interface ParamDef {
   desc: string | null;
   value: number | boolean | null;
   in_file: boolean;
+  /** the shipped value (agent_settings.defaults.yaml), null when it is not in that file */
+  default?: number | boolean | null;
 }
 
 export interface ParamGroup {

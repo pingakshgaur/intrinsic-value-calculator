@@ -1,0 +1,182 @@
+/* ============================================================ agent network
+ * Full-bleed map: a top bar, a tool rail on the left, the inspector docked on
+ * the right and the replay bar along the bottom - nothing floats over the map
+ * except tooltips, menus and the mini-map you switch on.                      */
+
+.net-page { position: absolute; inset: 0; display: flex; flex-direction: column; min-height: 0; }
+.net-page > .empty, .net-page > .skel { margin: 24px; }
+.net { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+
+/* ---------- top bar */
+.net-top { height: 46px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 14px; border-bottom: 1px solid var(--line); background: var(--chrome); min-width: 0; }
+.net-title { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--fg-1); margin-right: 4px; white-space: nowrap; }
+.net-title .codicon { color: var(--accent-2); }
+.net-top .sel { max-width: 210px; }
+.net-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 6px; border: 1px solid transparent; background: none; color: var(--fg-2); font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+.net-btn:hover { background: var(--hover); color: var(--fg-1); }
+.net-btn.on { background: var(--active); color: var(--fg-1); border-color: var(--line-2); }
+.net-btn.icon { width: 30px; padding: 0; justify-content: center; }
+.net-badge { font-size: 10px; font-weight: 600; background: var(--accent-bg); color: var(--accent-2); border-radius: 8px; padding: 0 6px; line-height: 16px; }
+.net-find { position: relative; width: 200px; flex: none; }
+.net-find .search { width: 100%; }
+.net-hits { position: absolute; top: calc(100% + 4px); left: 0; width: 320px; z-index: 70; background: var(--raise); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: var(--shadow-pop); padding: 4px; display: flex; flex-direction: column; }
+.net-hits button { display: grid; grid-template-columns: 8px auto minmax(0, 1fr) auto; gap: 8px; align-items: center; border: 0; background: none; padding: 6px 8px; border-radius: 6px; color: var(--fg); font-size: 12px; cursor: pointer; text-align: left; }
+.net-hits button:hover { background: var(--accent-bg); }
+.net-hits i { width: 8px; height: 8px; border-radius: 2px; }
+.net-hits b { font: 600 11px var(--mono); color: var(--fg-1); }
+@media (max-width: 1150px) { .net-title b, .net-find { display: none; } .net-btn { padding: 0 8px; } }
+
+/* ---------- body: rail | map | inspector */
+.net-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 44px minmax(0, 1fr) 340px; }
+.net-body.noside { grid-template-columns: 44px minmax(0, 1fr); }
+@media (max-width: 1000px) { .net-body { grid-template-columns: 44px minmax(0, 1fr); } .net-body .an-side { position: absolute; right: 0; top: 46px; bottom: 38px; width: min(340px, 90vw); z-index: 40; box-shadow: var(--shadow-pop); } }
+.net-rail { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0; border-right: 1px solid var(--line); background: var(--chrome); }
+.net-rail button { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 7px; background: none; color: var(--fg-2); cursor: pointer; }
+.net-rail button:hover { background: var(--hover); color: var(--fg-1); }
+.net-rail button.on { background: var(--accent-bg); color: var(--accent-2); box-shadow: inset 2px 0 0 var(--accent); }
+.net-rail .sep { width: 22px; height: 1px; background: var(--line); margin: 6px 0; }
+.net-body .an-side { border-radius: 0; border: 0; border-left: 1px solid var(--line); background: var(--panel); }
+.net-body .an-tabs { align-items: center; }
+
+/* ---------- the map */
+.net-stage { border-radius: 0; border: 0; min-width: 0; }
+.net-stage.tool-pan, .net-stage.tool-pan .an-node { cursor: grab; }
+.net-stage.tool-link, .net-stage.tool-link .an-node, .net-stage.tool-note, .net-stage.tool-focus .an-node { cursor: crosshair; }
+.net-stage.tool-erase .an-node, .net-stage.tool-erase .an-note, .net-stage.tool-erase .an-edge .hit { cursor: not-allowed; }
+.net-stage.tool-erase .an-node:hover { outline: 2px dashed var(--down); outline-offset: 3px; }
+.net-stage.tool-link .an-node:hover { outline: 2px solid var(--accent-2); outline-offset: 3px; }
+.net-chip { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 12; display: inline-flex; gap: 6px; align-items: center; padding: 4px 4px 4px 11px; border-radius: 14px;
+  background: var(--raise); border: 1px solid var(--line-2); font-size: 12px; color: var(--fg-1); box-shadow: var(--shadow-pop); max-width: calc(100% - 40px); white-space: nowrap; }
+.net-chip.tool { color: var(--fg-2); }
+.net-chip button { border: 0; background: none; cursor: pointer; color: var(--fg-2); display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; }
+.net-chip button:hover { background: var(--hover); color: var(--fg-1); }
+
+/* compact cards: callsign and a short title only */
+.an-node.card.compact { padding: 6px 9px; justify-content: center; border-radius: 10px; }
+.an-node.card.compact .an-ic { width: 24px; height: 24px; border-radius: 7px; }
+.an-node.card.compact .an-id span { font-size: 10.5px; text-transform: none; letter-spacing: 0; color: var(--fg-2); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.an-node.r-chief.compact { padding: 8px 12px; }
+.an-node.r-chief.compact .an-ic { width: 32px; height: 32px; }
+.an-node.far { opacity: .07; filter: grayscale(1); }
+.an-frame.dim { opacity: .1; }
+.an-node.off { opacity: .55; border-style: dashed; }
+.an-state.s-off { background: var(--down); }
+.an-edge.k-custom .line { stroke: var(--accent-2); stroke-width: 2px; stroke-dasharray: 7 4; stroke-opacity: .9; fill: none; }
+.an-edge.k-custom.sel .line, .an-edge.k-custom:hover .line { stroke-width: 3px; stroke-opacity: 1; }
+.an-elabel.custom { fill: var(--accent-2); font-weight: 600; font-size: 11px; }
+.an-draft { stroke: var(--accent-2); stroke-width: 2px; stroke-dasharray: 4 4; fill: none; }
+.an-note { position: absolute; z-index: 3; min-width: 120px; max-width: 260px; padding: 8px 10px; border-radius: 6px; background: #f6e58d; color: #2b2a14;
+  font-size: 12px; line-height: 1.45; box-shadow: 0 4px 14px #0005; cursor: move; white-space: pre-wrap; overflow-wrap: anywhere; }
+.an-note::before { content: ""; position: absolute; top: -5px; left: 50%; width: 10px; height: 10px; border-radius: 50%; background: #e0b030; transform: translateX(-50%); box-shadow: 0 1px 2px #0005; }
+.an-note.editing { cursor: text; }
+.an-note textarea { width: 230px; min-height: 60px; border: 0; background: transparent; resize: both; font: inherit; color: inherit; outline: none; }
+.an-mini { z-index: 11; }
+
+/* ---------- bottom bar */
+.net-bot { height: 38px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-top: 1px solid var(--line); background: var(--chrome); min-width: 0; }
+.net-transport { display: flex; align-items: center; gap: 10px; width: min(600px, 50%); flex: none; }
+.net-transport input[type="range"] { flex: 1; min-width: 60px; }
+.net-transport .an-density { width: 90px; height: 18px; }
+.net-last { flex: 1; min-width: 0; display: flex; gap: 6px; align-items: center; font-size: 11.5px; color: var(--fg-2); overflow: hidden; }
+.net-last i { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.net-last b { font: 600 10.5px var(--mono); flex: none; }
+.net-last .faint { flex: none; }
+.net-count { white-space: nowrap; }
+@media (max-width: 1150px) { .net-count, .net-transport .an-density { display: none; } }
+
+/* ---------- layers / views / shortcuts popovers */
+.net-pop { width: 310px; max-height: min(70vh, 640px); overflow: auto; }
+.net-pop.sm { width: 280px; }
+.nl { display: flex; flex-direction: column; gap: 14px; padding: 12px 14px 14px; }
+.nl section { display: flex; flex-direction: column; gap: 7px; }
+.nl-h { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--fg-3); }
+.nl-h .faint { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.nl .seg { align-self: flex-start; }
+.nl .seg button { height: 26px; font-size: 11.5px; }
+.nl-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.nl-chips .chip { height: 24px; font-family: var(--mono); font-size: 11px; padding: 0 8px; }
+.nl-chips .chip:not(.on) { opacity: .5; text-decoration: line-through; }
+.nl-edge { display: inline-flex; align-items: center; gap: 8px; }
+.nl-edge i { width: 16px; height: 3px; border-radius: 2px; }
+.nl-edge i.dot { background-image: radial-gradient(circle, currentColor 1px, transparent 1.5px); }
+.nl-edge i.dash { mask: repeating-linear-gradient(90deg, #000 0 5px, transparent 5px 8px); }
+.nl-kinds { display: flex; flex-wrap: wrap; gap: 2px 6px; padding-left: 2px; }
+.nl-kinds button { display: inline-flex; gap: 6px; align-items: center; border: 0; background: none; color: var(--fg); font-size: 11.5px; padding: 2px 3px; border-radius: 4px; cursor: pointer; }
+.nl-kinds button:hover { background: var(--hover); }
+.nl-kinds button.off { opacity: .35; text-decoration: line-through; }
+.nl-kinds i { width: 8px; height: 8px; border-radius: 50%; }
+.nl-hidden { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg); min-width: 0; }
+.nl-hidden .ellipsis { flex: 1; min-width: 0; }
+.nl-view { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; padding: 6px 8px; border-radius: 6px; color: var(--fg); font-size: 12.5px; cursor: pointer; text-align: left; }
+.nl-view:hover { background: var(--accent-bg); color: var(--fg-1); }
+.nl.keys { gap: 7px; }
+.nl.keys > div { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 8px; align-items: baseline; font-size: 12px; color: var(--fg); }
+.nl.keys kbd { justify-self: start; }
+
+/* ---------- light theme: a pale canvas with inked team colours (see ink() in AgentNetwork.tsx) */
+.net.light .an-stage { background-color: #f3f4f6;
+  background-image: radial-gradient(#00000026 1px, transparent 1.3px), radial-gradient(ellipse at 30% 0%, #297aa012, transparent 60%), radial-gradient(ellipse at 90% 100%, #7b3fb30f, transparent 55%); }
+.net.light .an-node.card { background: linear-gradient(180deg, color-mix(in srgb, var(--tc) 10%, #fff), #fff 85%); border-color: color-mix(in srgb, var(--tc) 60%, #c9ccd1);
+  box-shadow: inset 0 1px 0 #fff, 0 3px 0 color-mix(in srgb, var(--tc) 22%, #d5d8dd), 0 6px 14px #0000001a; }
+.net.light .an-node.r-lead { background: linear-gradient(180deg, color-mix(in srgb, var(--tc) 16%, #fff), #fff 90%); }
+.net.light .an-node.r-chief { background: linear-gradient(160deg, color-mix(in srgb, var(--tc) 22%, #fff), #fff 80%); }
+.net.light .an-node.card:hover { box-shadow: inset 0 1px 0 #fff, 0 5px 0 color-mix(in srgb, var(--tc) 26%, #d5d8dd), 0 10px 20px #00000024; }
+.net.light .an-node.s-working { animation: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--tc) 55%, transparent), 0 6px 16px #00000026; }
+.net.light .an-node.round { background: radial-gradient(circle at 35% 28%, color-mix(in srgb, var(--tc) 18%, #fff), #fff 72%); border-color: color-mix(in srgb, var(--tc) 70%, #b9bcc2);
+  box-shadow: inset 0 1px 0 #fff, 0 3px 0 color-mix(in srgb, var(--tc) 22%, #d5d8dd), 0 6px 14px #0000001a; }
+.net.light .an-ic { background: color-mix(in srgb, var(--tc) 12%, #fff); border-color: color-mix(in srgb, var(--tc) 45%, transparent); }
+.net.light .an-id b { color: #1d2024; }
+.net.light .an-node.card.compact .an-id span, .net.light .an-title { color: #4a4f57; }
+.net.light .an-cap { color: #3f444b; font-weight: 600; }
+.net.light .an-frame { border-color: color-mix(in srgb, var(--tc) 45%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--tc) 8%, #fff), color-mix(in srgb, var(--tc) 3%, #fff)); }
+.net.light .an-frame-h { color: var(--tc); font-weight: 600; }
+.net.light .an-frame-bar { box-shadow: none; }
+.net.light .an-edge .line { stroke-opacity: calc(.55 + var(--vol, 0) * .2 + var(--hot, 0) * .25); }
+.net.light .an-edge.dim { opacity: .14; }
+.net.light .an-elabel { fill: #50555c; }
+.net.light .an-node::before { box-shadow: 0 0 18px 2px color-mix(in srgb, var(--tc) 70%, transparent); opacity: calc(var(--heat, 0) * .6); }
+.net.light .an-float { background: #fff; box-shadow: 0 4px 10px #00000026; }
+.net.light .an-float.pos { color: #1f7a33; } .net.light .an-float.neg { color: #b3261e; }
+.net.light .an-count { box-shadow: 0 0 0 2px #f3f4f6; color: #fff; }
+.net.light .an-ov { box-shadow: 0 6px 18px #0000001f; }
+.net.light .an-ring .fg { filter: none; }
+.net.light .an-note { box-shadow: 0 4px 12px #00000026; }
+
+/* ---------- tool / focus hint chip */
+.net-chip { height: 32px; padding: 0 4px; gap: 8px; line-height: 1; }
+.net-chip-ic { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--accent-bg); color: var(--accent-2); }
+.net-chip-ic .codicon { font-size: 14px; }
+.net-chip-t { display: inline-flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; }
+.net-chip-t b { color: var(--fg-1); font-weight: 600; }
+.net-chip button { flex: none; }
+.net-chip button .codicon { font-size: 13px; }
+
+/* ---------- in-card dropdown: brief info under an agent */
+.an-node.card .an-top { min-width: 0; }
+.an-node.card .an-title, .an-node.card .an-task { flex: none; }
+.an-more { flex: none; width: 18px; height: 18px; margin: -2px -4px -2px -2px; display: grid; place-items: center; border: 0; border-radius: 5px; background: none; color: var(--fg-3); cursor: pointer; padding: 0; }
+.an-more .codicon { font-size: 13px; }
+.an-more:hover, .an-more.on { background: color-mix(in srgb, var(--tc) 22%, transparent); color: var(--fg-1); }
+.an-drop { position: absolute; z-index: 6; padding: 10px 12px; border-radius: 10px; background: var(--raise); border: 1px solid color-mix(in srgb, var(--tc) 45%, var(--line-2));
+  box-shadow: 0 10px 28px #0008; display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; color: var(--fg); cursor: default; animation: pop .12s ease; }
+.an-drop::before { content: ""; position: absolute; top: -6px; left: 18px; width: 10px; height: 10px; background: inherit; border-left: 1px solid color-mix(in srgb, var(--tc) 45%, var(--line-2));
+  border-top: 1px solid color-mix(in srgb, var(--tc) 45%, var(--line-2)); transform: rotate(45deg); }
+.an-drop-h { display: flex; align-items: baseline; gap: 7px; }
+.an-drop-h b { font: 700 12px var(--mono); color: var(--tc); flex: none; }
+.an-drop-h span { flex: 1; min-width: 0; color: var(--fg-1); font-weight: 600; font-size: 12px; line-height: 1.3; }
+.an-drop-h button { flex: none; align-self: flex-start; border: 0; background: none; color: var(--fg-3); cursor: pointer; padding: 0; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 4px; }
+.an-drop-h button:hover { background: var(--hover); color: var(--fg-1); }
+.an-drop-team { color: var(--fg-3); font-size: 11px; }
+.an-drop-state { display: flex; align-items: center; gap: 6px; color: var(--fg-1); }
+.an-drop-state i { width: 7px; height: 7px; border-radius: 50%; background: var(--fg-3); flex: none; }
+.an-drop-state.s-working i { background: var(--up); box-shadow: 0 0 6px var(--up); }
+.an-drop-state.s-done i { background: var(--c-blue); }
+.an-drop-state.s-error i, .an-drop-state.s-off i { background: var(--down); }
+.an-drop-stats { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--fg-3); }
+.an-drop-stats b { color: var(--fg-1); font-family: var(--mono); font-weight: 600; }
+.an-drop p { margin: 0; color: var(--fg-2); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.an-drop-tuned { color: var(--hm); font-size: 11px; }
+.an-drop-acts { display: flex; gap: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
+.an-drop-acts button { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border: 0; border-radius: 5px; background: none; color: var(--fg-2); font-size: 11.5px; cursor: pointer; }
+.an-drop-acts button:hover { background: var(--hover); color: var(--fg-1); }
+.net.light .an-drop { background: #fff; box-shadow: 0 10px 24px #00000024; }

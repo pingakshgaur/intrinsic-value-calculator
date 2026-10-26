@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import {
-  agentOf, colorOf, dmName, isDm, Kind, KIND_META, Msg, Roster, timeOf, useAgentRuns, useChannelStats, useLiveFeed, useRoster,
+  agentOf, colorOf, dmName, isDm, Kind, KIND_META, Msg, Roster, timeOf, useAgentRuns, useChannelStats, useLiveFeed, useRoster, workforceSize,
 } from "../lib/agents";
 import { ago } from "../lib/format";
 import { chime } from "../lib/notify";
@@ -15,6 +15,7 @@ import { useApp } from "../components/workbenchContext";
 
 const SHOWN_KINDS: Kind[] = ["task", "finding", "request", "reply", "flag", "review", "summary", "verdict", "system", "user"];
 const READ_KEY = "rr.read.v1";
+const OPEN_KEY = "rr.teams.open.v1";
 
 function useChannel(run: number | null, channel: string) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -91,8 +92,18 @@ function Room({ roster }: { roster: Roster }) {
   const [company, setCompany] = useState<string>("");
   const [kinds, setKinds] = useState<Set<Kind>>(new Set());
   const [text, setText] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  // agents asked something and not yet answered: shown as "typing" until their reply lands
+  const [waiting, setWaiting] = useState<{ cs: string[]; after: number; until: number } | null>(null);
   const [find, setFind] = useState("");
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // agent groups start folded so the channels stay in view; the ones you open are remembered
+  const [openTeams, setOpenTeams] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || "[]")); } catch { return new Set(); } });
+  const toggleTeam = (code: string) => setOpenTeams((s) => {
+    const n = new Set(s);
+    if (n.has(code)) n.delete(code); else n.add(code);
+    try { localStorage.setItem(OPEN_KEY, JSON.stringify([...n])); } catch { /* private mode */ }
+    return n;
+  });
   const [read, setRead] = useState<Record<string, number>>(() => { try { return JSON.parse(localStorage.getItem(READ_KEY) || "{}"); } catch { return {}; } });
   const listRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
@@ -147,17 +158,34 @@ function Room({ roster }: { roster: Roster }) {
   };
   const toBottom = () => { const el = listRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" }); atBottom.current = true; setNewBelow(0); };
 
-  const typing = members.filter((cs) => status[cs]?.state === "working").slice(0, 4);
+  const lastId = ch.msgs[ch.msgs.length - 1]?.id ?? 0;
+  useEffect(() => {
+    if (!waiting) return;
+    const answered = ch.msgs.some((m) => m.id > waiting.after && waiting.cs.includes(m.sender));
+    if (answered || Date.now() > waiting.until) { setWaiting(null); return; }
+    const t = window.setTimeout(() => ch.refresh(), 1200);
+    return () => window.clearTimeout(t);
+  }, [waiting, lastId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setWaiting(null), [channel]);
+  const answering = waiting?.cs ?? [];
+  const typing = answering.length ? [] : members.filter((cs) => status[cs]?.state === "working").slice(0, 4);
   const send = async () => {
     const t = text.trim();
     if (!t) return;
     try {
-      await api.post("/api/agents/messages", { channel, text: t });
+      const r = await api.post<{ ok: boolean; pending?: string[] }>("/api/agents/messages", { channel, text: t });
       setText("");
       atBottom.current = true;
+      if (run) set({ run: null }); // your message goes into the latest run - show it
+      setWaiting({ cs: r.pending ?? ["OPS-00"], after: lastId, until: Date.now() + 120_000 });
       ch.refresh();
     } catch (e) { app.toast(e instanceof Error ? e.message : String(e), "error"); }
   };
+  const reply = (m: Msg) => {
+    setText((cur) => `@${m.sender} ${cur.replace(/^@[A-Z]{3}-\d{2}\s*/, "")}`);
+    window.setTimeout(() => { const el = inputRef.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 0);
+  };
+  const copy = (m: Msg) => { navigator.clipboard?.writeText(m.text).then(() => app.toast("Copied")).catch(() => app.toast("Copy failed", "error")); };
   const open = (c: string) => { set({ c }); setSide({ type: "channel" }); };
   const exportTable = () => ({
     head: ["Time", "From", "To", "Kind", "Company", "Message"],
@@ -167,6 +195,8 @@ function Room({ roster }: { roster: Roster }) {
   const title = meta ? `#${meta.name}` : isDm(channel) ? dmName(channel) : channel;
   const prog = feed.live?.progress;
   const active = !!feed.live?.active;
+  // when the latest run has nothing in this channel yet, offer the one before it
+  const prevRun = !run ? (runs.data ?? []).find((r) => r.id !== runId && (r.messages ?? 0) > 0)?.id : undefined;
 
   return (
     <div className="rr">
@@ -176,7 +206,7 @@ function Room({ roster }: { roster: Roster }) {
             <span className="rr-logo"><Icon name="organization" /></span>
             <div className="grow" style={{ minWidth: 0 }}>
               <b>Research Room</b>
-              <div className="xs faint">{roster.agents.length - 1} agents · 6 teams</div>
+              <div className="xs faint">{workforceSize(roster).agents} agents · {workforceSize(roster).teams} teams</div>
             </div>
             <span className={`live-dot ${active ? "on" : ""}`}>{active ? "Live" : ""}</span>
           </div>
@@ -221,11 +251,11 @@ function Room({ roster }: { roster: Roster }) {
           <div className="rr-sec">Agents</div>
           {Object.entries(roster.teams).map(([code, t]) => {
             const people = roster.agents.filter((a) => a.team === code);
-            const shut = collapsed.has(code);
+            const shut = !openTeams.has(code);
             const working = people.filter((a) => status[a.callsign]?.state === "working").length;
             return (
               <div key={code}>
-                <button className="rr-team" onClick={() => setCollapsed((s) => { const n = new Set(s); if (n.has(code)) n.delete(code); else n.add(code); return n; })} style={{ ["--tc" as string]: t.color }}>
+                <button className="rr-team" onClick={() => toggleTeam(code)} style={{ ["--tc" as string]: t.color }}>
                   <Icon name={shut ? "chevron-right" : "chevron-down"} className="xs" /><i className="sw" /><span className="grow ellipsis">{code} · {t.name}</span>
                   {working > 0 && <span className="xs" style={{ color: "var(--up)" }}>{working} busy</span>}
                 </button>
@@ -247,7 +277,7 @@ function Room({ roster }: { roster: Roster }) {
             <div className="rr-title" style={{ ["--tc" as string]: meta ? roster.teams[meta.team].color : "#9A9B9C" }}>
               {meta ? <span className="hash">#</span> : <Icon name={channel === "trace" ? "pulse" : "comment"} />}<b>{channel === "trace" ? "data-exchange trace" : meta ? meta.name : title}</b>
             </div>
-            <div className="xs faint ellipsis">{meta?.purpose ?? (channel === "trace" ? "Every feed an agent fetched, and every time another agent reused it instead of fetching again." : "A direct exchange between two agents.")}</div>
+            <div className="xs faint ellipsis">{meta?.purpose ?? (channel === "trace" ? "Every feed an agent fetched, and every time another agent reused it instead of fetching again." : isDm(channel) ? "A direct exchange between two agents." : "This channel does not exist - pick one on the left.")}</div>
           </div>
           <div className="rr-members" title={members.join(", ")}>
             {members.slice(0, 6).map((cs) => <span key={cs} onClick={() => setSide({ type: "agent", cs })}><AgentAvatar role={agentOf(roster, cs)?.role ?? "user"} color={colorOf(roster, cs)} size={24} status={status[cs]?.state} /></span>)}
@@ -277,9 +307,17 @@ function Room({ roster }: { roster: Roster }) {
         <div className="rr-msgs" ref={listRef} onScroll={onScroll}>
           {ch.more && ch.msgs.length > 0 && <button className="rr-more" onClick={ch.loadEarlier}>Load earlier messages</button>}
           {ch.loading ? <div className="empty" style={{ padding: 40 }}><Icon name="loading" className="spin" /></div>
-            : shown.length === 0 ? <Empty icon="comment-discussion" title={ch.msgs.length ? "Nothing matches these filters" : "No messages here yet"}>
-              {ch.msgs.length ? "Clear the search, company or kind filter." : "Start a research run - the agents report here as they work."}
-            </Empty>
+            : shown.length === 0 ? (ch.msgs.length ? (
+              <Empty icon="filter" title="Nothing matches these filters"
+                action={<button className="btn sm sec" onClick={() => { setFind(""); setCompany(""); setKinds(new Set()); }}>Clear filters</button>}>
+                Clear the search, company or kind filter.
+              </Empty>
+            ) : (
+              <Empty icon="comment-discussion" title={active ? `Run #${runId} has just started` : "No messages here yet"}
+                action={prevRun ? <button className="btn sm sec" onClick={() => set({ run: String(prevRun) })}><Icon name="history" className="xs" />Read run #{prevRun}</button> : undefined}>
+                {active ? "The agents post here as they finish each company." : "Start a research run - the agents report here as they work."}
+              </Empty>
+            ))
             : shown.map((m, i) => {
               const p = shown[i - 1];
               const grouped = !!p && p.sender === m.sender && m.ts - p.ts < 120 && p.kind !== "user" && m.kind !== "verdict";
@@ -288,16 +326,18 @@ function Room({ roster }: { roster: Roster }) {
                 <div key={m.id}>
                   {newCo && <div className="rr-sep"><span>{m.company}</span></div>}
                   <ChatMessage m={m} roster={roster} grouped={grouped && !newCo} byMid={byMid} selected={side?.type === "msg" && side.m.id === m.id}
-                    onAgent={(cs) => setSide({ type: "agent", cs })} onCompany={setCompany} onSelect={(mm) => setSide({ type: "msg", m: mm })} />
+                    onAgent={(cs) => setSide({ type: "agent", cs })} onCompany={setCompany} onSelect={(mm) => setSide({ type: "msg", m: mm })}
+                    onReply={channel === "trace" ? undefined : reply} onCopy={copy} />
                 </div>
               );
             })}
         </div>
         {newBelow > 0 && <button className="rr-new" onClick={toBottom}><Icon name="arrow-down" className="xs" />{newBelow} new message{newBelow === 1 ? "" : "s"}</button>}
         <div className="rr-typing">
+          {answering.length > 0 && <><span className="typing-dots"><i /><i /><i /></span>{answering.map((cs) => <b key={cs} style={{ color: colorOf(roster, cs) }}>{cs}</b>)}<span>{answering.length === 1 ? "is" : "are"} typing…</span></>}
           {typing.length > 0 && <><span className="typing-dots"><i /><i /><i /></span>{typing.map((cs) => <b key={cs} style={{ color: colorOf(roster, cs) }}>{cs}</b>)}<span>{typing.length === 1 ? "is" : "are"} working{status[typing[0]]?.companies?.[0] ? ` on ${status[typing[0]].companies[0]}` : ""}…</span></>}
         </div>
-        <Composer roster={roster} title={title} text={text} setText={setText} onSend={send} disabled={channel === "trace"} />
+        <Composer roster={roster} title={title} text={text} setText={setText} onSend={send} disabled={channel === "trace"} inputRef={inputRef} />
       </section>
 
       {side && (
@@ -378,8 +418,9 @@ function MessageDetail({ m, roster, byMid, onAgent }: { m: Msg; roster: Roster; 
   );
 }
 
-function Composer({ roster, title, text, setText, onSend, disabled }: {
+function Composer({ roster, title, text, setText, onSend, disabled, inputRef }: {
   roster: Roster; title: string; text: string; setText: (s: string) => void; onSend: () => void; disabled?: boolean;
+  inputRef: React.RefObject<HTMLTextAreaElement>;
 }) {
   const [hi, setHi] = useState(0);
   const word = /(^|\s)([/@][\w-]*)$/.exec(text)?.[2] ?? "";
@@ -401,7 +442,7 @@ function Composer({ roster, title, text, setText, onSend, disabled }: {
           ))}
         </div>
       )}
-      <textarea rows={1} value={text} disabled={disabled} placeholder={disabled ? "The trace is read-only" : `Message ${title} — /help for commands, @EQR-02 HAL to ask an analyst`}
+      <textarea ref={inputRef} rows={1} value={text} disabled={disabled} placeholder={disabled ? "The trace is read-only" : `Message ${title} — ask, instruct ("focus on debt") or task ("re-check HAL"); @EQR-02 to address an agent`}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (options.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); setHi((h) => (h + (e.key === "ArrowDown" ? 1 : options.length - 1)) % options.length); return; }
@@ -409,7 +450,7 @@ function Composer({ roster, title, text, setText, onSend, disabled }: {
           if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); }
         }} />
       <button className="btn" onClick={onSend} disabled={disabled || !text.trim()} title="Send (Enter)"><Icon name="send" className="sm" /></button>
-      <span className="rr-hint xs faint">Agents answer from the latest research · no LLM call · <kbd>Enter</kbd> send · <kbd>Shift Enter</kbd> new line</span>
+      <span className="rr-hint xs faint">Agents answer from their latest research (with an AI model when one is set up) and keep your instructions for the next run · <kbd>/help</kbd> commands · <kbd>Enter</kbd> send · <kbd>Shift Enter</kbd> new line</span>
     </div>
   );
 }

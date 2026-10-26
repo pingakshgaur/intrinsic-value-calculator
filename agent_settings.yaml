@@ -196,8 +196,8 @@ sector_index:
 #   V  = geometric blend of lenses x Q x (1 - H), then bull / base / bear
 hybrid_model:
   # ---- cost of equity ------------------------------------------------------
-  risk_free_rate: 0.0640          # usually = macro.india_10y_yield
-  equity_risk_premium: 0.0550
+  risk_free_rate: 0.064          # usually = macro.india_10y_yield
+  equity_risk_premium: 0.055
   min_cost_of_equity: 0.10        # floor on the CAPM figure, before premia
   cost_of_debt_pre_tax: 0.0850
   premia_caps:                    # each premium = cap x risk(0..1)

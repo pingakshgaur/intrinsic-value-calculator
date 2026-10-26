@@ -103,3 +103,21 @@ export function timeOf(ts: number) {
   const d = new Date(ts * 1000);
   return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
 }
+
+/** Head-count of the research workforce: the run orchestrator (OPS) is plumbing, not a researcher. */
+export function workforceSize(r: Roster) {
+  return { agents: r.agents.filter((a) => a.role !== "system").length, teams: Object.keys(r.teams).filter((t) => t !== "OPS").length };
+}
+export const roleName = (role: Role) => (role === "chief" ? "Chief" : role === "lead" ? "Team lead" : role === "system" ? "Orchestrator" : "Analyst");
+
+// ---------------------------------------------------------------- per-agent tuning (src/agents/profiles.py)
+export type Stance = "cautious" | "balanced" | "bold";
+export type LlmMode = "auto" | "fast" | "smart" | "off";
+export interface AgentProfileSettings { enabled: boolean; weight: number; llm: LlmMode; stance: Stance; min_confidence: number; rerun_quick: boolean; instructions: string }
+export interface Profiles { profiles: Record<string, AgentProfileSettings>; default: AgentProfileSettings; llm_modes: LlmMode[]; stances: Stance[] }
+export const useProfiles = () => useQuery({ queryKey: ["agent-profiles"], queryFn: () => api.get<Profiles>("/api/agents/profiles"), staleTime: 5_000 });
+/** fields that differ from the defaults - shown as a "tuned" marker */
+export function tuned(p: AgentProfileSettings | undefined, d: AgentProfileSettings | undefined) {
+  if (!p || !d) return [] as string[];
+  return (Object.keys(d) as (keyof AgentProfileSettings)[]).filter((k) => p[k] !== d[k]);
+}

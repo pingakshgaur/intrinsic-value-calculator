@@ -1,4 +1,4 @@
-import { Fragment, ReactNode, useEffect, useMemo, useState } from "react";
+import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useHistory, useIntel } from "../lib/hooks";
@@ -17,6 +17,7 @@ const SECTIONS = [
   { id: "cases", label: "Bull vs bear", icon: "law" },
   { id: "history", label: "History", icon: "history" },
 ];
+const SECTION_IDS = SECTIONS.map((s) => s.id);
 
 export function Profile() {
   const { company = "" } = useParams();
@@ -37,23 +38,44 @@ export function Profile() {
   );
 }
 
-function useScrollSpy(ids: string[]) {
+/**
+ * The section the reader is in: the last one whose top has passed the band
+ * under the sticky bar - or the last section once the page cannot scroll any
+ * further (a short final section never reaches that band). A click on the nav
+ * wins until its smooth scroll settles.
+ */
+function useScrollSpy(ids: readonly string[]) {
   const [on, setOn] = useState(ids[0]);
+  const pinned = useRef<{ id: string; until: number } | null>(null);
+  const key = ids.join("|");
   useEffect(() => {
     const root = document.querySelector(".main");
-    const obs = new IntersectionObserver((es) => {
-      const vis = es.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-      if (vis[0]) setOn(vis[0].target.id);
-    }, { root, rootMargin: "-100px 0px -60% 0px" });
-    ids.forEach((id) => { const el = document.getElementById(id); if (el) obs.observe(el); });
-    return () => obs.disconnect();
-  }, [ids]);
-  return on;
+    if (!root) return;
+    const check = () => {
+      if (pinned.current && performance.now() < pinned.current.until) return;
+      pinned.current = null;
+      const top = root.getBoundingClientRect().top + 120;
+      let cur = ids[0];
+      for (const id of ids) { const el = document.getElementById(id); if (el && el.getBoundingClientRect().top <= top) cur = id; }
+      if (root.scrollHeight - root.scrollTop - root.clientHeight < 4) cur = ids[ids.length - 1];
+      setOn(cur);
+    };
+    // six rectangle reads per scroll event: cheap enough to run directly
+    root.addEventListener("scroll", check, { passive: true });
+    check();
+    return () => root.removeEventListener("scroll", check);
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const go = (id: string) => {
+    pinned.current = { id, until: performance.now() + 900 };
+    setOn(id);
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+  };
+  return { on, go };
 }
 
 function Body({ v, prev, next }: { v: Verdict; prev?: string; next?: string }) {
   const nav = useNavigate();
-  const on = useScrollSpy(SECTIONS.map((s) => s.id));
+  const { on, go } = useScrollSpy(SECTION_IDS);
   const ticker = (v.ticker || "").split(".")[0];
   return (
     <>
@@ -80,7 +102,7 @@ function Body({ v, prev, next }: { v: Verdict; prev?: string; next?: string }) {
 
       <div className="profile" style={{ marginTop: 16 }}>
         <nav className="anchors" aria-label="Sections">
-          {SECTIONS.map((s) => <a key={s.id} href={`#${s.id}`} className={on === s.id ? "on" : ""} onClick={(e) => { e.preventDefault(); document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth" }); }}><Icon name={s.icon} className="sm" />{s.label}</a>)}
+          {SECTIONS.map((s) => <a key={s.id} href={`#${s.id}`} className={on === s.id ? "on" : ""} onClick={(e) => { e.preventDefault(); go(s.id); }}><Icon name={s.icon} className="sm" />{s.label}</a>)}
         </nav>
         <div className="col" style={{ gap: 28, minWidth: 0 }}>
           <Section id="summary" title="Summary">

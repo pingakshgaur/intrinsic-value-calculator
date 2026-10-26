@@ -23,7 +23,7 @@ export function RichText({ text, roster, onAgent }: { text: string; roster: Rost
   return <>{parts}</>;
 }
 
-export function ChatMessage({ m, roster, grouped, byMid, onAgent, onCompany, onSelect, selected }: {
+export function ChatMessage({ m, roster, grouped, byMid, onAgent, onCompany, onSelect, onReply, onCopy, selected }: {
   m: Msg;
   roster: Roster;
   grouped: boolean;
@@ -31,6 +31,8 @@ export function ChatMessage({ m, roster, grouped, byMid, onAgent, onCompany, onS
   onAgent: (cs: string) => void;
   onCompany: (c: string) => void;
   onSelect: (m: Msg) => void;
+  onReply?: (m: Msg) => void;
+  onCopy?: (m: Msg) => void;
   selected?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -43,7 +45,7 @@ export function ChatMessage({ m, roster, grouped, byMid, onAgent, onCompany, onS
   const ev = (d.evidence as { id: string; source: string; title: string; url: string; date: string }[] | undefined) ?? [];
   return (
     <div className={`msg k-${m.kind} ${grouped ? "grouped" : ""} ${me ? "mine" : ""} ${m.to === "YOU" ? "tome" : ""} ${selected ? "sel" : ""}`}
-      style={{ ["--tc" as string]: color }} onClick={() => onSelect(m)}>
+      style={{ ["--tc" as string]: color }}>
       <div className="msg-av">
         {!grouped && (me ? <AgentAvatar role="user" color={color} size={34} /> : <button className="av-btn" onClick={(e) => { e.stopPropagation(); onAgent(m.sender); }}><AgentAvatar role={a?.role ?? "system"} color={color} size={34} /></button>)}
         {grouped && <span className="msg-time-g">{timeOf(m.ts).slice(0, 5)}</span>}
@@ -53,6 +55,8 @@ export function ChatMessage({ m, roster, grouped, byMid, onAgent, onCompany, onS
           <div className="msg-h">
             {me ? <b className="who">You</b> : <button className="who" onClick={(e) => { e.stopPropagation(); onAgent(m.sender); }}>{a?.title ?? m.sender}</button>}
             {!me && <span className="cs">{m.sender}</span>}
+            {m.kind !== "user" && <span className="msg-kchip" style={{ color: k.color }}><Icon name={k.icon} className="xs" />{k.label}</span>}
+            {d.llm && <span className="tag hm xs" title="Written by the agent's LLM from its latest research">AI</span>}
             <span className="time">{timeOf(m.ts)}</span>
           </div>
         )}
@@ -60,7 +64,8 @@ export function ChatMessage({ m, roster, grouped, byMid, onAgent, onCompany, onS
           <div className="quote"><Icon name="reply" className="xs" /><b>{quoted.sender}</b> <span className="ellipsis">{quoted.text}</span></div>
         )}
         <div className="msg-t">
-          {m.company && <button className="co-chip" onClick={(e) => { e.stopPropagation(); onCompany(m.company!); }}>{m.company.replace(/ Limited$/i, "")}</button>}
+          {grouped && m.kind !== "user" && m.kind !== "reply" && <span className="msg-kchip g" style={{ color: k.color }}><Icon name={k.icon} className="xs" />{k.label}</span>}
+          {m.company && !(m.kind === "reply" && m.text.slice(0, 60).toLowerCase().includes(m.company.replace(/ (Limited|Ltd\.?)$/i, "").toLowerCase())) && <button className="co-chip" onClick={(e) => { e.stopPropagation(); onCompany(m.company!); }}>{m.company.replace(/ Limited$/i, "")}</button>}
           <RichText text={m.company ? m.text.replace(new RegExp(`^${m.company.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:\\s*`), "") : m.text} roster={roster} onAgent={onAgent} />
         </div>
         {(m.kind === "finding" || m.kind === "summary") && isNum(d.score) && (
@@ -98,7 +103,12 @@ export function ChatMessage({ m, roster, grouped, byMid, onAgent, onCompany, onS
           </div>
         )}
       </div>
-      <span className="msg-kind" style={{ color: k.color }} title={k.label}><Icon name={k.icon} className="xs" />{k.label}</span>
+      <div className="msg-acts" role="toolbar" aria-label="Message actions">
+        {!me && onReply && m.sender !== "OPS-00" && <button onClick={() => onReply(m)} title={`Reply to ${m.sender}`}><Icon name="reply" className="xs" />Reply</button>}
+        <button onClick={() => onSelect(m)} title="Details: data carried and what it refers to"><Icon name="info" className="xs" />Details</button>
+        {onCopy && <button onClick={() => onCopy(m)} title="Copy the text"><Icon name="copy" className="xs" /></button>}
+        {m.company && <button onClick={() => onCompany(m.company!)} title={`Only ${m.company}`}><Icon name="filter" className="xs" /></button>}
+      </div>
     </div>
   );
 }

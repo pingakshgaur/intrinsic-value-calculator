@@ -4,20 +4,25 @@ import { isOpen, useChart, useWatchMutations, WatchItem } from "../lib/live";
 import { isNum, money, num, pct, shortName, slug, when } from "../lib/format";
 import { ErrorNote, Icon, LabelBadge, Skeleton } from "./ui";
 import { Level, TradingChart } from "./TradingChart";
+import { SimpleChart } from "./SimpleChart";
 import { useApp } from "./workbenchContext";
 
 const RANGES = [["1d", "1D"], ["5d", "5D"], ["1mo", "1M"], ["6mo", "6M"], ["1y", "1Y"], ["5y", "5Y"], ["max", "Max"]] as const;
+const SIMPLE_RANGES = ["1d", "5d", "1mo", "6mo", "1y"];
 
-export function ChartPanel({ ticker, watch, height = 400, extra, compactHead }: {
+export function ChartPanel({ ticker, watch, height = 400, extra, compactHead, simple }: {
   ticker: string;
   watch?: WatchItem | null;
   height?: number;
   extra?: ReactNode;
   compactHead?: boolean;
+  /** a quiet line chart with a few ranges, for narrow side panels */
+  simple?: boolean;
 }) {
   const [range, setRange] = useState<string>(() => { try { return localStorage.getItem("chart.range") || "1d"; } catch { return "1d"; } });
   const pick = (r: string) => { setRange(r); try { localStorage.setItem("chart.range", r); } catch { /* ignore */ } };
-  const q = useChart(ticker, range);
+  const shown = simple && !SIMPLE_RANGES.includes(range) ? "1d" : range;
+  const q = useChart(ticker, shown);
   const m = useWatchMutations();
   const app = useApp();
   const d = q.data && q.data.ticker === ticker ? q.data : null;
@@ -28,14 +33,14 @@ export function ChartPanel({ ticker, watch, height = 400, extra, compactHead }: 
     const l: Level[] = [];
     if (hm?.value) l.push({ price: hm.value, color: "var(--hm)", title: "HYBRID MODEL" });
     if (hm?.buy_below) l.push({ price: hm.buy_below, color: "var(--up)", title: "Buy-below" });
-    if (range === "1d" && d?.prev_close) l.push({ price: d.prev_close, color: "var(--fg-3)", title: "Prev close" });
+    if (shown === "1d" && d?.prev_close) l.push({ price: d.prev_close, color: "var(--fg-3)", title: "Prev close" });
     if (watch?.alert_below) l.push({ price: watch.alert_below, color: "var(--c-yellow)", title: "Alert ↓" });
     if (watch?.alert_above) l.push({ price: watch.alert_above, color: "var(--c-yellow)", title: "Alert ↑" });
     return l;
-  }, [hm?.value, hm?.buy_below, range, d?.prev_close, watch?.alert_below, watch?.alert_above]);
+  }, [hm?.value, hm?.buy_below, shown, d?.prev_close, watch?.alert_below, watch?.alert_above]);
 
   const bars = d?.bars ?? [];
-  const day = range === "1d" && bars.length ? {
+  const day = shown === "1d" && bars.length ? {
     open: bars[0].o, high: Math.max(...bars.map((b) => b.h ?? -Infinity)), low: Math.min(...bars.map((b) => b.l ?? Infinity)),
     vol: bars.reduce((a, b) => a + (b.v || 0), 0),
   } : null;
@@ -47,7 +52,7 @@ export function ChartPanel({ ticker, watch, height = 400, extra, compactHead }: 
       onError: (e) => app.toast(e instanceof Error ? e.message : String(e), "error"),
     });
   };
-  const ranges = watch ? [...RANGES, ["tracked", "Tracked"] as const] : RANGES;
+  const ranges = simple ? RANGES.filter(([k]) => SIMPLE_RANGES.includes(k)) : watch ? [...RANGES, ["tracked", "Tracked"] as const] : RANGES;
   const setAlert = (kind: "below" | "above", price: number) => m.update.mutate({ ticker, [`alert_${kind}`]: price }, {
     onSuccess: () => app.toast(`Alert set: ${kind === "below" ? "at or below" : "at or above"} ${num(price)}`, "ok"),
     onError: (e) => app.toast(e instanceof Error ? e.message : String(e), "error"),
@@ -66,11 +71,11 @@ export function ChartPanel({ ticker, watch, height = 400, extra, compactHead }: 
         </div>
         <div className="cp-px">
           <span className="v">{d ? num(d.last, 2) : "—"}</span>
-          {d && <span className={`d ${isNum(d.chg_pct) ? (d.chg_pct >= 0 ? "up" : "down") : ""}`}>{isNum(d.chg_pct) ? `${d.chg_pct >= 0 ? "▲" : "▼"} ${pct(Math.abs(d.chg_pct), 2)}` : ""}<small>{range === "1d" ? "today" : RANGES.find((r) => r[0] === range)?.[1] ?? range}</small></span>}
+          {d && <span className={`d ${isNum(d.chg_pct) ? (d.chg_pct >= 0 ? "up" : "down") : ""}`}>{isNum(d.chg_pct) ? `${d.chg_pct >= 0 ? "▲" : "▼"} ${pct(Math.abs(d.chg_pct), 2)}` : ""}<small>{shown === "1d" ? "today" : RANGES.find((r) => r[0] === shown)?.[1] ?? shown}</small></span>}
         </div>
       </div>
       <div className="cp-tools">
-        <div className="seg">{ranges.map(([k, l]) => <button key={k} className={range === k ? "on" : ""} onClick={() => pick(k)}>{l}</button>)}</div>
+        <div className="seg">{ranges.map(([k, l]) => <button key={k} className={shown === k ? "on" : ""} onClick={() => pick(k)}>{l}</button>)}</div>
         <span className="spacer" />
         {q.isFetching && <Icon name="loading" className="xs spin faint" />}
         {d && <span className={`live-dot ${isOpen(d.market) ? "on" : ""}`}>{isOpen(d.market) ? "Live" : "Market closed"}</span>}
@@ -81,9 +86,10 @@ export function ChartPanel({ ticker, watch, height = 400, extra, compactHead }: 
       <div className="cp-chart">
         {q.isError && !d ? <div style={{ padding: 16 }}><ErrorNote error={q.error} onRetry={() => q.refetch()} /></div>
           : !d ? <div style={{ padding: 16 }}><Skeleton h={height - 32} /></div>
-          : range === "tracked" && !bars.length ? <div className="empty" style={{ height }}><Icon name="history" /><span className="small">No stored minute bars yet — the tracker saves them on every poll.</span></div>
-          : <TradingChart bars={bars} levels={levels} height={height} resetKey={`${ticker}|${range}`} ticker={ticker} title={d.meta.name !== ticker ? shortName(d.meta.name) : ticker}
-              intraday={["1d", "5d", "1mo", "tracked"].includes(range)} prevClose={range === "1d" ? d.prev_close : null}
+          : shown === "tracked" && !bars.length ? <div className="empty" style={{ height }}><Icon name="history" /><span className="small">No stored minute bars yet — the tracker saves them on every poll.</span></div>
+          : simple ? <SimpleChart bars={bars} levels={levels} height={height} intraday={["1d", "5d"].includes(shown)} base={shown === "1d" ? d.prev_close : null} />
+          : <TradingChart bars={bars} levels={levels} height={height} resetKey={`${ticker}|${shown}`} ticker={ticker} title={d.meta.name !== ticker ? shortName(d.meta.name) : ticker}
+              intraday={["1d", "5d", "1mo", "tracked"].includes(shown)} prevClose={shown === "1d" ? d.prev_close : null}
               onAlert={tracked && !isIndex ? setAlert : undefined} />}
       </div>
       <div className="cp-figs">
@@ -119,6 +125,7 @@ export function ChartPanel({ ticker, watch, height = 400, extra, compactHead }: 
         </div>
       )}
       {extra}
+      {simple && <Link className="xs cp-full" to={`/markets?t=${encodeURIComponent(ticker)}`}><Icon name="graph-line" className="xs" />Full chart with indicators and drawing tools</Link>}
       {d && <div className="xs faint cp-foot">{d.market.delay_note}. {d.market.ist}.</div>}
     </div>
   );

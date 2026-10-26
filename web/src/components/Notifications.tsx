@@ -155,7 +155,8 @@ function useWatchers() {
     if (!list) return;
     const max = list.reduce((m, a) => Math.max(m, a.id), 0);
     if (last.current == null) {
-      const stored = Number(localStorage.getItem(LAST) || 0);
+      let stored = 0;
+      try { stored = Number(localStorage.getItem(LAST) || 0); } catch { /* storage blocked */ }
       last.current = stored || max; // first visit ever: do not replay old alerts
     }
     const fresh = list.filter((a) => a.id > last.current!).sort((a, b) => a.id - b.id);

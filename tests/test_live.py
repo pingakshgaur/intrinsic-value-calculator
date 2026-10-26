@@ -201,7 +201,7 @@ def test_verdict_without_saved_calibration_is_rebuilt():
     from agents import settings as S
     from server import hybrid_api
 
-    S.load(ROOT / "agent_settings.yaml")
+    S.load(ROOT / "agent_settings.defaults.yaml")  # shipped constants, not Studio-tuned ones
     base = {"sector": "Information Technology", "regime": "mature", "price": 500.0, "beta_adj": 1.0, "tax": 0.25,
             "shares": 1.0e8, "debt": 5.0e9, "cash": 2.0e9, "equity_book": 2.0e10, "fcff_norm": 3.0e9,
             "nopat": 3.5e9, "nopat_norm": 3.4e9, "ni_norm": 3.0e9, "roe_norm": 0.16, "g_base": 0.10,

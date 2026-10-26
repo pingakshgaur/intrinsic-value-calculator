@@ -1,13 +1,15 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { AgentStatus, colorOf, dmId, KIND_META, Msg, Roster, timeOf } from "../lib/agents";
+import { AgentStatus, colorOf, dmId, KIND_META, Msg, roleName, Roster, timeOf, tuned, useProfiles } from "../lib/agents";
 import { ago } from "../lib/format";
 import { AgentAvatar } from "./AgentAvatar";
+import { AgentSettings } from "./AgentSettings";
 import { Icon } from "./ui";
 
 const STATE_TEXT: Record<string, string> = { idle: "Idle", working: "Working", done: "Done for this run", error: "Had an error", waiting: "Waiting" };
 
 /** Who an agent is, what it is doing, who it talks to. Used by the chat and the graph. */
-export function AgentProfile({ cs, roster, status, messages, onMessage, onChannel, graphLink = true, onPick }: {
+export function AgentProfile({ cs, roster, status, messages, onMessage, onChannel, graphLink = true, onPick, startTab = "about" }: {
   cs: string;
   roster: Roster;
   status?: AgentStatus;
@@ -16,7 +18,11 @@ export function AgentProfile({ cs, roster, status, messages, onMessage, onChanne
   onChannel?: (channel: string) => void;
   graphLink?: boolean;
   onPick?: (cs: string) => void;
+  startTab?: "about" | "settings";
 }) {
+  const [tab, setTab] = useState(startTab);
+  useEffect(() => setTab(startTab), [cs, startTab]);
+  const prof = useProfiles();
   const a = roster.agents.find((x) => x.callsign === cs);
   if (!a) return null;
   const team = roster.teams[a.team];
@@ -38,9 +44,18 @@ export function AgentProfile({ cs, roster, status, messages, onMessage, onChanne
         <div style={{ minWidth: 0 }}>
           <div className="ap-cs">{a.callsign}</div>
           <div className="ap-title">{a.title}</div>
-          <div className="ap-team"><i style={{ background: color }} />{team.name} · {a.role === "chief" ? "Chief" : a.role === "lead" ? "Team lead" : a.role === "system" ? "System" : "Analyst"}</div>
+          <div className="ap-team"><i style={{ background: color }} />{team.name} · {roleName(a.role)}
+            {prof.data?.profiles[cs] && !prof.data.profiles[cs].enabled && <span className="tag down xs">off</span>}
+            {tuned(prof.data?.profiles[cs], prof.data?.default).length > 0 && <span className="tag hm xs" title="Settings changed from the defaults">tuned</span>}</div>
         </div>
       </div>
+      {a.role !== "system" && (
+        <div className="seg ap-tabs">
+          <button className={tab === "about" ? "on" : ""} onClick={() => setTab("about")}><Icon name="info" className="xs" />About</button>
+          <button className={tab === "settings" ? "on" : ""} onClick={() => setTab("settings")}><Icon name="settings-gear" className="xs" />Settings</button>
+        </div>
+      )}
+      {tab === "settings" && a.role !== "system" ? <AgentSettings cs={cs} roster={roster} /> : <>
       <p className="ap-duty">{a.duty}</p>
       <div className={`ap-state s-${st}`}>
         <span className="dot" /> <b>{STATE_TEXT[st] ?? st}</b>
@@ -81,6 +96,7 @@ export function AgentProfile({ cs, roster, status, messages, onMessage, onChanne
           ))}
         </div>
       )}
+      </>}
     </div>
   );
 }

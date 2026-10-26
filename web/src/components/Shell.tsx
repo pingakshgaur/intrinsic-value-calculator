@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useIntel, useJobs, useMarket, useStatus } from "../lib/hooks";
 import { useWatchlist } from "../lib/live";
@@ -19,6 +19,7 @@ const NAV = [
     { to: "/studio", icon: "beaker", label: "HYBRID MODEL Studio" },
   ] },
   { group: "Research workforce", items: [
+    { to: "/agents", icon: "organization", label: "Overview", end: true },
     { to: "/agents/network", icon: "type-hierarchy", label: "Agent Network" },
     { to: "/agents/chat", icon: "comment-discussion", label: "Research Room" },
   ] },
@@ -159,17 +160,15 @@ export function Shell() {
             ))}
           </nav>
           <div className="sb-foot">
-            <div className="r"><span className={`dot ${offline ? "bad" : "ok"}`} />Server<b>{offline ? "offline" : "local"}</b></div>
-            <div className="r"><span className={`dot ${llm ? "ok" : ""}`} />AI providers<b>{llm}/3</b></div>
-            <div className="r"><span className="dot" />Report<b>{ago(status.data?.valuation_updated)}</b></div>
-            <div className="r"><span className="dot" />Research<b>{ago(status.data?.intel_updated)}</b></div>
-            <div className="r" title={tracker?.error ?? undefined}>
-              <span className={`dot ${tracker?.error ? "bad" : tracker && !tracker.paused && (wl.data?.items.length ?? 0) > 0 ? (tracker.market.state === "closed" ? "ok" : "busy") : ""}`} />Tracker
-              <b>{!tracker ? "—" : tracker.paused ? "paused" : `${wl.data?.items.length ?? 0} live`}</b>
-            </div>
-            <button className="btn ghost xs" style={{ justifyContent: "flex-start", marginTop: 4, paddingLeft: 0 }} onClick={() => setCollapsed(true)}>
-              <Icon name="layout-sidebar-left-off" className="sm" /> Collapse <kbd style={{ marginLeft: "auto" }}>Ctrl \</kbd>
-            </button>
+            <SystemStatus rows={[
+              { k: "Server", v: offline ? "offline" : "local", tone: offline ? "bad" : "ok" },
+              { k: "AI providers", v: `${llm}/3`, tone: llm ? "ok" : "" },
+              { k: "Report", v: ago(status.data?.valuation_updated), tone: "" },
+              { k: "Research", v: ago(status.data?.intel_updated), tone: "" },
+              { k: "Tracker", v: !tracker ? "—" : tracker.paused ? "paused" : `${wl.data?.items.length ?? 0} live`, title: tracker?.error ?? undefined,
+                tone: tracker?.error ? "bad" : tracker && !tracker.paused && (wl.data?.items.length ?? 0) > 0 ? (tracker.market.state === "closed" ? "ok" : "busy") : "" },
+            ]} />
+            <button className="ibtn sb-collapse" onClick={() => setCollapsed(true)} title="Collapse the sidebar (Ctrl \)"><Icon name="layout-sidebar-left-off" /></button>
           </div>
           {collapsed && <button className="ibtn" style={{ margin: "0 auto 12px" }} title="Expand (Ctrl \)" onClick={() => setCollapsed(false)}><Icon name="layout-sidebar-left" /></button>}
         </aside>
@@ -249,5 +248,36 @@ export function Shell() {
         ))}
       </div>
     </AppContext.Provider>
+  );
+}
+
+interface StatusRow { k: string; v: string; tone: "ok" | "bad" | "busy" | ""; title?: string }
+
+/** Server, AI, report, research and tracker status as one line of dots; click for the details. */
+function SystemStatus({ rows }: { rows: StatusRow[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", close);
+    window.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", close); window.removeEventListener("keydown", esc); };
+  }, [open]);
+  const bad = rows.filter((r) => r.tone === "bad").length;
+  return (
+    <div className="sb-sys" ref={ref}>
+      {open && (
+        <div className="sb-sys-pop" role="dialog" aria-label="System status">
+          {rows.map((r) => <div key={r.k} className="r" title={r.title}><span className={`dot ${r.tone}`} />{r.k}<b>{r.v}</b></div>)}
+        </div>
+      )}
+      <button className={`sb-sys-btn ${open ? "on" : ""}`} onClick={() => setOpen(!open)} aria-expanded={open} title="System status">
+        <span className="dots">{rows.map((r) => <span key={r.k} className={`dot ${r.tone}`} />)}</span>
+        <span className="t">{bad ? `${bad} issue${bad > 1 ? "s" : ""}` : "System"}</span>
+        <Icon name={open ? "chevron-down" : "chevron-up"} className="xs" />
+      </button>
+    </div>
   );
 }

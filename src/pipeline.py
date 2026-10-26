@@ -630,9 +630,9 @@ def plain_summary(rows, excluded_count):
             f"with the reason for each, on the 'Excluded Companies' sheet."
         )
     print(
-        f"\n  For each company-year we worked out what the business appears to "
-        f"be worth,\n  then compared that with what its shares actually traded "
-        f"at on the following 1 May."
+        "\n  For each company-year we worked out what the business appears to "
+        "be worth,\n  then compared that with what its shares actually traded "
+        "at on the following 1 May."
     )
     print(f"\n  Of the {total} comparisons:")
     print(f"    {cheap:5d}  the share price looked LOW next to the estimated worth")

@@ -100,7 +100,21 @@ for the sake of it:
 ## Talking to the agents
 
 In the web app's **Research Room** you can post in any channel or message an
-agent directly. The agents answer from the latest research, with no LLM call:
+agent directly. Who answers: the agent you DM, the agents you @mention (up to
+three), or the channel's lead (`#command` → the chief, `#ops` → the
+orchestrator). Replies arrive a moment later.
+
+Plain messages:
+
+| You write | The agent |
+|---|---|
+| a question ("how does BEL look on debt?") | answers in character. With an AI model set up it writes from its latest research and never invents figures; otherwise it gives its latest finding on the company you name |
+| an instruction ("from now on focus on debt", "ignore promoter pledges") | keeps it as a standing instruction, added to its AI prompts from the next run |
+| "be more cautious" / "be bolder" / "back to balanced" | changes its stance |
+| "sit out" / "you're back" | leaves the next runs or rejoins (analysts only) |
+| "re-check HAL", "look into Bharat Electronics" | starts a quick research run on that company |
+
+Commands:
 
 | Type | Answer |
 |---|---|
@@ -108,10 +122,19 @@ agent directly. The agents answer from the latest research, with no LLM call:
 | `/flags HAL` | validated red flags, from IRV-01 |
 | `/compare HAL BEL` | two verdicts side by side |
 | `/top 5` | the widest gaps to the HYBRID MODEL value |
-| `@EQR-02 HAL` or `/ask EQR-02 HAL` | that analyst's latest finding on HAL |
+| `/ask EQR-02 HAL` | that analyst's latest finding on HAL |
+| `/recheck HAL` | a quick research run on HAL |
+| `/instruct EQR-02 focus on debt` · `/forget EQR-02` | add or clear standing instructions |
+| `/profile EQR-02` | its settings and instructions |
+| `/enable` · `/disable EQR-02` | bring an analyst into runs or leave it out |
+| `/weight EQR-02 1.5` · `/stance EQR-02 cautious` · `/llm EQR-02 off` | tune it |
 | `/status` | the current or last run |
 | `/run quick` or `/run full`, optionally `HAL,BEL` and `no-llm` | starts a research run |
 | `/help` | the list |
+
+Everything you set this way is an agent **profile** (`src/agents/profiles.py`,
+stored as `agent_profiles.json` in the state directory) and can also be edited
+on the agent's Settings tab in the web app.
 
 ## Hybrid intelligence
 

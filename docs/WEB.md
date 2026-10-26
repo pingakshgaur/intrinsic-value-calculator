@@ -23,12 +23,13 @@ An analyst workspace:
 | **Command Center** | Metric band; coverage treemap (tile size = market cap, colour = upside); signals feed; upside vs confidence; label mix and extremes; model leaderboard |
 | **Markets** | Live index cards (Nifty 50, Sensex, Bank, IT, Midcap 50, Financial Services, VIX) with intraday sparklines and a sector heat strip. A scanner over every company the app knows (about 425): top gainers and losers, most active, volume spikes, near 52-week high or low, RSI extremes, and covered companies below their buy-below price. Candlestick or line charts from 1 day to the full history, with the HYBRID MODEL value and buy-below drawn on the chart. Look up any NSE or BSE symbol |
 | **Watchlist** | The companies you track, as tiles or a table: live price, change, intraday sparkline, day range, the HYBRID MODEL re-valued at the live price, and change since you added it. Each company has a live chart (including every minute bar the tracker stored), price alerts and a note. An alerts feed lists level crossings, buy-below crossings and big daily moves |
-| **Agent Network** | The 23 research agents as a live 2.5D node graph: info-bits travel the edges as they exchange work; replay any run; inspect, filter and message any agent |
-| **Research Room** | The agents' chat: team channels, direct exchanges between agents, live status, and commands you can type to ask any agent |
+| **Research workforce** | Overview of the 23 agents: run status, every team and agent with live status, this run's verdicts and red flags, recent runs, and each agent's profile and settings |
+| **Agent Network** | The agents as a full-screen live map: info-bits travel the edges as they exchange work; replay any run; layers, views and tools to simplify, focus, annotate and rearrange the map |
+| **Research Room** | The agents' chat: team channels, direct exchanges, live status. Talk to any agent: it answers, keeps your instructions and acts on requests |
 | **Learning** | How many extra companies train the ML models, how many are cached, the switches for daily feeding and retraining, and a record of every valuation run (training rows, HYBRID MODEL confidence and error), so you can see whether more data helped |
 | **Coverage** | Sortable data grid with a column chooser and density toggle, inline range bars and CSV export. Selecting a row opens an inspector; `↑ ↓` move between rows and `Enter` opens the profile |
 | **Equity profile** | Sticky figures bar and a section index that follows your scrolling. Sections: summary, valuation (lens contribution, bridge, build-up), drivers and risk, agents and evidence, bull vs bear, history |
-| **HYBRID MODEL Studio** | Parameter tree on the left. In the centre, a live canvas with figures, range, bridge and lens contribution. On the right, an inspector with sensitivity, changes and inputs. Named scenario sets, a portfolio mode, and **Commit** to save |
+| **HYBRID MODEL Studio** | Parameter tree on the left. In the centre, a live canvas with figures, range, bridge and lens contribution. On the right, an inspector with sensitivity, changes and inputs. Named scenario sets, a portfolio mode, and **Commit** to save. **Discard** drops uncommitted edits; **Defaults** loads the shipped value (`agent_settings.defaults.yaml`) of every constant you changed, to review and commit. The page scrolls as a whole while the parameter list and inspector stay in view |
 | **Model Performance** | Leaderboard, error by year, win rate, sector × model matrix, company explorer, HYBRID MODEL and Ensemble detail, chart gallery, companies left out, files |
 | **Universe** | Editable grid of the company list: bulk select, delete or set sector, CSV import and export, checks |
 | **Operations** | New-job form (type, scope, period, options, auto-train) beside a live job detail (stage timeline, auto-train controls, log) and the jobs table |
@@ -92,53 +93,67 @@ prices and Research tabs.
 
 ## Research workforce
 
-The 23 research agents (see [AGENTS.md](AGENTS.md) for who is who) have two pages:
+The 23 research agents (see [AGENTS.md](AGENTS.md) for who is who) have three pages.
 
 The workforce **starts working as soon as the web app starts** (a quick,
-rule-based sweep that makes no LLM calls). The **Workforce** button on the
-Agent Network page controls this and starts a run on demand.
+rule-based sweep that makes no LLM calls). The **Workforce** button controls
+this and starts a run on demand.
 
-- **Agent Network:** a live node graph.
-  - **Layout:** data sources feed the five team frames (analysts, then their
-    lead); the leads report to the chief, who feeds the outputs.
-  - **Motion:** everything on the graph reacts to the backend.
-    - A node recoils when it sends and is knocked when an info-bit lands, then
-      springs back.
-    - Busy nodes glow, and the glow fades as they go quiet.
-    - Edges brighten and their dashes flow while traffic crosses them; busier
-      edges are thicker.
-    - Labels float up from the receiver: a finding's score, a team summary,
-      a red flag, or the verdict at the chief.
-    - Counters bump as they change: sent and received on every agent, team
-      progress bars, fetches per data source, outputs, and a progress ring on
-      the chief. A ticker shows the last three messages.
-    - When a live run ends, the graph stays at its final state instead of
-      restarting.
-  - **Info-bits:** these travel the edges as the agents exchange work. Their
-    colour shows what they carry (fetch, shared data, finding, red flag,
-    request, reply, review, team report, verdict), so you can see evidence
-    become findings, team reports and verdicts.
-  - **Live and replay:** live during a run. Afterwards, any run replays with a
-    scrubber and speed control; silent stretches are compressed.
-  - **Navigation:** drag the canvas to pan, scroll to zoom, drag nodes to
-    rearrange (remembered), `F` to fit, `Space` to play or pause. The 2.5D
-    button tilts the whole network into perspective.
-  - **Interaction:** hover a node or edge for details; click to inspect (status,
-    stats, who it reads and who reads it, latest messages); double-click for
-    its channel; right-click for actions (centre, highlight connections,
-    message, filter, copy callsign). Edges show the messages that travelled
-    them.
-  - **Filters and minimap:** filter by team and by info-bit kind; a minimap
-    shows where you are.
+- **Overview** (`/agents`): the run at a glance (companies done, who is working,
+  messages, calls saved, LLM calls), a card per team listing every agent with its
+  live status, this run's verdicts and red flags, and the recent runs (click one
+  to replay it). Click an agent for its profile; the gear opens its **settings**.
+- **Agent Network:** the agents as a live map that fills the page.
+  - **Around the map, never over it:** a top bar (run, search, Views, Layers,
+    Workforce, export, shortcuts, inspector), a tool rail on the left, the
+    inspector docked on the right (`I` hides it) and the replay bar along the bottom.
+  - **Simple by default:** compact cards, only the main connections, no captions
+    or score pop-ups. **Layers** switches on what you need: full cards, the
+    orchestrator, data sources, outputs, team bands, each kind of connection,
+    edge captions, info-bits (and which kinds), score pop-ups, the mini-map, and
+    your annotations. Hide or show whole teams; hidden nodes are listed there to
+    bring back. With analysts off the map shows leads only and their traffic goes
+    to the lead.
+  - **Arrangements:** *Hierarchy* (sources → teams → chief → outputs) or
+    *Radial* (the chief in the middle, leads around it, analysts fanned outside).
+    Dragged positions are remembered per arrangement.
+  - **Views:** built-in presets (Simple, Leads only, Data flow, Everything,
+    Radial) and your own saved views.
+  - **Tools** (left rail): Select & move `V`, Pan `H`, Link `K` (drag between
+    two nodes to draw your own connection, with a caption), Note `N` (pin a
+    note), Focus `G` (show one node and its connections only) and Hide / delete
+    `X`. `Shift`+drag pans with any tool; `Esc` clears everything.
+  - **Changes that reach the agents:** right-click an analyst to leave it out of
+    research runs (or bring it back), or open its **Settings**. Links and notes
+    are your own annotations and stay in this browser.
+  - **Motion:** info-bits travel the edges in the colour of what they carry;
+    senders recoil and receivers are knocked; busy agents glow; counters bump.
+    Live during a run; afterwards any run replays with a scrubber and speed control.
+  - **Light theme:** a pale canvas with team colours inked darker, so nodes,
+    edges and captions keep their contrast.
 - **Research Room:** the agents' chat.
-  - **Sidebar:** team channels, direct exchanges between agents, the data
-    trace, and every agent with live status.
+  - **Sidebar:** team channels, direct exchanges, the data trace, and every
+    agent (grouped by team, folded until you open a team).
   - **Messages:** findings show score, confidence, signals and evidence links;
     team reports show how many findings they combine; verdicts show value
-    against price.
-  - **Tools:** filter by company or kind, search, and see who is working.
-  - **Composer:** commands and @mentions autocomplete. The agents answer from
-    the latest research without LLM calls.
+    against price. Hover a message for **Reply**, **Details**, **Copy** and a
+    company filter.
+  - **Talking to agents:** DM an agent, @mention up to three, or write in a
+    channel (its lead answers). Agents answer in character - with an AI model
+    when one is set up, grounded in their latest research - keep your
+    instructions ("focus on debt", "be more cautious") for the next run, and act
+    on requests ("re-check HAL"). "… is typing" shows until the reply lands.
+    See [AGENTS.md](AGENTS.md#talking-to-the-agents) for the commands.
+
+### Agent settings
+
+Each agent (Overview, Network inspector, Research Room → agent → **Settings**)
+has: on/off in runs (analysts only), weight in its team report (x0–3), stance
+(cautious x0.75, balanced, bold x1.25 on its scores), AI model (auto, fast,
+smart or off), a confidence floor below which its findings are ignored, whether
+it re-runs in quick sweeps, and standing instructions added to every AI prompt
+it sends. **Defaults** puts an agent back. Settings are stored in
+`agent_profiles.json` next to the blackboard and apply from the next run.
 
 ## Export to PDF
 

@@ -1,0 +1,364 @@
+# Factory copy of agent_settings.yaml. The HYBRID MODEL Studio restores its
+# constants from here ("Defaults"). Do not edit - change agent_settings.yaml.
+
+# =============================================================================
+# Market Intelligence Agents - every editable constant in one place
+# =============================================================================
+#
+# Run:   python run.py --agents                 (full research + valuation)
+#        python run.py --agents --quick         (news / market sweep only)
+#        python run.py --agents --llm-check     (test your API keys)
+#
+# Anything removed from this file falls back to the default built into
+# src/agents/settings.py, so a broken edit cannot crash a scheduled run - it
+# is reported in the log and the default is used instead.
+#
+# Units: rates are decimals (0.015 = 1.5%). Scores run -1 (bad) .. +1 (good).
+# =============================================================================
+
+# ---------------------------------------------------------------- the run ---
+run:
+  # Companies to research. Same CSV format as the main calculator.
+  companies_csv: data/companies.csv
+  # Optional: only research these tickers from the CSV (empty = all of them).
+  only_tickers: []
+  # Years of history the base valuation reads (ending at the latest complete FY).
+  history_years: 5
+  # Companies researched in parallel. Keep low on free LLM tiers.
+  parallel_companies: 3
+  # Train the four ML learners for the base valuation. Slow; off for cloud runs.
+  base_valuation_ml: false
+  # Where the blackboard database and reports go. The cloud workflow points
+  # this at a checkout of the 'intel-reports' branch so history survives.
+  state_dir: output/intel
+  # Dated report folders kept under <state_dir>/reports (oldest deleted).
+  keep_reports: 60
+  # How long fetched feeds are reused before downloading again (hours).
+  feed_cache_hours: 6
+  # Ignore news older than this.
+  news_lookback_days: 30
+  # Insider / shareholding look-back.
+  ownership_lookback_days: 180
+
+# ---------------------------------------------------------- LLM providers ---
+# Hybrid mode: numbers are always computed in Python. The LLM is only used
+# where text must be read (news, announcements) or written (bull/bear cases,
+# the chief's summary). With no API keys at all, every agent falls back to its
+# rule-based path and the run still completes.
+#
+# Keys are read from environment variables (or a local .env file), NEVER from
+# this file. In GitHub Actions they come from repository secrets.
+llm:
+  enabled: true
+  # Hard ceiling on LLM calls in one run, across all providers.
+  max_calls_per_run: 400
+  # Identical prompts are answered from the cache for this long (hours).
+  cache_hours: 20
+  # Tries per call before falling through to the next provider.
+  retries: 2
+  timeout_seconds: 75
+  temperature: 0.2
+
+  # Which provider/model handles each kind of task, tried in order. "fast" is
+  # bulk classification (headline sentiment, materiality); "smart" is
+  # reasoning and writing (bull/bear cases, chief summary).
+  routes:
+    # Pick models in the web app (Settings -> AI providers) from each
+    # provider's live list; model names change as providers retire them.
+    fast:  [groq:fast, gemini:fast, nvidia:fast]
+    smart: [groq:smart, gemini:smart, nvidia:smart]
+
+  providers:
+    groq:
+      base_url: https://api.groq.com/openai/v1
+      key_env: GROQ_API_KEY
+      models:
+        fast: openai/gpt-oss-20b
+        smart: openai/gpt-oss-120b
+      # Free-tier limits. The router paces itself to stay under them.
+      requests_per_minute: 28
+      requests_per_day: 14000
+      tokens_per_minute: 6000
+    gemini:
+      # Google's OpenAI-compatible endpoint.
+      base_url: https://generativelanguage.googleapis.com/v1beta/openai
+      key_env: GEMINI_API_KEY
+      models:
+        fast: gemini-3.5-flash-lite
+        smart: gemini-3.8-flash
+      requests_per_minute: 9
+      requests_per_day: 240
+      tokens_per_minute: 200000
+    nvidia:
+      base_url: https://integrate.api.nvidia.com/v1
+      key_env: NVIDIA_API_KEY
+      models:
+        fast: nvidia/nemotron-3-ultra-550b-a55b
+        smart: nvidia/nemotron-3-ultra-550b-a55b
+      requests_per_minute: 35
+      requests_per_day: 5000
+      tokens_per_minute: 100000
+    # Any other OpenAI-compatible service can be added the same way, e.g.
+    # openrouter:
+    #   base_url: https://openrouter.ai/api/v1
+    #   key_env: OPENROUTER_API_KEY
+    #   models: {fast: "...", smart: "..."}
+    #   requests_per_minute: 15
+    #   requests_per_day: 50
+
+# --------------------------------------------------------- data sources -----
+sources:
+  # NSE portal APIs (announcements, insider trades, shareholding, pledges,
+  # delivery %). NSE often blocks datacentre IPs, including GitHub's runners;
+  # every agent degrades to yfinance / news when NSE refuses.
+  use_nse: true
+  use_google_news_rss: true
+  news_max_items: 25
+  # Credibility tiers for news domains. Unlisted domains get 'unknown'.
+  credibility:
+    tier_weights: {primary: 1.0, tier1: 0.85, tier2: 0.6, unknown: 0.35, low: 0.1}
+    primary: [nseindia.com, bseindia.com, sebi.gov.in, rbi.org.in, mca.gov.in, pib.gov.in]
+    tier1: [reuters.com, bloomberg.com, economictimes.indiatimes.com, livemint.com,
+            business-standard.com, thehindubusinessline.com, financialexpress.com,
+            moneycontrol.com, cnbctv18.com, ft.com, wsj.com, ndtvprofit.com]
+    tier2: [zeebiz.com, businesstoday.in, thehindu.com, indianexpress.com,
+            hindustantimes.com, timesofindia.indiatimes.com, outlookbusiness.com,
+            investing.com, marketscreener.com, tradingview.com]
+    low: [blogspot.com, medium.com, wordpress.com, youtube.com, telegram.me]
+
+# ------------------------------------------------------------ macro ---------
+# Values you update by hand when they change (RBI policy, CPI print, GDP).
+# The rest is fetched live from Yahoo Finance each run.
+macro:
+  repo_rate: 0.0550
+  cpi_inflation: 0.0300
+  rbi_inflation_target: 0.0400
+  real_gdp_growth: 0.0650
+  india_10y_yield: 0.0640
+  # "Normal" levels the live readings are compared against.
+  normal_india_vix: 15.0
+  normal_brent_usd: 75.0
+  inr_depreciation_tolerance_1y: 0.04
+  live_tickers:
+    nifty: ^NSEI
+    india_vix: ^INDIAVIX
+    usd_inr: INR=X
+    brent: BZ=F
+    us_10y: ^TNX
+    gold: GC=F
+
+# How exposed each sector is to each outside shock, 0..1. Sector names are
+# matched by substring, lower case. 'default' covers anything unmatched.
+sector_exposure:
+  default:            {crude: 0.3, inr: 0.3, us_rates: 0.3, china: 0.2, geopolitics: 0.3, regulation: 0.3}
+  information tech:   {crude: 0.1, inr: 0.8, us_rates: 0.7, china: 0.1, geopolitics: 0.4, regulation: 0.3}
+  software:           {crude: 0.1, inr: 0.8, us_rates: 0.7, china: 0.1, geopolitics: 0.4, regulation: 0.3}
+  pharma:             {crude: 0.2, inr: 0.7, us_rates: 0.3, china: 0.6, geopolitics: 0.4, regulation: 0.8}
+  oil:                {crude: 1.0, inr: 0.6, us_rates: 0.3, china: 0.3, geopolitics: 0.8, regulation: 0.6}
+  energy:             {crude: 0.9, inr: 0.5, us_rates: 0.3, china: 0.3, geopolitics: 0.7, regulation: 0.6}
+  metal:              {crude: 0.4, inr: 0.5, us_rates: 0.4, china: 0.9, geopolitics: 0.6, regulation: 0.4}
+  auto:               {crude: 0.6, inr: 0.4, us_rates: 0.3, china: 0.5, geopolitics: 0.4, regulation: 0.4}
+  bank:               {crude: 0.2, inr: 0.3, us_rates: 0.6, china: 0.1, geopolitics: 0.3, regulation: 0.8}
+  financ:             {crude: 0.2, inr: 0.3, us_rates: 0.6, china: 0.1, geopolitics: 0.3, regulation: 0.8}
+  defence:            {crude: 0.2, inr: 0.3, us_rates: 0.1, china: 0.3, geopolitics: 0.2, regulation: 0.7}
+  fmcg:               {crude: 0.5, inr: 0.3, us_rates: 0.1, china: 0.2, geopolitics: 0.2, regulation: 0.4}
+  consumer:           {crude: 0.4, inr: 0.3, us_rates: 0.2, china: 0.3, geopolitics: 0.2, regulation: 0.3}
+  chemical:           {crude: 0.6, inr: 0.5, us_rates: 0.3, china: 0.8, geopolitics: 0.4, regulation: 0.5}
+  infra:              {crude: 0.4, inr: 0.3, us_rates: 0.5, china: 0.3, geopolitics: 0.3, regulation: 0.6}
+  power:              {crude: 0.3, inr: 0.3, us_rates: 0.5, china: 0.3, geopolitics: 0.2, regulation: 0.8}
+  realty:             {crude: 0.2, inr: 0.2, us_rates: 0.8, china: 0.1, geopolitics: 0.1, regulation: 0.6}
+  telecom:            {crude: 0.1, inr: 0.4, us_rates: 0.5, china: 0.3, geopolitics: 0.3, regulation: 0.8}
+
+# NSE sector indices used by the Industry analyst (substring match, lower case).
+sector_index:
+  default: ^NSEI
+  information tech: ^CNXIT
+  software: ^CNXIT
+  bank: ^NSEBANK
+  financ: ^CNXFIN
+  pharma: ^CNXPHARMA
+  auto: ^CNXAUTO
+  fmcg: ^CNXFMCG
+  metal: ^CNXMETAL
+  energy: ^CNXENERGY
+  oil: ^CNXENERGY
+  realty: ^CNXREALTY
+  infra: ^CNXINFRA
+  media: ^CNXMEDIA
+  power: ^CNXENERGY
+
+# ====================================================== HYBRID MODEL ========
+# The project's headline intrinsic value. The full method is written out at
+# the top of src/hybrid_model.py; every number below can also be changed live
+# in the web app's Hybrid Model Lab (and saved back here from there).
+#
+#   k  = max(Rf + beta x ERP, floor) + SUM premia            cost of equity
+#   g  = g_base + SUM tilts                                   growth
+#   six lenses: cash flow, earnings power, asset, market, conservative, learning
+#   growth-credibility gate on the cash-flow lens
+#   V  = geometric blend of lenses x Q x (1 - H), then bull / base / bear
+hybrid_model:
+  # ---- cost of equity ------------------------------------------------------
+  risk_free_rate: 0.0640          # usually = macro.india_10y_yield
+  equity_risk_premium: 0.0550
+  min_cost_of_equity: 0.10        # floor on the CAPM figure, before premia
+  cost_of_debt_pre_tax: 0.0850
+  premia_caps:                    # each premium = cap x risk(0..1)
+    size: 0.030                   # actual size premium comes from size_bands
+    liquidity: 0.020
+    governance: 0.030
+    forensic: 0.030
+    leverage: 0.020
+    macro: 0.015
+    geopolitical: 0.020
+    earnings_volatility: 0.015
+  max_total_premium: 0.080
+  size_bands:                     # market cap in rupee crore -> premium
+    - {min_cr: 100000, premium: 0.000}
+    - {min_cr: 20000,  premium: 0.005}
+    - {min_cr: 5000,   premium: 0.015}
+    - {min_cr: 1000,   premium: 0.025}
+    - {min_cr: 0,      premium: 0.030}
+  leverage_free_de: 0.5           # no leverage premium below this debt/equity
+  leverage_full_de: 2.5           # full premium at this debt/equity
+
+  # ---- growth --------------------------------------------------------------
+  growth:
+    min: 0.02
+    max: 0.20
+    terminal: 0.050
+    terminal_cap_over_gdp: 0.0    # terminal <= real GDP + inflation + this
+    high_growth_years: 5
+    fade_years: 5
+    min_spread_k_minus_g: 0.020
+    tilts_caps:                   # each tilt = cap x score(-1..+1)
+      industry_tailwind: 0.020
+      earnings_momentum: 0.015
+      news_impact: 0.010
+      macro_growth: 0.005
+
+  # ---- the six lenses --------------------------------------------------------
+  # Weight of each lens by company type. 0 switches a lens off for that type.
+  lens_weights:
+    mature:     {cash_flow: 1.0, earnings_power: 0.8, asset: 0.6, market: 1.0, conservative: 0.3, learning: 0.6}
+    lender:     {cash_flow: 1.0, earnings_power: 0.8, asset: 1.0, market: 0.8, conservative: 0.4, learning: 0.5}
+    loss_maker: {cash_flow: 0.6, earnings_power: 0.2, asset: 1.0, market: 0.4, conservative: 0.0, learning: 0.6}
+    young:      {cash_flow: 0.8, earnings_power: 0.5, asset: 0.5, market: 1.2, conservative: 0.2, learning: 0.3}
+  use_learning_lens: true
+  # Calibration: remove each lens's median miss against the 1-May price in
+  # EARLIER years (point-in-time), and weight lenses by their past accuracy.
+  calibration:
+    enabled: true
+    skill_weighting: true
+    shrink_k: 10                  # evidence needed to move halfway off neutral
+    min_obs: 4                    # history needed before a lens is calibrated
+  # Growth-credibility gate: the share of the cash-flow value that may come
+  # from growth (PVGO) is capped at base + moat_bonus x moat.
+  gate:
+    base_pvgo_share: 0.45
+    moat_bonus: 0.30
+  fcff_value_driver_weight: 0.5   # 0 = observed FCFF, 1 = NOPAT x (1 - g/RONIC)
+  ri_persistence: 0.62            # lenders' residual-income fade
+  asset_pb_bounds: [0.5, 6.0]     # justified P/B is kept inside these
+  outlier_ratio: 3.0              # drop lenses this many times off the centre
+  estimate_penalty: 0.75          # weight multiplier for estimated inputs
+
+  # ---- quality and governance ----------------------------------------------
+  quality_caps:                   # Q = 1 + SUM cap x score
+    moat: 0.10
+    earnings_quality: 0.07
+    financial_strength: 0.05
+    capital_allocation: 0.03
+  quality_bounds: [0.75, 1.25]
+  governance:
+    haircut_per_red_flag: 0.05
+    max_haircut: 0.30
+    pledge_flag_above: 0.25
+    promoter_selling_flag_above: 0.02
+
+  # ---- scenarios -------------------------------------------------------------
+  scenarios:
+    probabilities: {bull: 0.25, base: 0.50, bear: 0.25}
+    max_probability_tilt: 0.10
+    bull: {growth_shift: 0.020, rate_shift: -0.010, quality_shift: 0.05}
+    bear: {growth_shift: -0.030, rate_shift: 0.015, quality_shift: -0.08}
+
+  # ---- uncertainty, confidence, safety, labels -----------------------------
+  base_sigma: 0.20                # added to the lenses' disagreement
+  confidence_tolerance: 0.20      # confidence = P(price within this of value)
+  confidence_weights:             # used when the research agents ran
+    model: 0.40
+    evidence_coverage: 0.20
+    validation: 0.25
+    agreement: 0.15
+  margin_of_safety:
+    base: 0.15
+    per_low_confidence: 0.15
+    per_red_flag: 0.03
+    max: 0.45
+  labels:                         # research labels from price / value
+    deep_value_below: 0.65
+    undervalued_below: 0.90
+    overvalued_above: 1.15
+    min_confidence_for_label: 25
+    red_flags_for_avoid: 3
+  overlay_weight: 0.0             # sentiment/flows tilt; 0 keeps them out
+
+forensics:
+  # Beneish (1999) 8-variable cut-off. Above it = manipulator profile.
+  beneish_threshold: -1.78
+  # A red flag (and governance haircut) is raised only this far above the
+  # cut-off; scores between the two still add graded forensic risk.
+  beneish_flag_margin: 0.25
+
+# =================================================== the agent hierarchy =====
+# Weight of each analyst inside its lead's section score. Set an analyst's
+# weight to 0 to switch it off entirely.
+agents:
+  market_news_lead:
+    research_analyst: 0.20
+    sentiment_analyst: 0.25
+    stock_movement_analyst: 0.15
+    news_credibility_analyst: 0.10
+    market_impact_analyst: 0.30
+  equity_research_lead:
+    fundamental_research_analyst: 0.45
+    financial_forensics_analyst: 0.40
+    pre_earnings_analyst: 0.15
+  industry_geo_lead:
+    industry_research_analyst: 0.55
+    geopolitical_risk_analyst: 0.45
+  market_activity_lead:
+    market_volume_analyst: 0.20
+    insider_activity_analyst: 0.30
+    fund_holdings_analyst: 0.30
+    short_seller_analyst: 0.20
+  review_lead:
+    bull_case_analyst: 0.35
+    bear_case_analyst: 0.35
+    research_validation_analyst: 0.30
+
+  # Weight of each lead in the chief's overall research score.
+  chief:
+    market_news_lead: 0.15
+    equity_research_lead: 0.35
+    industry_geo_lead: 0.15
+    market_activity_lead: 0.20
+    review_lead: 0.15
+
+  # Evidence rules enforced by the Research Validation analyst.
+  validation:
+    max_evidence_age_days: 400    # financial statements are annual
+    max_news_age_days: 30
+    min_sources_for_claim: 1
+    require_source_url: true
+
+# ------------------------------------------------------------ alerts --------
+# Optional Telegram message after each run (needs TELEGRAM_BOT_TOKEN and
+# TELEGRAM_CHAT_ID). Off by default.
+alerts:
+  telegram: false
+  # Only alert on these changes since the previous run.
+  on_label_change: true
+  on_new_red_flag: true
+  on_price_crossing_buy_below: true

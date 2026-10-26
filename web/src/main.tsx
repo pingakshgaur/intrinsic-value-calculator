@@ -9,6 +9,7 @@ import "@vscode/codicons/dist/codicon.css";
 import "./styles/system.css";
 import "./styles/views.css";
 import "./styles/agents.css";
+import "./styles/network.css";
 import { Shell } from "./components/Shell";
 import { Empty, Panel } from "./components/ui";
 import { CommandCenter } from "./views/CommandCenter";
@@ -24,6 +25,7 @@ import { Watchlist } from "./views/Watchlist";
 import { Learning } from "./views/Learning";
 import { AgentChat } from "./views/AgentChat";
 import { AgentNetwork } from "./views/AgentNetwork";
+import { AgentsOverview } from "./views/AgentsOverview";
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 15_000, refetchOnWindowFocus: true } } });
 
@@ -48,7 +50,7 @@ const router = createBrowserRouter([
       { path: "learning", element: <Learning /> },
       { path: "agents/network", element: <AgentNetwork /> },
       { path: "agents/chat", element: <AgentChat /> },
-      { path: "agents", element: <Navigate to="/agents/network" replace /> },
+      { path: "agents", element: <AgentsOverview /> },
       { path: "coverage", element: <Coverage /> },
       { path: "coverage/:company", element: <Profile /> },
       { path: "studio", element: <Studio /> },

@@ -1,114 +1,45 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import { AgentStatus, colorOf, dmId, Kind, KIND_META, Msg, Role, Roster, timeOf, useAgentRuns, useLiveFeed, useRoster } from "../lib/agents";
-import { ago } from "../lib/format";
+import { AgentStatus, colorOf, dmId, Kind, KIND_META, Msg, roleName, Roster, useAgentRuns, useLiveFeed, useProfiles, useRoster, workforceSize } from "../lib/agents";
+import { at, fmtClock, geom, Geom, layout, pathD, Pt, routes } from "../lib/agentGraph";
+import { DEFAULT_LAYERS, Layers, Link, Mesh, Note, posKey, Positions, uid, useStored, View } from "../lib/netPrefs";
 import { LABEL_HEX } from "../lib/labels";
-import { AgentAvatar, BotGlyph } from "../components/AgentAvatar";
-import { AgentProfile } from "../components/AgentProfile";
+import { useTheme } from "../lib/theme";
+import { BotGlyph } from "../components/AgentAvatar";
 import { ExportButton } from "../components/ExportButton";
-import { Icon, PageHeader, Popover, QueryView, Toggle } from "../components/ui";
+import { Density, MiniMap, NodeTip } from "../components/NetworkParts";
+import { InspectorTab, NetworkInspector } from "../components/NetworkInspector";
+import { EDGE_COLOR, LayersMenu, ViewsMenu } from "../components/NetworkLayers";
+import { WorkforceControl } from "../components/WorkforceControl";
+import { Icon, Popover, QueryView } from "../components/ui";
 import { useApp } from "../components/workbenchContext";
 
-// ------------------------------------------------------------ geometry
-type NKind = "agent" | "source" | "output";
-interface GNode { id: string; kind: NKind; x: number; y: number; w: number; h: number; team?: string; role?: Role; title: string; icon?: string }
-interface GEdge { id: string; from: string; to: string; kind: "input" | "report" | "command" | "consume" | "output" | "ops" }
-interface Frame { team: string; x: number; y: number; w: number; h: number }
-interface Pt { x: number; y: number }
-type Geom = [Pt, Pt, Pt, Pt];
-
-const TEAM_ORDER = ["NWS", "EQR", "IGR", "MAO", "IRV"];
-const AW = 132, AH = 66, GAP = 16, LW = 156, LH = 74, FX = 236, FY = 24, FH = 128, FS = 148;
-const OUTS = [
-  { id: "OUT-VERDICT", title: "Verdicts & reports", icon: "verified" },
-  { id: "OUT-ALERTS", title: "Alerts", icon: "bell" },
-  { id: "OUT-ROOM", title: "Research Room", icon: "comment-discussion" },
-];
-const SRC_ICON: Record<string, string> = { "SRC-MKT": "graph-line", "SRC-NSE": "file-text", "SRC-NEWS": "rss", "SRC-ACC": "book", "SRC-LLM": "sparkle" };
-
-function layout(r: Roster) {
-  const nodes: GNode[] = [], edges: GEdge[] = [], frames: Frame[] = [];
-  const leadX = FX + 20 + 5 * (AW + GAP) + 14;
-  TEAM_ORDER.forEach((code, i) => {
-    const fy = FY + i * FS;
-    frames.push({ team: code, x: FX, y: fy, w: leadX + LW + 20 - FX, h: FH });
-    r.agents.filter((a) => a.team === code && a.role === "analyst").forEach((a, j) => {
-      nodes.push({ id: a.callsign, kind: "agent", x: FX + 20 + j * (AW + GAP), y: fy + 44, w: AW, h: AH, team: code, role: a.role, title: a.title });
-    });
-    const lead = r.agents.find((a) => a.team === code && a.role === "lead");
-    if (lead) nodes.push({ id: lead.callsign, kind: "agent", x: leadX, y: fy + 40, w: LW, h: LH, team: code, role: "lead", title: lead.title });
-  });
-  const midY = FY + (TEAM_ORDER.length * FS - (FS - FH)) / 2;
-  const cx = leadX + LW + 130;
-  nodes.push({ id: "CMD-00", kind: "agent", x: cx, y: midY - 50, w: 196, h: 100, team: "CMD", role: "chief", title: "Chief Market Intelligence Officer" });
-  nodes.push({ id: "OPS-00", kind: "agent", x: cx + 20, y: FY + 6, w: 156, h: 62, team: "OPS", role: "system", title: "Run Orchestrator" });
-  OUTS.forEach((o, i) => nodes.push({ id: o.id, kind: "output", x: cx + 330, y: midY - 160 + i * 130, w: 70, h: 70, title: o.title, icon: o.icon }));
-  Object.entries(r.sources).forEach(([id, s], i) => nodes.push({ id, kind: "source", x: 40, y: FY + 40 + i * 132, w: 72, h: 72, title: s.title, icon: SRC_ICON[id] }));
-  const add = (from: string, to: string, kind: GEdge["kind"]) => edges.push({ id: `${from}>${to}`, from, to, kind });
-  for (const [cs, srcs] of Object.entries(r.inputs)) for (const s of srcs) add(s, cs, "input");
-  for (const a of r.agents) if (a.role === "analyst") add(a.callsign, `${a.team}-00`, "report");
-  for (const t of TEAM_ORDER) add(`${t}-00`, "CMD-00", "command");
-  add("OPS-00", "CMD-00", "ops");
-  for (const o of OUTS) add("CMD-00", o.id, "output");
-  for (const [consumer, providers] of Object.entries(r.consumes)) {
-    if (consumer === "IRV-01" || consumer === "CMD-00") continue; // drawn only while traffic flows
-    for (const p of providers) add(p, consumer, "consume");
-  }
-  return { nodes, edges, frames, width: cx + 330 + 110, height: FY + TEAM_ORDER.length * FS + 10 };
-}
-
-const center = (n: GNode): Pt => ({ x: n.x + n.w / 2, y: n.y + n.h / 2 });
-function geom(a: GNode, b: GNode): Geom {
-  const A = center(a), B = center(b);
-  const dx = B.x - A.x, dy = B.y - A.y;
-  if (Math.abs(dx) >= Math.abs(dy) * 0.7) {
-    const s = Math.sign(dx) || 1;
-    const p0 = { x: A.x + (s * a.w) / 2, y: A.y }, p3 = { x: B.x - (s * b.w) / 2, y: B.y };
-    const c = Math.max(46, Math.abs(p3.x - p0.x) / 2);
-    return [p0, { x: p0.x + s * c, y: p0.y }, { x: p3.x - s * c, y: p3.y }, p3];
-  }
-  const s = Math.sign(dy) || 1;
-  const p0 = { x: A.x, y: A.y + (s * a.h) / 2 }, p3 = { x: B.x, y: B.y - (s * b.h) / 2 };
-  const c = Math.max(40, Math.abs(p3.y - p0.y) / 2);
-  return [p0, { x: p0.x, y: p0.y + s * c }, { x: p3.x, y: p3.y - s * c }, p3];
-}
-const pathD = (g: Geom) => `M${g[0].x},${g[0].y} C${g[1].x},${g[1].y} ${g[2].x},${g[2].y} ${g[3].x},${g[3].y}`;
-function at(g: Geom, t: number): Pt {
-  const u = 1 - t;
-  const a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
-  return { x: a * g[0].x + b * g[1].x + c * g[2].x + d * g[3].x, y: a * g[0].y + b * g[1].y + c * g[2].y + d * g[3].y };
-}
-
-/** Which way a message travels on the graph. */
-function routes(m: Msg): [string, string][] {
-  const d = m.data as Record<string, unknown>;
-  switch (m.kind) {
-    case "fetch": return d.source ? [[String(d.source), m.sender]] : [];
-    case "share": return m.to ? [[m.sender, m.to]] : [];
-    case "task":
-      if (m.sender === "CMD-00") return TEAM_ORDER.map((t) => ["CMD-00", `${t}-00`] as [string, string]);
-      return ((d.members as string[]) ?? []).map((cs) => [m.sender, cs] as [string, string]);
-    case "finding": case "flag":
-      return m.sender.endsWith("-00") ? [] : [[m.sender, `${m.sender.slice(0, 3)}-00`]];
-    case "summary": return [[m.sender, "CMD-00"]];
-    case "verdict": return m.company ? [["CMD-00", "OUT-VERDICT"], ...(Number(d.flags) > 0 ? [["CMD-00", "OUT-ALERTS"] as [string, string]] : [])] : [["CMD-00", "OUT-ROOM"]];
-    case "request": case "reply": case "review": return m.to && m.to !== "YOU" ? [[m.sender, m.to]] : m.to === "YOU" ? [[m.sender, "OUT-ROOM"]] : [];
-    case "system": return [["OPS-00", "CMD-00"]];
-    case "user": return [["OUT-ROOM", m.channel.startsWith("dm:") ? m.channel.slice(3).split("|").find((x) => x !== "YOU") ?? "CMD-00" : "CMD-00"]];
-    default: return [];
-  }
-}
-
-interface Packet { g: Geom; t0: number; dur: number; color: string; el: SVGGElement; edge?: string; to: string; kind: Kind; dir: Pt }
+interface Packet { g: Geom; t0: number; dur: number; el: SVGGElement; edge?: string; to: string; dir: Pt }
 interface Spring { x: number; y: number; vx: number; vy: number }
+type Tool = "select" | "pan" | "link" | "note" | "focus" | "erase";
+const TOOLS: { id: Tool; icon: string; key: string; label: string; help: string }[] = [
+  { id: "select", icon: "inspect", key: "V", label: "Select & move", help: "click an agent to inspect it, drag to move it" },
+  { id: "pan", icon: "move", key: "H", label: "Pan", help: "drag anywhere to move the view" },
+  { id: "link", icon: "git-compare", key: "K", label: "Link", help: "drag from one node to another to draw your own connection" },
+  { id: "note", icon: "note", key: "N", label: "Note", help: "click the map to pin a note" },
+  { id: "focus", icon: "target", key: "G", label: "Focus", help: "click a node to show only it and its connections" },
+  { id: "erase", icon: "eraser", key: "X", label: "Hide / delete", help: "click a node or edge to hide it, a link or note to delete it" },
+];
 
-// ------------------------------------------------------------ page
+// light theme: team colours are tuned for a dark canvas, so ink them darker
+function ink(hex: string, light: boolean) {
+  if (!light || !/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  const n = parseInt(hex.slice(1), 16), f = 0.62;
+  const c = (v: number) => Math.round(v * f).toString(16).padStart(2, "0");
+  return `#${c(n >> 16)}${c((n >> 8) & 255)}${c(n & 255)}`;
+}
+
 export function AgentNetwork() {
   const roster = useRoster();
   return (
-    <div className="page fill an-page">
+    <div className="net-page">
       <QueryView q={roster} rows={10}>{(r) => <Network roster={r} />}</QueryView>
     </div>
   );
@@ -118,32 +49,71 @@ function Network({ roster }: { roster: Roster }) {
   const [params, setParams] = useSearchParams();
   const nav = useNavigate();
   const app = useApp();
+  const qc = useQueryClient();
+  const light = useTheme() === "light";
   const runParam = params.get("run");
   const run = runParam ? Number(runParam) : null;
   const runs = useAgentRuns();
   const feed = useLiveFeed(run, 3000);
+  const profiles = useProfiles();
   const live = !!feed.live?.active && !run;
-  const L = useMemo(() => layout(roster), [roster]);
-  const [pos, setPos] = useState<Record<string, Pt>>(() => { try { return JSON.parse(localStorage.getItem("net.pos.v1") || "{}"); } catch { return {}; } });
+
+  // ---------- what is shown
+  const [layers, setLayers] = useStored<Layers>("net.layers.v2", DEFAULT_LAYERS);
+  const [hidden, setHidden] = useStored<string[]>("net.hidden.v1", []);
+  const [teamsOff, setTeamsOff] = useStored<string[]>("net.teamsOff.v1", []);
+  const [kindsOff, setKindsOff] = useStored<Kind[]>("net.kindsOff.v1", []);
+  const [mesh, setMesh] = useStored<Mesh>("net.mesh.v1", { links: [], notes: [] });
+  const [views, setViews] = useStored<View[]>("net.views.v1", []);
+  const [sideOpen, setSideOpen] = useStored<boolean>("net.side.v1", window.innerWidth >= 1400);
+  const L = useMemo(() => layout(roster, layers.arrange, layers.detail), [roster, layers.arrange, layers.detail]);
+  const pk = posKey(layers.arrange, layers.detail);
+  const [pos, setPos] = useState<Positions>({});
+  useEffect(() => { try { setPos(JSON.parse(localStorage.getItem(pk) || "{}")); } catch { setPos({}); } }, [pk]);
+  const savePos = (p: Positions) => { try { localStorage.setItem(pk, JSON.stringify(p)); } catch { /* ignore */ } };
   const nodes = useMemo(() => L.nodes.map((n) => (pos[n.id] ? { ...n, ...pos[n.id] } : n)), [L, pos]);
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+
+  const visible = useMemo(() => {
+    const v = new Set<string>();
+    for (const n of nodes) {
+      if (hidden.includes(n.id)) continue;
+      if (n.kind === "source" && !layers.sources) continue;
+      if (n.kind === "output" && !layers.outputs) continue;
+      if (n.role === "system" && !layers.ops) continue;
+      if (n.role === "analyst" && !layers.analysts) continue;
+      if (n.team && teamsOff.includes(n.team)) continue;
+      v.add(n.id);
+    }
+    return v;
+  }, [nodes, hidden, layers.sources, layers.outputs, layers.ops, layers.analysts, teamsOff]);
+  /** where traffic for a node goes when the node itself is hidden: an analyst's lead */
+  const proxy = useCallback((id: string) => {
+    if (visible.has(id)) return id;
+    const n = byId.get(id);
+    if (n?.role === "analyst" && n.team && visible.has(`${n.team}-00`)) return `${n.team}-00`;
+    return null;
+  }, [visible, byId]);
+
+  // ---------- interaction state
+  const [tool, setTool] = useState<Tool>("select");
   const [view, setView] = useState({ x: 20, y: 10, k: 0.8 });
-  const [tilt, setTilt] = useState(() => { try { return localStorage.getItem("net.tilt") === "1"; } catch { return false; } });
-  const [labels, setLabels] = useState(true);
-  const [srcEdges, setSrcEdges] = useState(true);
   const [sel, setSel] = useState<string | null>(params.get("focus"));
   const [selEdge, setSelEdge] = useState<string | null>(null);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const [tab, setTab] = useState<InspectorTab>(params.get("focus") ? "agent" : "activity");
+  const [agentTab, setAgentTab] = useState<"about" | "settings">("about");
   const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(null);
   const [edgeTip, setEdgeTip] = useState<{ id: string; x: number; y: number } | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number; node: string | null } | null>(null);
-  const [teams, setTeams] = useState<Set<string>>(new Set());
-  const [kindsOff, setKindsOff] = useState<Set<Kind>>(new Set());
+  const [menu, setMenu] = useState<{ x: number; y: number; node: string | null; world: Pt } | null>(null);
   const [find, setFind] = useState("");
-  const [tab, setTab] = useState<"activity" | "agent" | "edge">(params.get("focus") ? "agent" : "activity");
+  const [editNote, setEditNote] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ from: string; to: Pt } | null>(null);
+  // agents whose in-card dropdown (brief info) is open
+  const [openInfo, setOpenInfo] = useState<string[]>([]);
+  const toggleInfo = (id: string) => setOpenInfo((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]));
   const stage = useRef<HTMLDivElement>(null);
   const [sw, setSw] = useState(1200);
-  const [sideOpen, setSideOpen] = useState(() => window.innerWidth >= 1500);
-  const [legendOpen, setLegendOpen] = useState<boolean | null>(null);
   const layer = useRef<SVGGElement>(null);
   const packets = useRef<Packet[]>([]);
   const hot = useRef<Map<string, number>>(new Map());
@@ -175,6 +145,7 @@ function Network({ roster }: { roster: Roster }) {
       let vt = 0;
       const out = d.messages.map((m, i) => { if (i) vt += Math.min(2, Math.max(0, m.ts - d.messages[i - 1].ts)); return { ...m, vt }; });
       setReplay(out);
+      edgeCount.current.clear();
       if (wasLive.current && !run) {
         // a run that just finished live stays at its final state instead of restarting
         wasLive.current = false;
@@ -183,10 +154,10 @@ function Network({ roster }: { roster: Roster }) {
       } else { clock.current = 0; cursor.current = 0; setClockShow(0); setPlaying(true); }
     }).catch(() => undefined);
     return () => { stop = true; };
-  }, [replayRun, live]);
+  }, [replayRun, live]); // eslint-disable-line react-hooks/exhaustive-deps
   const span = replay.length ? Math.max(1, replay[replay.length - 1].vt) : 1;
 
-  // ---------- spawning
+  // ---------- spawning info-bits
   const kick = (id: string, dx: number, dy: number) => {
     const s = springs.current.get(id) ?? { x: 0, y: 0, vx: 0, vy: 0 };
     s.vx += dx; s.vy += dy;
@@ -197,14 +168,14 @@ function Network({ roster }: { roster: Roster }) {
     const host = floats.current;
     if (!host || host.childElementCount > 40) return;
     const d = m.data as Record<string, unknown>;
-    let at: string | null = null, text = "", cls = "";
-    if (m.kind === "verdict" && m.company) { at = "CMD-00"; text = `${m.company.replace(/ (Limited|Ltd\.?)$/i, "")} · ${String(d.label ?? "")}`; cls = "verdict"; }
-    else if (m.kind === "finding" && typeof d.score === "number") { at = m.sender; text = `${d.score >= 0 ? "+" : ""}${d.score.toFixed(2)}`; cls = d.score >= 0 ? "pos" : "neg"; }
-    else if (m.kind === "summary" && typeof d.score === "number") { at = m.sender; text = `Σ ${d.score >= 0 ? "+" : ""}${d.score.toFixed(2)}`; cls = "sum"; }
-    else if (m.kind === "flag") { at = m.sender; text = "⚑ red flag"; cls = "neg"; }
-    else if (m.kind === "request") { at = m.sender; text = `? → ${m.to}`; cls = "req"; }
-    if (!at) return;
-    const n = byId.get(at);
+    let where: string | null = null, text = "", cls = "";
+    if (m.kind === "verdict" && m.company) { where = "CMD-00"; text = `${m.company.replace(/ (Limited|Ltd\.?)$/i, "")} · ${String(d.label ?? "")}`; cls = "verdict"; }
+    else if (m.kind === "finding" && typeof d.score === "number") { where = m.sender; text = `${d.score >= 0 ? "+" : ""}${d.score.toFixed(2)}`; cls = d.score >= 0 ? "pos" : "neg"; }
+    else if (m.kind === "summary" && typeof d.score === "number") { where = m.sender; text = `Σ ${d.score >= 0 ? "+" : ""}${d.score.toFixed(2)}`; cls = "sum"; }
+    else if (m.kind === "flag") { where = m.sender; text = "⚑ red flag"; cls = "neg"; }
+    if (!where) return;
+    const id = proxy(where);
+    const n = id ? byId.get(id) : null;
     if (!n) return;
     const el = document.createElement("div");
     el.className = `an-float ${cls}`;
@@ -216,29 +187,31 @@ function Network({ roster }: { roster: Roster }) {
     window.setTimeout(() => el.remove(), 2100);
   };
   const spawn = useCallback((m: Msg) => {
-    if (kindsOff.has(m.kind) || !layer.current) return;
-    floatFor(m);
-    for (const [a, b] of routes(m)) {
+    if (kindsOff.includes(m.kind) || !layer.current) return;
+    if (layers.floats) floatFor(m);
+    for (const [a0, b0] of routes(m)) {
+      const a = proxy(a0), b = proxy(b0);
+      if (!a || !b || a === b) continue;
       const A = byId.get(a), B = byId.get(b);
-      if (!A || !B || A === B) continue;
-      if (teams.size && !((A.team && teams.has(A.team)) || (B.team && teams.has(B.team)))) continue;
+      if (!A || !B) continue;
+      const edge = `${a}>${b}`;
+      edgeCount.current.set(edge, (edgeCount.current.get(edge) ?? 0) + 1);
+      pulse.current.set(a, performance.now());
+      if (!layers.packets) { pulse.current.set(b, performance.now()); hot.current.set(edge, performance.now()); continue; }
       if (packets.current.length > 140) return;
       const color = KIND_META[m.kind]?.color ?? "#9cdcfe";
       const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
       g.setAttribute("class", "pk");
-      g.innerHTML = `<circle r="9" fill="${color}" opacity=".18"/><circle r="4.2" fill="${color}"/><circle r="1.8" fill="#fff" opacity=".85"/>`;
+      g.innerHTML = `<circle r="9" fill="${color}" opacity=".18"/><circle r="4.2" fill="${color}" stroke="${light ? "#0008" : "none"}" stroke-width="1"/><circle r="1.8" fill="#fff" opacity=".85"/>`;
       layer.current.appendChild(g);
-      const edge = `${a}>${b}`;
       const dist = Math.hypot(B.x - A.x, B.y - A.y);
       const dir = { x: (B.x - A.x) / (dist || 1), y: (B.y - A.y) / (dist || 1) };
-      packets.current.push({ g: geom(A, B), t0: performance.now(), dur: Math.min(1700, 520 + dist * 0.9), color, el: g, edge, to: b, kind: m.kind, dir });
-      edgeCount.current.set(edge, (edgeCount.current.get(edge) ?? 0) + 1);
-      pulse.current.set(a, performance.now());
-      kick(a, -dir.x * 22, -dir.y * 22);  // the sender recoils
+      packets.current.push({ g: geom(A, B), t0: performance.now(), dur: Math.min(1700, 520 + dist * 0.9), el: g, edge, to: b, dir });
+      kick(a, -dir.x * 22, -dir.y * 22); // the sender recoils
     }
-  }, [byId, kindsOff, teams]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [byId, kindsOff, proxy, layers.packets, layers.floats, light]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // live: every new message becomes packets, staggered so bursts read as flow
+  // live: every new message becomes info-bits, staggered so bursts read as flow
   const spawned = useRef(0);
   const queue = useRef<Msg[]>([]);
   useEffect(() => {
@@ -252,7 +225,7 @@ function Network({ roster }: { roster: Roster }) {
     if (queue.current.length > 90) queue.current = queue.current.slice(-45);
   }, [feed.messages, live]);
 
-  // the animation loop: replay clock, live queue, packets, edge glow
+  // the animation loop: replay clock, live queue, packets, edge glow, springs
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
@@ -278,7 +251,7 @@ function Network({ roster }: { roster: Roster }) {
           p.el.remove();
           if (p.edge) hot.current.set(p.edge, now);
           pulse.current.set(p.to, now);
-          kick(p.to, p.dir.x * 60, p.dir.y * 60);  // the receiver takes the hit
+          kick(p.to, p.dir.x * 60, p.dir.y * 60); // the receiver takes the hit
           continue;
         }
         const e = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
@@ -290,11 +263,9 @@ function Network({ roster }: { roster: Roster }) {
       packets.current = keep;
       for (const [id, el] of edgeEls.current) {
         const h = hot.current.get(id);
-        const v = h ? Math.max(0, 1 - (now - h) / 1400) : 0;
-        el.style.setProperty("--hot", v.toFixed(3));
+        el.style.setProperty("--hot", (h ? Math.max(0, 1 - (now - h) / 1400) : 0).toFixed(3));
         el.style.setProperty("--vol", Math.min(1, Math.log2(1 + (edgeCount.current.get(id) ?? 0)) / 7).toFixed(3));
       }
-      // springs: a node knocked by traffic swings and settles (fixed 60 Hz steps)
       for (let step = 0, left = dt; step < 8 && left > 0; step++, left -= 1 / 60) {
         const h = Math.min(1 / 60, left);
         for (const s of springs.current.values()) {
@@ -321,6 +292,8 @@ function Network({ roster }: { roster: Roster }) {
     return () => { cancelAnimationFrame(raf); window.clearInterval(ui); };
   }, [live, playing, replay, span, speed, spawn]);
   useEffect(() => () => { packets.current.forEach((p) => p.el.remove()); packets.current = []; }, []);
+  // a new arrangement moves every node: drop the info-bits in flight
+  useEffect(() => { packets.current.forEach((p) => p.el.remove()); packets.current = []; }, [L]);
   const seek = (s: number) => {
     packets.current.forEach((p) => p.el.remove());
     packets.current = [];
@@ -331,14 +304,12 @@ function Network({ roster }: { roster: Roster }) {
   };
 
   // ---------- status (live from the run, or derived from the replay clock)
-  const status: Record<string, AgentStatus & { active?: boolean }> = useMemo(() => {
+  const status: Record<string, AgentStatus> = useMemo(() => {
     if (live) return feed.live?.status ?? {};
-    const out: Record<string, AgentStatus & { active?: boolean }> = {};
-    const now = clockShow;
+    const out: Record<string, AgentStatus> = {};
     for (let i = 0; i < cursor.current; i++) {
       const m = replay[i];
       if (!m) continue;
-      const age = now - m.vt;
       const s = out[m.sender] ?? (out[m.sender] = { state: "done", companies: [], task: "", since: m.ts, done: 0, errors: 0, sent: 0, received: 0, llm: 0 });
       s.sent++;
       if (m.kind === "finding" || (m.kind === "verdict" && m.company)) s.done++;
@@ -346,12 +317,11 @@ function Network({ roster }: { roster: Roster }) {
         const r = out[b] ?? (out[b] = { state: "done", companies: [], task: "", since: m.ts, done: 0, errors: 0, sent: 0, received: 0, llm: 0 });
         r.received++;
       }
-      if (age < 2.2 / Math.max(1, speed / 4)) { s.state = "working"; if (m.company && !s.companies.includes(m.company)) s.companies = [m.company]; }
+      if (clockShow - m.vt < 2.2 / Math.max(1, speed / 4)) { s.state = "working"; if (m.company && !s.companies.includes(m.company)) s.companies = [m.company]; }
     }
     return out;
   }, [live, feed.live?.status, clockShow, replay, speed]);
 
-  // ---------- running totals for the counters on the canvas
   const runNow = live ? feed.live?.run?.id : replayRun;
   const soFar = useMemo(() => (live ? feed.messages.filter((m) => m.run === runNow) : replay.slice(0, cursor.current)),
     [live, feed.messages, runNow, replay, clockShow]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -361,7 +331,7 @@ function Network({ roster }: { roster: Roster }) {
     for (const m of soFar) {
       if (m.kind === "summary") c[`rep:${m.sender.slice(0, 3)}`] = (c[`rep:${m.sender.slice(0, 3)}`] ?? 0) + 1;
       if (m.kind === "fetch") { const s = String((m.data as Record<string, unknown>).source ?? ""); c[s] = (c[s] ?? 0) + 1; }
-      if (m.channel !== "trace") { chat++; c[`team:${m.sender.slice(0, 3)}`] = (c[`team:${m.sender.slice(0, 3)}`] ?? 0) + 1; }
+      if (m.channel !== "trace") chat++;
       if (m.kind === "task" && m.sender === "CMD-00") companies++;
       if (m.kind === "verdict" && m.company) verdicts++;
       if (m.kind === "flag") flags++;
@@ -369,18 +339,21 @@ function Network({ roster }: { roster: Roster }) {
     const total = live ? (feed.live?.progress?.total ?? companies) : (replay.filter((m) => m.kind === "task" && m.sender === "CMD-00").length || companies);
     return { c, total: Math.max(total, verdicts), verdicts, flags, chat };
   }, [soFar, live, feed.live?.progress?.total, replay]);
-  const ticker = soFar.filter((m) => m.channel !== "trace").slice(-4);
+  const latest = soFar.filter((m) => m.channel !== "trace").slice(-1)[0];
 
   // ---------- view: fit, zoom, pan
   const fit = useCallback(() => {
     const el = stage.current;
     if (!el) return;
-    // leave room for the overlays: search and legend on top, tools and replay below
-    const top = 92, bottom = 64, availH = el.clientHeight - top - bottom;
-    const k = Math.min(1.25, Math.min((el.clientWidth - 40) / L.width, availH / L.height));
-    setView({ k, x: (el.clientWidth - L.width * k) / 2, y: top + (availH - L.height * k) / 2 });
-  }, [L]);
-  useEffect(() => { const t = window.setTimeout(fit, 60); return () => window.clearTimeout(t); }, [fit, sideOpen]);
+    const vis = nodes.filter((n) => visible.has(n.id));
+    if (!vis.length) return;
+    const x0 = Math.min(...vis.map((n) => n.x)) - 30, y0 = Math.min(...vis.map((n) => n.y)) - 40;
+    const x1 = Math.max(...vis.map((n) => n.x + n.w)) + 30, y1 = Math.max(...vis.map((n) => n.y + n.h)) + 40;
+    const k = Math.min(1.4, Math.min((el.clientWidth - 40) / (x1 - x0), (el.clientHeight - 40) / (y1 - y0)));
+    setView({ k, x: (el.clientWidth - (x1 - x0) * k) / 2 - x0 * k, y: (el.clientHeight - (y1 - y0) * k) / 2 - y0 * k });
+  }, [nodes, visible]);
+  const fitKey = `${layers.arrange}|${layers.detail}|${sideOpen}|${visible.size}`;
+  useEffect(() => { const t = window.setTimeout(fit, 60); return () => window.clearTimeout(t); }, [fitKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const el = stage.current;
     if (!el) return;
@@ -388,49 +361,101 @@ function Network({ roster }: { roster: Roster }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const showLegend = legendOpen ?? sw >= 1050;
-  const focus = useCallback((id: string) => {
+  const centreOn = useCallback((id: string) => {
     const n = byId.get(id), el = stage.current;
     if (!n || !el) return;
     const k = Math.max(view.k, 0.9);
     setView({ k, x: el.clientWidth / 2 - (n.x + n.w / 2) * k, y: el.clientHeight / 2 - (n.y + n.h / 2) * k });
     pulse.current.set(id, performance.now());
   }, [byId, view.k]);
-  useEffect(() => { const f = params.get("focus"); if (f) { const t = window.setTimeout(() => focus(f), 120); return () => window.clearTimeout(t); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const f = params.get("focus"); if (f) { const t = window.setTimeout(() => centreOn(f), 160); return () => window.clearTimeout(t); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const zoomAt = (factor: number, cx?: number, cy?: number) => setView((v) => {
     const el = stage.current!;
     const px = cx ?? el.clientWidth / 2, py = cy ?? el.clientHeight / 2;
-    const k = Math.max(0.3, Math.min(2.4, v.k * factor));
+    const k = Math.max(0.25, Math.min(2.6, v.k * factor));
     return { k, x: px - ((px - v.x) * k) / v.k, y: py - ((py - v.y) * k) / v.k };
   });
-  const drag = useRef<{ mode: "pan" | "node"; id?: string; sx: number; sy: number; ox: number; oy: number; moved: boolean } | null>(null);
+  const toWorld = (cx: number, cy: number): Pt => {
+    const r = stage.current!.getBoundingClientRect();
+    return { x: (cx - r.left - view.x) / view.k, y: (cy - r.top - view.y) / view.k };
+  };
+  const inspect = (id: string, t: "about" | "settings" = "about") => {
+    setSel(id); setSelEdge(null); setTab("agent"); setAgentTab(t); setSideOpen(true);
+  };
+  const pick = (cs: string) => { inspect(cs); if (visible.has(cs)) centreOn(cs); };
+  const hide = (id: string) => {
+    if (!hidden.includes(id)) setHidden([...hidden, id]);
+    if (sel === id) setSel(null);
+    if (focusId === id) setFocusId(null);
+    app.toast(`${id.startsWith("E:") ? "Edge" : id} hidden - Layers › Hidden brings it back`);
+  };
+  const addNote = (p: Pt) => {
+    const n: Note = { id: uid(), x: p.x - 80, y: p.y - 20, text: "", arrange: layers.arrange };
+    setMesh({ ...mesh, notes: [...mesh.notes, n] });
+    setEditNote(n.id);
+    setTool("select");
+    if (!layers.annotations) setLayers({ ...layers, annotations: true });
+  };
+
+  // ---------- pointer: what a press does depends on the tool
+  const drag = useRef<{ mode: "pan" | "node" | "note"; id?: string; sx: number; sy: number; ox: number; oy: number; moved: boolean } | null>(null);
   const onDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     setMenu(null);
-    const nodeEl = (e.target as HTMLElement).closest("[data-node]") as HTMLElement | null;
-    if (nodeEl) {
+    const t = e.target as HTMLElement;
+    if (t.closest("textarea, input, button, [data-drop]")) return;
+    const noteEl = t.closest("[data-note]") as HTMLElement | null;
+    const nodeEl = t.closest("[data-node]") as HTMLElement | null;
+    const panning = tool === "pan" || e.shiftKey;
+    if (noteEl && !panning) {
+      const id = noteEl.dataset.note!;
+      if (tool === "erase") { setMesh({ ...mesh, notes: mesh.notes.filter((n) => n.id !== id) }); return; }
+      const n = mesh.notes.find((x) => x.id === id)!;
+      drag.current = { mode: "note", id, sx: e.clientX, sy: e.clientY, ox: n.x, oy: n.y, moved: false };
+    } else if (nodeEl && !panning) {
       const id = nodeEl.dataset.node!;
-      const n = byId.get(id)!;
-      drag.current = { mode: "node", id, sx: e.clientX, sy: e.clientY, ox: n.x, oy: n.y, moved: false };
-    } else if (!nodeEl) {
+      if (tool === "link") setDraft({ from: id, to: toWorld(e.clientX, e.clientY) });
+      else if (tool === "focus") { setFocusId(focusId === id ? null : id); return; }
+      else if (tool === "erase") { hide(id); return; }
+      else if (tool === "note") { addNote(toWorld(e.clientX, e.clientY)); return; }
+      else { const n = byId.get(id)!; drag.current = { mode: "node", id, sx: e.clientX, sy: e.clientY, ox: n.x, oy: n.y, moved: false }; }
+    } else if (tool === "note" && !panning) {
+      addNote(toWorld(e.clientX, e.clientY));
+      return;
+    } else {
       drag.current = { mode: "pan", sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y, moved: false };
     }
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* the pointer is already gone */ }
   };
   const onMove = (e: React.PointerEvent) => {
+    if (draft) { setDraft({ ...draft, to: toWorld(e.clientX, e.clientY) }); return; }
     const d = drag.current;
     if (!d) return;
     const dx = e.clientX - d.sx, dy = e.clientY - d.sy;
     if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
     if (d.mode === "pan") setView((v) => ({ ...v, x: d.ox + dx, y: d.oy + dy }));
-    else if (d.moved && !tilt) setPos((p) => ({ ...p, [d.id!]: { x: d.ox + dx / view.k, y: d.oy + dy / view.k } })); // in 2.5D nodes stay put
+    else if (d.mode === "node" && d.moved) setPos((p) => ({ ...p, [d.id!]: { x: d.ox + dx / view.k, y: d.oy + dy / view.k } }));
+    else if (d.mode === "note" && d.moved) setMesh((m) => ({ ...m, notes: m.notes.map((n) => (n.id === d.id ? { ...n, x: d.ox + dx / view.k, y: d.oy + dy / view.k } : n)) }));
   };
-  const onUp = () => {
+  const onUp = (e: React.PointerEvent) => {
+    if (draft) {
+      const under = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-node]") as HTMLElement | null;
+      const to = under?.dataset.node;
+      if (to && to !== draft.from && !mesh.links.some((l) => l.from === draft.from && l.to === to)) {
+        const link: Link = { id: uid(), from: draft.from, to, label: "" };
+        setMesh({ ...mesh, links: [...mesh.links, link] });
+        setSelEdge(`L:${link.id}`); setSel(null); setTab("edge"); setSideOpen(true);
+        if (!layers.annotations) setLayers({ ...layers, annotations: true });
+      }
+      setDraft(null);
+      return;
+    }
     const d = drag.current;
     drag.current = null;
-    if (d?.mode === "node" && d.moved) setPos((p) => { try { localStorage.setItem("net.pos.v1", JSON.stringify(p)); } catch { /* ignore */ } return p; });
-    if (d?.mode === "node" && (!d.moved || tilt)) { setSel(d.id!); setSelEdge(null); setTab("agent"); setSideOpen(true); }
-    if (d?.mode === "pan" && !d.moved) { setSel(null); setSelEdge(null); setTab("activity"); }
+    if (d?.mode === "node" && d.moved) setPos((p) => { savePos(p); return p; });
+    if (d?.mode === "node" && !d.moved) inspect(d.id!);
+    if (d?.mode === "note" && !d.moved) setEditNote(d.id!);
+    if (d?.mode === "pan" && !d.moved && tool !== "pan") { setSel(null); setSelEdge(null); setTab("activity"); if (tool === "focus") setFocusId(null); }
   };
   const onWheel = (e: React.WheelEvent) => {
     const r = stage.current!.getBoundingClientRect();
@@ -445,17 +470,22 @@ function Network({ roster }: { roster: Roster }) {
   }, []);
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === "INPUT") return;
+      const tg = e.target instanceof Element ? e.target : null;
+      if (tg?.closest("input, textarea, select, [contenteditable]") || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase());
+      if (t) { setTool(t.id); return; }
       if (e.key === "f" || e.key === "F") fit();
       else if (e.key === "+" || e.key === "=") zoomAt(1.2);
       else if (e.key === "-") zoomAt(1 / 1.2);
       else if (e.key === " " && !live) { e.preventDefault(); setPlaying((p) => !p); }
-      else if (e.key === "Escape") { setSel(null); setSelEdge(null); setMenu(null); setTab("activity"); }
+      else if (e.key === "i" || e.key === "I") setSideOpen((o) => !o);
+      else if (e.key === "m" || e.key === "M") setLayers((l) => ({ ...l, minimap: !l.minimap }));
+      else if (e.key === "Escape") { setSel(null); setSelEdge(null); setMenu(null); setFocusId(null); setDraft(null); setEditNote(null); setOpenInfo([]); setTab("activity"); setTool("select"); }
+      else if ((e.key === "Delete" || e.key === "Backspace") && selEdge?.startsWith("L:")) { setMesh((m) => ({ ...m, links: m.links.filter((l) => `L:${l.id}` !== selEdge) })); setSelEdge(null); setTab("activity"); }
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
-  }, [fit, live]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { try { localStorage.setItem("net.tilt", tilt ? "1" : "0"); } catch { /* ignore */ } }, [tilt]);
+  }, [fit, live, selEdge]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!menu) return;
     const close = (e: PointerEvent) => { if (!(e.target as HTMLElement).closest(".tc-menu")) setMenu(null); };
@@ -463,85 +493,161 @@ function Network({ roster }: { roster: Roster }) {
     return () => document.removeEventListener("pointerdown", close);
   }, [menu]);
 
-  // ---------- neighbourhood highlight
-  const neigh = useMemo(() => {
-    if (!sel) return null;
-    const s = new Set([sel]);
-    for (const e of L.edges) { if (e.from === sel) s.add(e.to); if (e.to === sel) s.add(e.from); }
+  // ---------- neighbourhoods: selection highlight and the focus tool
+  const neighbours = useCallback((id: string) => {
+    const s = new Set([id]);
+    for (const e of L.edges) { if (e.from === id) s.add(e.to); if (e.to === id) s.add(e.from); }
+    for (const l of mesh.links) { if (l.from === id) s.add(l.to); if (l.to === id) s.add(l.from); }
     return s;
-  }, [sel, L.edges]);
-  const dimTeam = (team?: string) => teams.size > 0 && !(team && teams.has(team));
+  }, [L.edges, mesh.links]);
+  const neigh = useMemo(() => (sel ? neighbours(sel) : null), [sel, neighbours]);
+  const focusSet = useMemo(() => (focusId ? neighbours(focusId) : null), [focusId, neighbours]);
+  const q = find.trim().toLowerCase();
+  const searchHits = q ? nodes.filter((n) => (n.id + " " + n.title).toLowerCase().includes(q)) : [];
   const now = performance.now();
-  const searchHits = find.trim() ? nodes.filter((n) => (n.id + " " + n.title).toLowerCase().includes(find.trim().toLowerCase())) : [];
-
-  const prog = feed.live?.progress;
-  const working = Object.entries(status).filter(([, s]) => s.state === "working");
-  const recent = (live ? feed.messages : replay.slice(0, cursor.current)).filter((m) => m.channel !== "trace").slice(-40).reverse();
-  const teamLoad = TEAM_ORDER.concat(["CMD"]).map((t) => ({ t, n: (live ? feed.messages : replay.slice(0, cursor.current)).filter((m) => m.sender.startsWith(t)).length }));
-  const maxLoad = Math.max(1, ...teamLoad.map((x) => x.n));
-  const edgeMsgs = selEdge ? (live ? feed.messages : replay).filter((m) => routes(m).some(([a, b]) => `${a}>${b}` === selEdge)).slice(-60).reverse() : [];
   const runInfo = feed.live?.run;
+  const size = workforceSize(roster);
+  const tc = (id: string) => ink(colorOf(roster, id), light);
 
-  const nodeMenu = (id: string) => {
+  // ---------- context menus
+  const toggleInRuns = async (cs: string, on: boolean) => {
+    try {
+      await api.put(`/api/agents/profiles/${cs}`, { enabled: on });
+      await qc.invalidateQueries({ queryKey: ["agent-profiles"] });
+      app.toast(on ? `${cs} takes part in runs again` : `${cs} sits out research runs from the next run`, "ok");
+    } catch (e) { app.toast(e instanceof Error ? e.message : String(e), "error"); }
+  };
+  const nodeMenu = (id: string, world: Pt) => {
     const a = roster.agents.find((x) => x.callsign === id);
     const team = a ? roster.teams[a.team] : null;
+    const prof = profiles.data?.profiles[id];
+    const close = () => setMenu(null);
     return (
       <>
         <div className="tc-mh">{id} · {byId.get(id)?.title}</div>
-        <button onClick={() => { setSel(id); setTab("agent"); setMenu(null); }}><Icon name="info" className="sm" />Inspect</button>
-        <button onClick={() => { focus(id); setMenu(null); }}><Icon name="target" className="sm" />Centre on it</button>
-        <button onClick={() => { setSel(id); setMenu(null); }}><Icon name="type-hierarchy" className="sm" />Highlight its connections</button>
+        <button onClick={() => { inspect(id); close(); }}><Icon name="info" className="sm" />Inspect</button>
+        {a && a.role !== "system" && <button onClick={() => { inspect(id, "settings"); close(); }}><Icon name="settings-gear" className="sm" />Settings…</button>}
+        <button onClick={() => { centreOn(id); close(); }}><Icon name="screen-normal" className="sm" />Centre on it</button>
+        <button onClick={() => { setFocusId(id); close(); }}><Icon name="target" className="sm" />Focus on its connections</button>
+        <button onClick={() => { setDraft({ from: id, to: world }); close(); }}><Icon name="git-compare" className="sm" />Draw a link from here</button>
+        <hr />
         {team && <button onClick={() => nav(`/agents/chat?c=${team.channel}`)}><Icon name="comment-discussion" className="sm" />Open #{team.slug}</button>}
         {a && a.role !== "system" && <button onClick={() => nav(`/agents/chat?c=${encodeURIComponent(dmId(id, "YOU"))}`)}><Icon name="comment" className="sm" />Message {id}</button>}
-        {team && a?.role !== "chief" && <button onClick={() => { setTeams(new Set([a!.team])); setMenu(null); }}><Icon name="filter" className="sm" />Show only {a!.team}</button>}
+        {a?.role === "analyst" && prof && <button onClick={() => { toggleInRuns(id, !prof.enabled); close(); }}><Icon name={prof.enabled ? "debug-pause" : "debug-start"} className="sm" />{prof.enabled ? "Leave out of research runs" : "Bring back into research runs"}</button>}
         <hr />
-        <button onClick={() => { navigator.clipboard?.writeText(id); setMenu(null); app.toast(`Copied ${id}`); }}><Icon name="copy" className="sm" />Copy callsign</button>
-        {pos[id] && <button onClick={() => { setPos((p) => { const n = { ...p }; delete n[id]; try { localStorage.setItem("net.pos.v1", JSON.stringify(n)); } catch { /* ignore */ } return n; }); setMenu(null); }}><Icon name="discard" className="sm" />Reset its position</button>}
+        <button onClick={() => { hide(id); close(); }}><Icon name="eye-closed" className="sm" />Hide on the map</button>
+        {a && a.team !== "CMD" && a.team !== "OPS" && <button onClick={() => { setTeamsOff(Object.keys(roster.teams).filter((t) => t !== a.team && t !== "CMD" && t !== "OPS")); close(); }}><Icon name="filter" className="sm" />Show only {a.team}</button>}
+        <button onClick={() => { navigator.clipboard?.writeText(id); close(); app.toast(`Copied ${id}`); }}><Icon name="copy" className="sm" />Copy callsign</button>
+        {pos[id] && <button onClick={() => { const n = { ...pos }; delete n[id]; setPos(n); savePos(n); close(); }}><Icon name="discard" className="sm" />Reset its position</button>}
       </>
     );
   };
-  const canvasMenu = (
+  const canvasMenu = (world: Pt) => (
     <>
       <div className="tc-mh">Agent Network</div>
+      <button onClick={() => { addNote(world); setMenu(null); }}><Icon name="note" className="sm" />Add a note here</button>
       <button onClick={() => { fit(); setMenu(null); }}><Icon name="screen-normal" className="sm" />Fit to screen <kbd>F</kbd></button>
-      <button onClick={() => { setTilt(!tilt); setMenu(null); }}><Icon name={tilt ? "check" : "blank"} className="sm" />2.5D perspective</button>
-      <button onClick={() => { setLabels(!labels); setMenu(null); }}><Icon name={labels ? "check" : "blank"} className="sm" />Edge labels</button>
-      <button onClick={() => { setSrcEdges(!srcEdges); setMenu(null); }}><Icon name={srcEdges ? "check" : "blank"} className="sm" />Data-source edges</button>
       {!live && <button onClick={() => { setPlaying(!playing); setMenu(null); }}><Icon name={playing ? "debug-pause" : "play"} className="sm" />{playing ? "Pause replay" : "Play replay"} <kbd>Space</kbd></button>}
       <hr />
-      <button onClick={() => { setTeams(new Set()); setKindsOff(new Set()); setMenu(null); }}><Icon name="clear-all" className="sm" />Clear filters</button>
-      <button onClick={() => { setPos({}); try { localStorage.removeItem("net.pos.v1"); } catch { /* ignore */ } setMenu(null); }}><Icon name="discard" className="sm" />Reset layout</button>
+      {(hidden.length > 0 || teamsOff.length > 0) && <button onClick={() => { setHidden([]); setTeamsOff([]); setMenu(null); }}><Icon name="eye" className="sm" />Show everything hidden ({hidden.length + teamsOff.length})</button>}
+      {focusId && <button onClick={() => { setFocusId(null); setMenu(null); }}><Icon name="clear-all" className="sm" />Leave focus</button>}
+      <button onClick={() => { setPos({}); savePos({}); setMenu(null); }}><Icon name="discard" className="sm" />Reset node positions</button>
     </>
   );
 
+  // ---------- your link, in the inspector
+  const link = selEdge?.startsWith("L:") ? mesh.links.find((l) => `L:${l.id}` === selEdge) : null;
+  const linkEditor = link ? (
+    <div className="col" style={{ gap: 10 }}>
+      <div className="label">Your link</div>
+      <b>{link.from} → {link.to}</b>
+      <label className="fld"><span>Caption</span>
+        <input className="inp sm" value={link.label} placeholder="e.g. should share filings" autoFocus
+          onChange={(e) => setMesh({ ...mesh, links: mesh.links.map((l) => (l.id === link.id ? { ...l, label: e.target.value } : l)) })} /></label>
+      <span className="xs faint">Links and notes are your own annotations on the map: they help you plan and explain the mesh, and stay in this browser. To change how agents actually work, use an agent's Settings.</span>
+      <div className="row">
+        <button className="btn sm sec" onClick={() => setMesh({ ...mesh, links: mesh.links.map((l) => (l.id === link.id ? { ...l, from: l.to, to: l.from } : l)) })}><Icon name="arrow-swap" className="xs" />Reverse</button>
+        <button className="btn sm ghost" onClick={() => { setMesh({ ...mesh, links: mesh.links.filter((l) => l.id !== link.id) }); setSelEdge(null); setTab("activity"); }}><Icon name="trash" className="xs" />Delete</button>
+      </div>
+    </div>
+  ) : undefined;
+
+  const applyView = (v: View) => { setLayers({ ...DEFAULT_LAYERS, ...v.layers, edges: { ...DEFAULT_LAYERS.edges, ...v.layers.edges } }); setHidden(v.hidden); setTeamsOff(v.teamsOff); setFocusId(null); };
+  const notesHere = layers.annotations ? mesh.notes.filter((n) => n.arrange === layers.arrange) : [];
+  const toolNow = TOOLS.find((t) => t.id === tool)!;
+
   return (
-    <>
-      <PageHeader crumbs={[{ label: "Research workforce" }, { label: "Agent Network" }]} title="Agent Network"
-        sub={<span className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-          <span className={`live-dot ${live ? "on" : ""}`}>{live ? "Live run" : `Replay of run #${replayRun ?? "-"}`}</span>
-          <span>{roster.agents.length - 1} agents in 6 teams · info-bits travel the edges as the agents exchange work</span>
-        </span>}
-        actions={<>
-          <select className="sel" value={run ?? ""} onChange={(e) => { const p = new URLSearchParams(params); if (e.target.value) p.set("run", e.target.value); else p.delete("run"); setParams(p, { replace: true }); }}>
-            <option value="">{feed.live?.active ? "Live run" : "Latest run"}{runInfo ? ` (#${runInfo.id})` : ""}</option>
-            {(runs.data ?? []).map((r) => <option key={r.id} value={r.id}>#{r.id} · {r.mode} · {r.started?.slice(5, 16).replace("T", " ")}</option>)}
-          </select>
-          <WorkforceControl active={!!feed.live?.active} />
-          <button className="btn sec" onClick={() => nav("/agents/chat")}><Icon name="comment-discussion" className="sm" />Research Room</button>
-          <button className={`btn sec ${sideOpen ? "on" : ""}`} onClick={() => setSideOpen(!sideOpen)} title="Show or hide the inspector"><Icon name="layout-sidebar-right" className="sm" />Inspector</button>
-        </>} />
-      <div className={`an ${sideOpen ? "" : "noside"}`}>
-        <div className={`an-stage ${tilt ? "tilt" : ""}`} ref={stage} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onWheel={onWheel}
-          onContextMenu={(e) => { e.preventDefault(); const n = (e.target as HTMLElement).closest("[data-node]") as HTMLElement | null; setMenu({ x: e.clientX, y: e.clientY, node: n?.dataset.node ?? null }); }}>
-          <div className="an-tilt">
+    <div className={`net ${light ? "light" : ""}`}>
+      <header className="net-top">
+        <div className="net-title">
+          <Icon name="type-hierarchy" />
+          <b>Agent Network</b>
+          <span className={`live-dot ${live ? "on" : ""}`}>{live ? "Live" : "Replay"}</span>
+        </div>
+        <select className="sel sm" value={run ?? ""} onChange={(e) => { const p = new URLSearchParams(params); if (e.target.value) p.set("run", e.target.value); else p.delete("run"); setParams(p, { replace: true }); }} title="Which run to show">
+          <option value="">{feed.live?.active ? "Live run" : "Latest run"}{runInfo ? ` (#${runInfo.id})` : ""}</option>
+          {(runs.data ?? []).map((r) => <option key={r.id} value={r.id}>#{r.id} · {r.mode} · {r.started?.slice(5, 16).replace("T", " ")}</option>)}
+        </select>
+        <div className="net-find">
+          <div className="search sm"><Icon name="search" /><input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find an agent"
+            onKeyDown={(e) => { if (e.key === "Enter" && searchHits[0]) { pick(searchHits[0].id); setFind(""); } else if (e.key === "Escape") setFind(""); }} /></div>
+          {searchHits.length > 0 && (
+            <div className="net-hits">
+              {searchHits.slice(0, 8).map((n) => (
+                <button key={n.id} onClick={() => { pick(n.id); setFind(""); }}>
+                  <i style={{ background: n.kind === "agent" ? colorOf(roster, n.id) : "var(--fg-3)" }} /><b>{n.id}</b><span className="ellipsis">{n.title}</span>
+                  {!visible.has(n.id) && <span className="xs faint">hidden</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <span className="spacer" />
+        <ViewsMenu views={views} setViews={setViews} current={{ layers, hidden, teamsOff }} apply={applyView} />
+        <LayersMenu layers={layers} setLayers={setLayers} roster={roster} teamsOff={teamsOff} setTeamsOff={setTeamsOff} hidden={hidden} setHidden={setHidden}
+          kindsOff={kindsOff} setKindsOff={setKindsOff} annotations={mesh.links.length + mesh.notes.length}
+          clearAnnotations={() => setMesh({ links: [], notes: [] })} titleOf={(id) => byId.get(id)?.title ?? ""} />
+        <WorkforceControl active={!!feed.live?.active} />
+        <ExportButton title="Agent Network" target={stage} className="net-btn icon" />
+        <Popover className="pop net-pop sm" trigger={(open, toggle) => <button className={`net-btn icon ${open ? "on" : ""}`} onClick={toggle} title="Shortcuts"><Icon name="keyboard" className="sm" /></button>}>
+          {() => (
+            <div className="nl keys">
+              {TOOLS.map((t) => <div key={t.id}><kbd>{t.key}</kbd><span>{t.label} - {t.help}</span></div>)}
+              <div><kbd>F</kbd><span>Fit the map to the screen</span></div>
+              <div><kbd>+</kbd><span>Zoom in · <kbd>-</kbd> out (or the mouse wheel)</span></div>
+              <div><kbd>Shift</kbd><span>+ drag pans with any tool</span></div>
+              <div><kbd>Space</kbd><span>Play / pause the replay</span></div>
+              <div><kbd>I</kbd><span>Inspector · <kbd>M</kbd> mini-map</span></div>
+              <div><kbd>Esc</kbd><span>Clear selection and focus</span></div>
+              <div><kbd>Del</kbd><span>Delete the selected link</span></div>
+            </div>
+          )}
+        </Popover>
+        <button className={`net-btn icon ${sideOpen ? "on" : ""}`} onClick={() => setSideOpen(!sideOpen)} title="Inspector (I)"><Icon name="layout-sidebar-right" className="sm" /></button>
+      </header>
+
+      <div className={`net-body ${sideOpen ? "" : "noside"}`}>
+        <nav className="net-rail" aria-label="Map tools">
+          {TOOLS.map((t) => (
+            <button key={t.id} className={tool === t.id ? "on" : ""} onClick={() => setTool(t.id)} title={`${t.label} (${t.key}) - ${t.help}`}><Icon name={t.icon} /></button>
+          ))}
+          <i className="sep" />
+          <button onClick={fit} title="Fit (F)"><Icon name="screen-normal" /></button>
+          <button onClick={() => zoomAt(1.2)} title="Zoom in (+)"><Icon name="zoom-in" /></button>
+          <button onClick={() => zoomAt(1 / 1.2)} title="Zoom out (-)"><Icon name="zoom-out" /></button>
+          <button className={layers.minimap ? "on" : ""} onClick={() => setLayers({ ...layers, minimap: !layers.minimap })} title="Mini-map (M)"><Icon name="map" /></button>
+        </nav>
+
+        <div className={`an-stage net-stage tool-${tool}`} ref={stage} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onWheel={onWheel}
+          onContextMenu={(e) => { e.preventDefault(); const n = (e.target as HTMLElement).closest("[data-node]") as HTMLElement | null; setMenu({ x: e.clientX, y: e.clientY, node: n?.dataset.node ?? null, world: toWorld(e.clientX, e.clientY) }); }}>
           <div className="an-world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})`, width: L.width, height: L.height }}>
-            {L.frames.map((f) => {
+            {layers.frames && layers.arrange === "hierarchy" && L.frames.filter((f) => !teamsOff.includes(f.team)).map((f) => {
               const t = roster.teams[f.team];
               const busy = roster.agents.filter((a) => a.team === f.team && status[a.callsign]?.state === "working").length;
+              const far = !!focusSet && !roster.agents.some((a) => a.team === f.team && focusSet.has(a.callsign));
               return (
-                <div key={f.team} className={`an-frame ${dimTeam(f.team) ? "dim" : ""}`} style={{ left: f.x, top: f.y, width: f.w, height: f.h, ["--tc" as string]: t.color }}>
-                  <span className="an-frame-h"><b>{f.team}</b> {t.name}{busy > 0 && <em>{busy} working</em>}
-                    <span key={tally.c[`team:${f.team}`] ?? 0} className="an-frame-n bump">{tally.c[`team:${f.team}`] ?? 0} msgs</span></span>
+                <div key={f.team} className={`an-frame ${far ? "dim" : ""}`} style={{ left: f.x, top: f.y, width: f.w, height: f.h, ["--tc" as string]: tc(`${f.team}-00`) }}>
+                  <span className="an-frame-h"><b>{f.team}</b> {t.name}{busy > 0 && <em>{busy} working</em>}</span>
                   <i className="an-frame-bar" style={{ width: `${Math.min(100, (100 * (tally.c[`rep:${f.team}`] ?? 0)) / Math.max(1, tally.total))}%` }} />
                 </div>
               );
@@ -549,12 +655,14 @@ function Network({ roster }: { roster: Roster }) {
             <svg className="an-svg" width={L.width} height={L.height}>
               <defs>
                 <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+                <marker id="net-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent-2)" /></marker>
               </defs>
               {L.edges.map((e) => {
-                const a = byId.get(e.from), b = byId.get(e.to);
-                if (!a || !b || (!srcEdges && e.kind === "input")) return null;
-                const dim = (neigh && !(neigh.has(e.from) && neigh.has(e.to))) || (teams.size && !((a.team && teams.has(a.team)) || (b.team && teams.has(b.team))));
-                const color = e.kind === "input" ? "#57a3f8" : e.kind === "consume" ? "#f0a35e" : e.kind === "output" ? "#e0b97f" : colorOf(roster, e.from);
+                if (!layers.edges[e.kind] || !visible.has(e.from) || !visible.has(e.to) || hidden.includes(`E:${e.id}`)) return null;
+                if (focusSet && !(e.from === focusId || e.to === focusId)) return null;
+                const a = byId.get(e.from)!, b = byId.get(e.to)!;
+                const dim = neigh && !(neigh.has(e.from) && neigh.has(e.to));
+                const color = ink(e.kind === "report" || e.kind === "command" ? colorOf(roster, e.from) : EDGE_COLOR[e.kind], light);
                 const g = geom(a, b);
                 const mid = at(g, 0.5);
                 return (
@@ -563,122 +671,141 @@ function Network({ roster }: { roster: Roster }) {
                     <path d={pathD(g)} className="line" />
                     <path d={pathD(g)} className="flow" />
                     <path d={pathD(g)} className="hit" onPointerEnter={(ev) => setEdgeTip({ id: e.id, x: ev.clientX, y: ev.clientY })} onPointerLeave={() => setEdgeTip(null)}
-                      onPointerDown={(ev) => { ev.stopPropagation(); setSelEdge(e.id); setSel(null); setTab("edge"); }} />
-                    {labels && e.kind === "command" && <text x={mid.x} y={mid.y - 6} className="an-elabel">team report</text>}
-                    {labels && e.kind === "consume" && <text x={mid.x} y={mid.y - 6} className="an-elabel">cross-team read</text>}
+                      onPointerDown={(ev) => { if (tool === "pan" || ev.shiftKey || ev.button !== 0) return; ev.stopPropagation(); if (tool === "erase") { hide(`E:${e.id}`); return; } setSelEdge(e.id); setSel(null); setTab("edge"); setSideOpen(true); }} />
+                    {layers.labels && <text x={mid.x} y={mid.y - 6} className="an-elabel">{e.kind === "command" ? "team report" : e.kind === "consume" ? "cross-team read" : e.kind === "input" ? "feed" : e.kind === "report" ? "finding" : e.kind === "output" ? "verdict" : "control"}</text>}
                   </g>
                 );
               })}
+              {layers.annotations && mesh.links.map((l) => {
+                const a = byId.get(l.from), b = byId.get(l.to);
+                if (!a || !b || !visible.has(l.from) || !visible.has(l.to)) return null;
+                if (focusSet && !(focusSet.has(l.from) && focusSet.has(l.to))) return null;
+                const g = geom(a, b);
+                const mid = at(g, 0.5);
+                return (
+                  <g key={l.id} className={`an-edge k-custom ${selEdge === `L:${l.id}` ? "sel" : ""}`}>
+                    <path d={pathD(g)} className="line" markerEnd="url(#net-arrow)" />
+                    <path d={pathD(g)} className="hit" onPointerDown={(ev) => {
+                      if (tool === "pan" || ev.shiftKey || ev.button !== 0) return;
+                      ev.stopPropagation();
+                      if (tool === "erase") { setMesh({ ...mesh, links: mesh.links.filter((x) => x.id !== l.id) }); return; }
+                      setSelEdge(`L:${l.id}`); setSel(null); setTab("edge"); setSideOpen(true);
+                    }} />
+                    {l.label && <text x={mid.x} y={mid.y - 7} className="an-elabel custom">{l.label}</text>}
+                  </g>
+                );
+              })}
+              {draft && byId.get(draft.from) && (() => { const A = byId.get(draft.from)!; return <line x1={A.x + A.w / 2} y1={A.y + A.h / 2} x2={draft.to.x} y2={draft.to.y} className="an-draft" markerEnd="url(#net-arrow)" />; })()}
               <g ref={layer} filter="url(#glow)" />
             </svg>
             <div className="an-floats" ref={floats} />
             {nodes.map((n) => {
+              if (!visible.has(n.id)) return null;
               const st = status[n.id];
               const isSel = sel === n.id;
-              const dim = (neigh && !neigh.has(n.id)) || dimTeam(n.team) || (searchHits.length > 0 && !searchHits.includes(n));
-              const color = n.kind === "source" ? "#57a3f8" : n.kind === "output" ? "#e0b97f" : colorOf(roster, n.id);
+              const far = !!focusSet && !focusSet.has(n.id);
+              const dim = (neigh && !neigh.has(n.id)) || (searchHits.length > 0 && !searchHits.includes(n));
+              const color = n.kind === "source" ? ink("#57a3f8", light) : n.kind === "output" ? ink("#e0b97f", light) : tc(n.id);
               const p = pulse.current.get(n.id);
               const pulsing = p && now - p < 700;
+              const off = n.role === "analyst" && profiles.data?.profiles[n.id]?.enabled === false;
+              const common = {
+                "data-node": n.id,
+                ref: (el: HTMLDivElement | null) => { if (el) nodeEls.current.set(n.id, el); else nodeEls.current.delete(n.id); },
+                style: { left: n.x, top: n.y, width: n.w, height: n.h, ["--tc" as string]: color },
+                onPointerEnter: (e: React.PointerEvent) => setHover({ id: n.id, x: e.clientX, y: e.clientY }),
+                onPointerMove: (e: React.PointerEvent) => setHover({ id: n.id, x: e.clientX, y: e.clientY }),
+                onPointerLeave: () => setHover(null),
+              };
               if (n.kind !== "agent") {
+                const v = n.id === "OUT-VERDICT" ? tally.verdicts : n.id === "OUT-ALERTS" ? tally.flags : n.id === "OUT-ROOM" ? tally.chat : tally.c[n.id] ?? 0;
                 return (
-                  <div key={n.id} data-node={n.id} ref={(el) => { if (el) nodeEls.current.set(n.id, el); else nodeEls.current.delete(n.id); }}
-                    className={`an-node round ${dim ? "dim" : ""} ${isSel ? "sel" : ""} ${pulsing ? "pulse" : ""}`}
-                    style={{ left: n.x, top: n.y, width: n.w, height: n.h, ["--tc" as string]: color }}
-                    onPointerEnter={(e) => setHover({ id: n.id, x: e.clientX, y: e.clientY })} onPointerLeave={() => setHover(null)}>
+                  <div key={n.id} {...common} className={`an-node round ${far ? "far" : ""} ${dim ? "dim" : ""} ${isSel ? "sel" : ""} ${pulsing ? "pulse" : ""}`}>
                     <Icon name={n.icon ?? "circle"} />
-                    {(() => {
-                      const v = n.id === "OUT-VERDICT" ? tally.verdicts : n.id === "OUT-ALERTS" ? tally.flags : n.id === "OUT-ROOM" ? tally.chat : tally.c[n.id] ?? 0;
-                      return v > 0 ? <span key={v} className="an-count bump">{v}</span> : null;
-                    })()}
+                    {v > 0 && <span key={v} className="an-count bump">{v}</span>}
                     <span className="an-cap">{n.title}</span>
                   </div>
                 );
               }
               const state = st?.state ?? "idle";
+              const compact = layers.detail === "compact";
               return (
-                <div key={n.id} data-node={n.id} ref={(el) => { if (el) nodeEls.current.set(n.id, el); else nodeEls.current.delete(n.id); }}
-                  className={`an-node card r-${n.role} s-${state} ${dim ? "dim" : ""} ${isSel ? "sel" : ""} ${pulsing ? "pulse" : ""}`}
-                  style={{ left: n.x, top: n.y, width: n.w, height: n.h, ["--tc" as string]: color }}
-                  onPointerEnter={(e) => setHover({ id: n.id, x: e.clientX, y: e.clientY })} onPointerMove={(e) => setHover({ id: n.id, x: e.clientX, y: e.clientY })} onPointerLeave={() => setHover(null)}
-                  onDoubleClick={() => { const a = roster.agents.find((x) => x.callsign === n.id); if (a) nav(`/agents/chat?c=${roster.teams[a.team].channel}`); }}>
-                  <span className="port l" /><span className="port r" />
+                <div key={n.id} {...common} className={`an-node card ${compact ? "compact" : ""} r-${n.role} s-${state} ${off ? "off" : ""} ${far ? "far" : ""} ${dim ? "dim" : ""} ${isSel ? "sel" : ""} ${pulsing ? "pulse" : ""}`}
+                  onDoubleClick={() => { if (tool === "select" && n.role !== "system") nav(`/agents/chat?c=${encodeURIComponent(dmId(n.id, "YOU"))}`); }}>
                   <div className="an-top">
-                    <span className="an-ic"><BotGlyph role={n.role ?? "analyst"} size={n.role === "chief" ? 22 : 17} color={color} />
+                    <span className="an-ic"><BotGlyph role={n.role ?? "analyst"} size={n.role === "chief" ? (compact ? 18 : 22) : compact ? 14 : 17} color={color} />
                       {n.role === "chief" && tally.total > 0 && (
                         <svg className="an-ring" viewBox="0 0 44 44"><circle cx="22" cy="22" r="19" className="bg" />
                           <circle cx="22" cy="22" r="19" className="fg" style={{ strokeDasharray: `${(119.4 * tally.verdicts) / tally.total} 119.4` }} /></svg>
                       )}
                     </span>
-                    <div className="an-id"><b>{n.id}</b><span>{n.role === "chief" ? "Chief" : n.role === "lead" ? "Team lead" : n.role === "system" ? "Orchestrator" : "Analyst"}</span></div>
-                    <span className={`an-state s-${state}`} title={state} />
+                    <div className="an-id"><b>{n.id}</b><span>{compact && n.role === "analyst" ? n.title.replace(/ Analyst$/, "") : roleName(n.role ?? "analyst")}</span></div>
+                    <span className={`an-state s-${off ? "off" : state}`} title={off ? "left out of runs" : state} />
+                    <button className={`an-more ${openInfo.includes(n.id) ? "on" : ""}`} onClick={(e) => { e.stopPropagation(); toggleInfo(n.id); }}
+                      title={openInfo.includes(n.id) ? "Hide details" : "Show details"} aria-expanded={openInfo.includes(n.id)}>
+                      <Icon name={openInfo.includes(n.id) ? "chevron-up" : "chevron-down"} />
+                    </button>
                   </div>
-                  <div className="an-title">{n.title.replace(/ Analyst$/, "")}</div>
-                  <div className="an-task">
-                    <span className="grow ellipsis">{state === "working" ? <><span className="spin-ring" />{st?.companies?.[0]?.replace(/ Limited$/i, "") ?? "working"}</> : state === "error" ? "error" : n.role === "chief" && tally.total ? `${tally.verdicts}/${tally.total} verdicts` : st?.done ? `${st.done} done` : "idle"}</span>
-                    {st && (st.sent > 0 || st.received > 0) && <span className="an-io"><b key={`s${st.sent}`} className="bump">↑{st.sent}</b><b key={`r${st.received}`} className="bump">↓{st.received}</b></span>}
+                  {!compact && <>
+                    <div className="an-title">{n.title.replace(/ Analyst$/, "")}</div>
+                    <div className="an-task">
+                      <span className="grow ellipsis">{off ? "left out of runs" : state === "working" ? <><span className="spin-ring" />{st?.companies?.[0]?.replace(/ Limited$/i, "") ?? "working"}</> : state === "error" ? "error" : n.role === "chief" && tally.total ? `${tally.verdicts}/${tally.total} verdicts` : st?.done ? `${st.done} done` : "idle"}</span>
+                      {st && (st.sent > 0 || st.received > 0) && <span className="an-io"><b key={`s${st.sent}`} className="bump">↑{st.sent}</b><b key={`r${st.received}`} className="bump">↓{st.received}</b></span>}
+                    </div>
+                  </>}
+                </div>
+              );
+            })}
+            {openInfo.filter((id) => visible.has(id)).map((id) => {
+              const n = byId.get(id)!;
+              const a = roster.agents.find((x) => x.callsign === id);
+              if (!a) return null;
+              const st = status[id];
+              const prof = profiles.data?.profiles[id];
+              const off = a.role === "analyst" && prof?.enabled === false;
+              const state = off ? "left out of runs" : st?.state === "working" ? `working on ${st.companies?.[0] ?? "…"}` : st?.state ?? "idle";
+              const tuned = prof ? [prof.stance !== "balanced" && prof.stance, prof.weight !== 1 && `weight x${prof.weight}`, prof.llm !== "auto" && `AI ${prof.llm}`, prof.instructions && "has instructions"].filter(Boolean) : [];
+              return (
+                <div key={`d-${id}`} data-drop className="an-drop" style={{ left: n.x, top: n.y + n.h + 8, width: Math.max(n.w, 230), ["--tc" as string]: tc(id) }}>
+                  <div className="an-drop-h"><b>{id}</b><span>{a.title}</span>
+                    <button onClick={() => toggleInfo(id)} title="Close"><Icon name="close" className="xs" /></button></div>
+                  <div className="an-drop-team">{roster.teams[a.team]?.name} · {roleName(a.role)}</div>
+                  <div className={`an-drop-state s-${off ? "off" : st?.state ?? "idle"}`}><i />{state}</div>
+                  {st && <div className="an-drop-stats"><span><b>{st.done}</b> done</span><span><b>{st.sent}</b> sent</span><span><b>{st.received}</b> received</span>{st.llm > 0 && <span><b>{st.llm}</b> AI-assisted</span>}</div>}
+                  <p>{a.duty}</p>
+                  {tuned.length > 0 && <div className="an-drop-tuned">Tuned: {tuned.join(" · ")}</div>}
+                  <div className="an-drop-acts">
+                    <button onClick={() => inspect(id)}><Icon name="info" className="xs" />Inspect</button>
+                    {a.role !== "system" && <button onClick={() => nav(`/agents/chat?c=${encodeURIComponent(dmId(id, "YOU"))}`)}><Icon name="comment" className="xs" />Message</button>}
+                    {a.role !== "system" && <button onClick={() => inspect(id, "settings")}><Icon name="settings-gear" className="xs" />Settings</button>}
                   </div>
                 </div>
               );
             })}
-          </div>
+            {notesHere.map((n) => (
+              <div key={n.id} data-note={n.id} className={`an-note ${editNote === n.id ? "editing" : ""}`} style={{ left: n.x, top: n.y }} onDoubleClick={() => setEditNote(n.id)}>
+                {editNote === n.id ? (
+                  <textarea autoFocus value={n.text} placeholder="Write a note…" rows={3}
+                    onChange={(e) => setMesh({ ...mesh, notes: mesh.notes.map((x) => (x.id === n.id ? { ...x, text: e.target.value } : x)) })}
+                    onBlur={() => { setEditNote(null); if (!n.text.trim()) setMesh((m) => ({ ...m, notes: m.notes.filter((x) => x.id !== n.id) })); }}
+                    onKeyDown={(e) => { if (e.key === "Escape" || (e.key === "Enter" && (e.ctrlKey || e.metaKey))) (e.target as HTMLTextAreaElement).blur(); }} />
+                ) : <span>{n.text}</span>}
+              </div>
+            ))}
           </div>
 
-          <div className="an-ov tl" data-noexport onPointerDown={(e) => e.stopPropagation()}>
-            <div className="search sm"><Icon name="search" /><input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find agent (callsign or role)"
-              onKeyDown={(e) => { if (e.key === "Enter" && searchHits[0]) { focus(searchHits[0].id); setSel(searchHits[0].id); setTab("agent"); } }} /></div>
-            <div className="an-teams">
-              {Object.entries(roster.teams).filter(([c]) => c !== "OPS").map(([code, t]) => (
-                <button key={code} className={`chip ${teams.has(code) ? "on" : ""}`} onClick={() => setTeams((s) => { const n = new Set(s); if (n.has(code)) n.delete(code); else n.add(code); return n; })}>
-                  <span className="sw" style={{ background: t.color }} />{code}
-                </button>
-              ))}
-            </div>
-            {ticker.length > 0 && (
-              <div className="an-ticker">
-                {ticker.slice(-3).map((m) => (
-                  <div key={m.id} className="an-tick" title={m.text}>
-                    <i style={{ background: KIND_META[m.kind]?.color }} /><b style={{ color: colorOf(roster, m.sender) }}>{m.sender}</b>
-                    {m.to ? <span className="faint">→ {m.to}</span> : <span />}<span className="ellipsis">{m.text}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          {!showLegend ? (
-            <button className="an-ov tr an-legend-btn" data-noexport onPointerDown={(e) => e.stopPropagation()} onClick={() => setLegendOpen(true)}>
-              <span className="dots">{(["fetch", "finding", "summary", "verdict"] as Kind[]).map((k) => <i key={k} style={{ background: KIND_META[k].color }} />)}</span>Info-bits<Icon name="chevron-down" className="xs" />
-            </button>
-          ) : (
-          <div className="an-ov tr an-legend" data-noexport onPointerDown={(e) => e.stopPropagation()}>
-            <button className="label an-legend-x" onClick={() => setLegendOpen(false)} title="Fold the legend">Info-bits <Icon name="chevron-up" className="xs" /></button>
-            {(["fetch", "share", "finding", "flag", "request", "reply", "review", "summary", "verdict", "task"] as Kind[]).map((k) => (
-              <button key={k} className={kindsOff.has(k) ? "off" : ""} onClick={() => setKindsOff((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; })}>
-                <i style={{ background: KIND_META[k].color, boxShadow: `0 0 8px ${KIND_META[k].color}` }} />{KIND_META[k].label}
-              </button>
-            ))}
-            <span className="an-flow xs faint">evidence → finding → team report → verdict</span>
-          </div>
-          )}
-          <div className="an-ov bl an-tools" data-noexport onPointerDown={(e) => e.stopPropagation()}>
-            <button title="Fit (F)" onClick={fit}><Icon name="screen-normal" /></button>
-            <button title="Zoom in (+)" onClick={() => zoomAt(1.2)}><Icon name="zoom-in" /></button>
-            <button title="Zoom out (-)" onClick={() => zoomAt(1 / 1.2)}><Icon name="zoom-out" /></button>
-            <button title="2.5D perspective" className={tilt ? "on" : ""} onClick={() => setTilt(!tilt)}><Icon name="layers" /></button>
-            <button title="Reset layout" onClick={() => { setPos({}); try { localStorage.removeItem("net.pos.v1"); } catch { /* ignore */ } }}><Icon name="discard" /></button>
-            <span className="an-zoom">{Math.round(view.k * 100)}%</span>
-            <ExportButton title="Agent Network" target={stage} className="" />
-          </div>
-          {!live && replay.length > 0 && (
-            <div className="an-ov bc an-transport" data-noexport onPointerDown={(e) => e.stopPropagation()} style={{ width: Math.max(300, Math.min(560, sw - (sw >= 760 ? 470 : 280))) }}>
-              <button className="ibtn" onClick={() => { if (!playing && cursor.current >= replay.length) seek(0); setPlaying(!playing); }} title="Play / pause (Space)"><Icon name={playing ? "debug-pause" : "play"} /></button>
-              <Density replay={replay} span={span} />
-              <input type="range" className="sl" min={0} max={span} step={0.1} value={clockShow} onChange={(e) => seek(Number(e.target.value))} />
-              <span className="mono xs">{fmtClock(clockShow)} / {fmtClock(span)}</span>
-              <select className="sel sm" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>{[1, 2, 4, 8, 16].map((s) => <option key={s} value={s}>{s}×</option>)}</select>
+          {focusId && (
+            <div className="net-chip" data-noexport onPointerDown={(e) => e.stopPropagation()}>
+              <span className="net-chip-ic"><Icon name="target" /></span><span className="net-chip-t">Focused on <b>{focusId}</b></span><button onClick={() => setFocusId(null)} title="Leave focus (Esc)"><Icon name="close" className="xs" /></button>
             </div>
           )}
-          {sw >= 760 && <MiniMap L={L} nodes={nodes} view={view} stage={stage} onJump={(x, y) => { const el = stage.current!; setView((v) => ({ ...v, x: el.clientWidth / 2 - x * v.k, y: el.clientHeight / 2 - y * v.k })); }} roster={roster} />}
-          {hover && !menu && <NodeTip id={hover.id} x={hover.x} y={hover.y} roster={roster} status={status[hover.id]} node={byId.get(hover.id)} />}
+          {tool !== "select" && !focusId && (
+            <div className="net-chip tool" data-noexport onPointerDown={(e) => e.stopPropagation()}>
+              <span className="net-chip-ic"><Icon name={toolNow.icon} /></span><span className="net-chip-t"><b>{toolNow.label}</b> · {toolNow.help}</span><button onClick={() => setTool("select")} title="Back to Select (V)"><Icon name="close" className="xs" /></button>
+            </div>
+          )}
+          {layers.minimap && sw >= 600 && <MiniMap L={L} nodes={nodes.filter((n) => visible.has(n.id))} view={view} stage={stage} onJump={(x, y) => { const el = stage.current!; setView((v) => ({ ...v, x: el.clientWidth / 2 - x * v.k, y: el.clientHeight / 2 - y * v.k })); }} roster={roster} />}
+          {hover && !menu && !drag.current && !draft && <NodeTip id={hover.id} x={hover.x} y={hover.y} roster={roster} status={status[hover.id]} node={byId.get(hover.id)} />}
           {edgeTip && !menu && (() => {
             const [a, b] = edgeTip.id.split(">");
             const e = L.edges.find((x) => x.id === edgeTip.id);
@@ -691,163 +818,42 @@ function Network({ roster }: { roster: Roster }) {
             );
           })()}
           {menu && (
-            <div className="tc-menu" style={{ left: Math.min(menu.x, window.innerWidth - 270), top: Math.min(menu.y, window.innerHeight - 330) }} onPointerDown={(e) => e.stopPropagation()}>
-              {menu.node ? nodeMenu(menu.node) : canvasMenu}
+            <div className="tc-menu" style={{ left: Math.min(menu.x, window.innerWidth - 270), top: Math.min(menu.y, window.innerHeight - 420) }} onPointerDown={(e) => e.stopPropagation()}>
+              {menu.node ? nodeMenu(menu.node, menu.world) : canvasMenu(menu.world)}
             </div>
           )}
         </div>
 
-        {sideOpen && <aside className="an-side">
-          <div className="an-tabs">
-            <button className={tab === "activity" ? "on" : ""} onClick={() => setTab("activity")}><Icon name="pulse" className="xs" />Activity</button>
-            <button className={tab === "agent" ? "on" : ""} onClick={() => setTab("agent")} disabled={!sel}><Icon name="hubot" className="xs" />Agent</button>
-            <button className={tab === "edge" ? "on" : ""} onClick={() => setTab("edge")} disabled={!selEdge}><Icon name="arrow-swap" className="xs" />Edge</button>
-          </div>
-          <div className="an-side-b">
-            {tab === "agent" && sel && roster.agents.some((a) => a.callsign === sel) ? (
-              <AgentProfile cs={sel} roster={roster} status={status[sel]} messages={live ? feed.messages : replay.slice(0, cursor.current)} graphLink={false}
-                onMessage={(c) => nav(`/agents/chat?c=${encodeURIComponent(c)}`)} onChannel={(c) => nav(`/agents/chat?c=${c}`)}
-                onPick={(cs) => { if (byId.has(cs)) { setSel(cs); focus(cs); } }} />
-            ) : tab === "agent" && sel ? (
-              <div className="col" style={{ gap: 8 }}><b>{byId.get(sel)?.title}</b><span className="small muted">{roster.sources[sel]?.detail ?? "Where the chief's work goes."}</span></div>
-            ) : tab === "edge" && selEdge ? (
-              <div className="col" style={{ gap: 8 }}>
-                <b>{selEdge.replace(">", " → ")}</b>
-                <span className="xs faint">{edgeMsgs.length} message{edgeMsgs.length === 1 ? "" : "s"} travelled this edge{live ? "" : " in the replay"}</span>
-                {edgeMsgs.map((m) => (
-                  <div key={m.id} className="ap-msg"><span className="k" style={{ color: KIND_META[m.kind]?.color }}>{KIND_META[m.kind]?.label}</span><span className="t">{m.text}</span><span className="xs faint">{timeOf(m.ts)}</span></div>
-                ))}
-              </div>
-            ) : (
-              <div className="col" style={{ gap: 14 }}>
-                <div className="an-run">
-                  <div className="row"><b>Run #{runInfo?.id ?? replayRun ?? "-"}</b><span className="tag xs">{runInfo?.mode ?? ""}</span><span className="spacer" /><span className={`live-dot ${live ? "on" : ""}`}>{live ? "live" : runInfo?.finished ? `finished ${ago(Date.parse(runInfo.finished) / 1000)}` : ""}</span></div>
-                  {prog && <div className="rr-prog"><div style={{ width: `${(100 * prog.done) / Math.max(1, prog.total)}%` }} /><span>{prog.done}/{prog.total} companies</span></div>}
-                  <div className="ap-stats">
-                    <div><b>{prog?.messages ?? 0}</b><span>messages</span></div>
-                    <div><b>{prog?.fetched ?? 0}</b><span>feeds fetched</span></div>
-                    <div><b>{prog?.saved ?? 0}</b><span>calls saved by sharing</span></div>
-                    <div><b>{runInfo?.llm_calls ?? 0}</b><span>LLM calls</span></div>
-                  </div>
-                </div>
-                <div>
-                  <div className="label" style={{ marginBottom: 6 }}>Working now · {working.length}</div>
-                  {working.length === 0 ? <span className="xs faint">{live ? "Between companies." : playing ? "…" : "Nobody - the run is over. Press play to replay it."}</span> : working.slice(0, 12).map(([cs, s]) => (
-                    <button key={cs} className="rr-agent" onClick={() => { setSel(cs); setTab("agent"); focus(cs); }}>
-                      <AgentAvatar role={roster.agents.find((a) => a.callsign === cs)?.role ?? "analyst"} color={colorOf(roster, cs)} size={22} status="working" />
-                      <span className="cs">{cs}</span><span className="grow ellipsis faint">{s.companies?.[0] ?? s.task}</span>
-                    </button>
-                  ))}
-                </div>
-                <div>
-                  <div className="label" style={{ marginBottom: 6 }}>Traffic by team</div>
-                  {teamLoad.map(({ t, n }) => (
-                    <div key={t} className="an-load"><span style={{ color: roster.teams[t]?.color }}>{t}</span><div><i style={{ width: `${(100 * n) / maxLoad}%`, background: roster.teams[t]?.color }} /></div><span className="mono xs">{n}</span></div>
-                  ))}
-                </div>
-                <div>
-                  <div className="label" style={{ marginBottom: 6 }}>Latest traffic</div>
-                  {recent.slice(0, 18).map((m) => (
-                    <button key={m.id} className="an-feed" onClick={() => { setSel(m.sender); setTab("agent"); focus(m.sender); }}>
-                      <i style={{ background: KIND_META[m.kind]?.color }} /><b style={{ color: colorOf(roster, m.sender) }}>{m.sender}</b>{m.to && <span className="faint">→ {m.to}</span>}<span className="ellipsis">{m.text}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </aside>}
+        {sideOpen && (
+          <NetworkInspector roster={roster} tab={tab} setTab={setTab} sel={sel} selEdge={selEdge} status={status}
+            seen={live ? feed.messages : replay.slice(0, cursor.current)} all={live ? feed.messages : replay}
+            live={live} playing={playing} run={runInfo} runId={replayRun} prog={feed.live?.progress}
+            nodeTitle={(id) => byId.get(id)?.title} onPick={pick} agentTab={agentTab} edgeView={linkEditor} onClose={() => setSideOpen(false)} />
+        )}
       </div>
-    </>
-  );
-}
 
-const fmtClock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-
-function Density({ replay, span }: { replay: { vt: number }[]; span: number }) {
-  const bins = useMemo(() => {
-    const b = new Array(60).fill(0);
-    for (const m of replay) b[Math.min(59, Math.floor((m.vt / span) * 60))]++;
-    return b;
-  }, [replay, span]);
-  const mx = Math.max(1, ...bins);
-  return <svg className="an-density" viewBox="0 0 60 20" preserveAspectRatio="none">{bins.map((v, i) => <rect key={i} x={i + 0.1} y={20 - (v / mx) * 20} width={0.8} height={(v / mx) * 20} />)}</svg>;
-}
-
-function NodeTip({ id, x, y, roster, status, node }: { id: string; x: number; y: number; roster: Roster; status?: AgentStatus; node?: GNode }) {
-  const a = roster.agents.find((q) => q.callsign === id);
-  const left = x + 280 > window.innerWidth ? x - 270 : x + 16;
-  return (
-    <div className="an-tip" style={{ left, top: y + 14 }}>
-      {a ? (
-        <>
-          <div className="row" style={{ gap: 8 }}><b style={{ color: colorOf(roster, id) }}>{id}</b><span>{a.title}</span></div>
-          <div className="xs muted">{roster.teams[a.team]?.name}</div>
-          <div className="xs" style={{ marginTop: 4 }}>{a.duty}</div>
-          <div className="xs faint" style={{ marginTop: 4 }}>{status?.state ?? "idle"}{status?.companies?.length ? ` · ${status.companies.join(", ")}` : ""}{status ? ` · ${status.sent} sent · ${status.received} received` : ""}</div>
-          <div className="xs faint">Click to inspect · double-click for its channel · right-click for more</div>
-        </>
-      ) : (
-        <><b>{node?.title}</b><div className="xs muted">{roster.sources[id]?.detail ?? "Output"}</div></>
-      )}
-    </div>
-  );
-}
-
-function MiniMap({ L, nodes, view, stage, onJump, roster }: { L: ReturnType<typeof layout>; nodes: GNode[]; view: { x: number; y: number; k: number }; stage: React.RefObject<HTMLDivElement>; onJump: (x: number, y: number) => void; roster: Roster }) {
-  const W = 160, H = Math.round((W * L.height) / L.width);
-  const s = W / L.width;
-  const el = stage.current;
-  const vw = el ? el.clientWidth / view.k : 0, vh = el ? el.clientHeight / view.k : 0;
-  const vx = -view.x / view.k, vy = -view.y / view.k;
-  return (
-    <div className="an-ov br an-mini" data-noexport onPointerDown={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); onJump((e.clientX - r.left) / s, (e.clientY - r.top) / s); }}>
-      <svg width={W} height={H}>
-        {L.frames.map((f) => <rect key={f.team} x={f.x * s} y={f.y * s} width={f.w * s} height={f.h * s} rx={3} fill={roster.teams[f.team].color} opacity={0.12} />)}
-        {nodes.map((n) => <rect key={n.id} x={n.x * s} y={n.y * s} width={Math.max(2, n.w * s)} height={Math.max(2, n.h * s)} rx={1.5} fill={n.kind === "agent" ? colorOf(roster, n.id) : "#9a9b9c"} opacity={0.8} />)}
-        <rect x={vx * s} y={vy * s} width={vw * s} height={vh * s} className="vp" />
-      </svg>
-    </div>
-  );
-}
-
-interface AutoStart { settings: { enabled: boolean; mode: "quick" | "full"; llm: boolean; skip_recent: number }; state: { last: number | null; reason: string | null } }
-
-/** Auto-start settings and a "start now" button for the research workforce. */
-function WorkforceControl({ active }: { active: boolean }) {
-  const q = useQuery({ queryKey: ["autostart"], queryFn: () => api.get<AutoStart>("/api/agents/autostart"), refetchInterval: 15_000 });
-  const qc = useQueryClient();
-  const app = useApp();
-  const s = q.data?.settings;
-  const save = (patch: Partial<AutoStart["settings"]>) => api.put("/api/agents/autostart", patch)
-    .then(() => qc.invalidateQueries({ queryKey: ["autostart"] })).catch((e) => app.toast(e instanceof Error ? e.message : String(e), "error"));
-  const runNow = () => api.post("/api/agents/autostart/run").then(() => { app.toast("Research workforce started", "ok"); qc.invalidateQueries(); })
-    .catch((e) => app.toast(e instanceof Error ? e.message : String(e), "error"));
-  return (
-    <Popover className="pop wf-pop" trigger={(open, toggle) => (
-      <button className={`btn sec ${open ? "on" : ""}`} onClick={toggle} title="Research workforce: auto-start and run now">
-        <span className={`live-dot ${active ? "on" : ""}`} />Workforce<Icon name="chevron-down" className="xs" />
-      </button>
-    )}>
-      {() => (
-        <div className="wf">
-          <div className="wf-h"><b>Research workforce</b><span className={`live-dot ${active ? "on" : ""}`}>{active ? "working now" : "idle"}</span></div>
-          {!s ? <span className="xs faint">loading…</span> : (
-            <>
-              <Toggle checked={s.enabled} onChange={(v) => save({ enabled: v })} label="Start working when the web app starts" />
-              <div className="wf-row">
-                <span>Run</span>
-                <div className="seg"><button className={s.mode === "quick" ? "on" : ""} onClick={() => save({ mode: "quick" })}>Quick sweep</button><button className={s.mode === "full" ? "on" : ""} onClick={() => save({ mode: "full" })}>Full research</button></div>
-              </div>
-              <Toggle checked={s.llm} onChange={(v) => save({ llm: v })} label="Use the AI models (spends free-tier quota)" />
-              <label className="wf-row"><span>Skip if a run finished in the last</span>
-                <input className="inp sm num" style={{ width: 64 }} type="number" min={0} max={1440} defaultValue={s.skip_recent} onBlur={(e) => save({ skip_recent: Number(e.target.value) })} /> min</label>
-              {q.data?.state.reason && <span className="xs faint">At startup: {q.data.state.reason}.</span>}
-            </>
-          )}
-          <button className="btn" onClick={runNow} disabled={active}><Icon name="rocket" className="sm" />{active ? "Working…" : `Start ${s?.mode === "full" ? "full research" : "a quick sweep"} now`}</button>
+      <footer className="net-bot">
+        {!live && replay.length > 0 ? (
+          <div className="net-transport">
+            <button className="ibtn" onClick={() => { if (!playing && cursor.current >= replay.length) seek(0); setPlaying(!playing); }} title="Play / pause (Space)"><Icon name={playing ? "debug-pause" : "play"} /></button>
+            <span className="xs faint">Replay #{replayRun}</span>
+            <Density replay={replay} span={span} />
+            <input type="range" className="sl" min={0} max={span} step={0.1} value={clockShow} onChange={(e) => seek(Number(e.target.value))} aria-label="Replay position" />
+            <span className="mono xs">{fmtClock(clockShow)} / {fmtClock(span)}</span>
+            <select className="sel sm" value={speed} onChange={(e) => setSpeed(Number(e.target.value))} aria-label="Replay speed">{[1, 2, 4, 8, 16].map((s) => <option key={s} value={s}>{s}×</option>)}</select>
+          </div>
+        ) : (
+          <div className="net-transport">
+            <span className={`live-dot ${live ? "on" : ""}`}>{live ? `Live · run #${runInfo?.id}` : "No run to replay yet"}</span>
+            {live && feed.live?.progress && <span className="xs faint">{feed.live.progress.done}/{feed.live.progress.total} companies</span>}
+          </div>
+        )}
+        <div className="net-last" title={latest?.text}>
+          {latest && <><i style={{ background: KIND_META[latest.kind]?.color }} /><b style={{ color: tc(latest.sender) }}>{latest.sender}</b>{latest.to && <span className="faint">→ {latest.to}</span>}<span className="ellipsis">{latest.text}</span></>}
         </div>
-      )}
-    </Popover>
+        <span className="xs faint net-count">{visible.size}/{L.nodes.length} nodes · {size.agents} agents</span>
+        <span className="an-zoom">{Math.round(view.k * 100)}%</span>
+      </footer>
+    </div>
   );
 }

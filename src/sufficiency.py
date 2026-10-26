@@ -211,7 +211,7 @@ def print_summary(records):
         f"\n[gate] data sufficiency: {need} of {len(config.FY_LIST)} complete "
         f"financial years required, {need_b} with a benchmark price"
     )
-    print(f"[gate] checked before the estimation layer, on reported data only")
+    print("[gate] checked before the estimation layer, on reported data only")
     print(f"[gate] {passing}/{total} companies pass; {len(failing)} {verb}")
 
     if failing:

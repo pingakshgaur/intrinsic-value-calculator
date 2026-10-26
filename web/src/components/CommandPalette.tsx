@@ -39,6 +39,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       { id: "p-mk", group: "Go to", label: "Markets · live scanner and charts", icon: "graph", hint: "Alt+2", run: go("/markets") },
       { id: "p-wl", group: "Go to", label: "Watchlist · live tracking", icon: "eye", hint: "Alt+3", run: go("/watchlist") },
       { id: "p-r", group: "Go to", label: "Coverage", icon: "table", hint: "Alt+4", run: go("/coverage") },
+      { id: "p-agents", group: "Go to", label: "Research workforce · overview of the agents and runs", icon: "organization", run: go("/agents") },
       { id: "p-net", group: "Go to", label: "Agent Network · live graph of the 23 agents", icon: "type-hierarchy", run: go("/agents/network") },
       { id: "p-room", group: "Go to", label: "Research Room · agent chat", icon: "comment-discussion", run: go("/agents/chat") },
       { id: "p-l", group: "Go to", label: "HYBRID MODEL Studio", icon: "beaker", hint: "Alt+5", run: go("/studio") },

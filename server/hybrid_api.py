@@ -111,6 +111,34 @@ def simulate_all(overrides):
     return D.clean(rows)
 
 
+FACTORY = D.ROOT / "agent_settings.defaults.yaml"
+
+
+def factory():
+    """{path: value} for every Studio constant as shipped (agent_settings.defaults.yaml).
+    Only constants written in that file - the Studio can reset nothing else."""
+    import yaml
+
+    try:
+        hm = (yaml.safe_load(FACTORY.read_text(encoding="utf-8")) or {}).get("hybrid_model") or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+    out = {}
+    for g in HM.PARAM_SCHEMA:
+        for path, *_ in g["params"]:
+            node = hm
+            for part in path.split("."):
+                node = node.get(part) if isinstance(node, dict) else None
+            if isinstance(node, (int, float, bool)):
+                out[path] = node
+    return out
+
+
 def params(overrides=None):
     S.load()
-    return D.clean(HM.schema_with_values(overrides))
+    rows = HM.schema_with_values(overrides)
+    fac = factory()
+    for g in rows:
+        for r in g["params"]:
+            r["default"] = fac.get(r["path"])
+    return D.clean(rows)

@@ -33,7 +33,8 @@ from agents.llm import LLMRouter, parse_json  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def settings(tmp_path, monkeypatch):
-    S.load(ROOT / "agent_settings.yaml")
+    # the shipped constants, not whatever was tuned in the Studio
+    S.load(ROOT / "agent_settings.defaults.yaml")
     S.data().setdefault("run", {})["state_dir"] = str(tmp_path / "intel")
     for k in ("GROQ_API_KEY", "GEMINI_API_KEY", "NVIDIA_API_KEY"):
         monkeypatch.delenv(k, raising=False)
@@ -419,8 +420,13 @@ def test_chat_api_answers_commands(monkeypatch):
     assert live["progress"]["done"] == 1 and live["status"]["CMD-00"]["done"] == 1
     assert all(m["channel"] != "trace" for m in A.messages()["messages"])
 
+    from server import agent_chat, agents_api
+    from agents import profiles
+
+    monkeypatch.setattr(agent_chat, "_llm", lambda: None)  # rule-based answers, no API calls
+
     def ask(channel, text):
-        A.post(channel, text)
+        A.post(channel, text, wait=True)
         return A.messages(channel=channel)["messages"][-1]
 
     assert ask("command", "/verdict MOCK")["sender"] == "CMD-00"
@@ -428,5 +434,22 @@ def test_chat_api_answers_commands(monkeypatch):
     assert r["sender"] == "EQR-02" and r["kind"] == "finding" and r["to"] == "YOU"
     assert ask("dm:EQR-01|YOU", "hello")["sender"] == "EQR-01"
     assert ask("ops", "/nonsense")["sender"] == "OPS-00"
+    # instructions and controls land in the agent's profile
+    r = ask("dm:EQR-01|YOU", "from now on focus on debt levels")
+    assert r["sender"] == "EQR-01" and "standing instruction" in r["text"]
+    assert "focus on debt" in profiles.get("EQR-01")["instructions"]
+    ask("dm:EQR-01|YOU", "be more cautious")
+    assert profiles.get("EQR-01")["stance"] == "cautious"
+    assert ask("command", "/disable EQR-01")["sender"] == "EQR-01" and profiles.get("EQR-01")["enabled"] is False
+    assert "leads and the chief" in ask("command", "/disable EQR-00")["text"].lower()
+    assert "x1.5" in ask("command", "/weight EQR-01 1.5")["text"]
+    assert "didn't work" in ask("command", "/stance EQR-01 wild")["text"]
+    assert "settings" in ask("command", "/profile EQR-01")["text"]
+    ask("command", "/forget EQR-01")
+    assert profiles.get("EQR-01")["instructions"] == ""
+    profiles.reset()
+    assert agents_api.post("command", "/help")["pending"] == ["OPS-00"]
+    with pytest.raises(ValueError):
+        A.post("trace", "hi")
     with pytest.raises(ValueError):
         A.post("not-a-channel", "hi")

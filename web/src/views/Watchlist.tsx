@@ -5,15 +5,14 @@ import { api } from "../lib/api";
 import { useCompanies } from "../lib/hooks";
 import { isOpen, TrackerState, useLiveAlerts, useLiveSearch, useSectors, useWatchlist, useWatchMutations, WatchItem } from "../lib/live";
 import { ago, isNum, money, num, pct, shortName, when } from "../lib/format";
-import { HM_COLOR } from "../lib/labels";
+import { HM_COLOR, LABELS } from "../lib/labels";
 import { Empty, ErrorNote, Icon, LabelBadge, PageHeader, Panel, Popover, QueryView, Toggle } from "../components/ui";
-import { Column, DataGrid, GridTools, useGridState } from "../components/DataGrid";
+import { Column, DataGrid, GridTools, sortRows, useGridState } from "../components/DataGrid";
 import { ChartPanel } from "../components/ChartPanel";
 import { Position, Spark } from "../components/Spark";
 import { useApp } from "../components/workbenchContext";
 import { chime } from "../lib/notify";
 
-type Sort = "change" | "name" | "upside" | "since";
 
 export function Watchlist() {
   const q = useWatchlist();
@@ -31,19 +30,15 @@ export function Watchlist() {
 
 function Board({ items, tracker, sel, pick }: { items: WatchItem[]; tracker: TrackerState; sel: string | null; pick: (t: string | null) => void }) {
   const [view, setView] = useState<"tiles" | "table">(() => { try { return (localStorage.getItem("wl.view") as "tiles" | "table") || "tiles"; } catch { return "tiles"; } });
-  const [sort, setSort] = useState<Sort>("change");
+  // one sort for both views: set by the table's column headers, or the column buttons above the tiles
+  const sortState = useGridState<WatchItem>("watch", WATCH_COLUMNS, { key: "chg", asc: false });
   useEffect(() => { try { localStorage.setItem("wl.view", view); } catch { /* ignore */ } }, [view]);
   const m = useWatchMutations();
   const alerts = useLiveAlerts();
   const open = isOpen(tracker.market);
   const current = items.find((w) => w.ticker === sel) ?? null;
 
-  const sorted = useMemo(() => {
-    const key: Record<Sort, (w: WatchItem) => number | string> = {
-      change: (w) => -(w.quote?.chg_pct ?? -9), name: (w) => w.name, upside: (w) => -(w.quote?.hm?.upside ?? -9), since: (w) => -(w.since_added ?? -9),
-    };
-    return [...items].sort((a, b) => (key[sort](a) < key[sort](b) ? -1 : key[sort](a) > key[sort](b) ? 1 : 0));
-  }, [items, sort]);
+  const sorted = useMemo(() => sortRows(items, WATCH_COLUMNS, sortState.sort), [items, sortState.sort]);
 
   const q = items.map((w) => w.quote).filter((x) => x && isNum(x.chg_pct));
   const today = new Date().toISOString().slice(0, 10);
@@ -77,15 +72,13 @@ function Board({ items, tracker, sel, pick }: { items: WatchItem[]; tracker: Tra
             <section className="panel" style={{ minHeight: 0 }}>
               <div className="toolbar">
                 <div className="seg"><button className={view === "tiles" ? "on" : ""} onClick={() => setView("tiles")}><Icon name="layout" className="xs" />Tiles</button><button className={view === "table" ? "on" : ""} onClick={() => setView("table")}><Icon name="list-flat" className="xs" />Table</button></div>
-                {view === "tiles" && <select className="sel sm" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
-                  <option value="change">Sort: today's change</option><option value="upside">Sort: live upside</option><option value="since">Sort: since added</option><option value="name">Sort: name</option>
-                </select>}
+                {view === "tiles" && <SortBar state={sortState} />}
                 <span className="spacer" />
                 <span className="xs faint">Click a company for its live chart, alerts and note</span>
               </div>
               {view === "tiles" ? (
                 <div className="tiles">{sorted.map((w) => <Tile key={w.ticker} w={w} on={w.ticker === sel} onClick={() => pick(w.ticker === sel ? null : w.ticker)} />)}</div>
-              ) : <WatchTable items={items} sel={sel} pick={pick} />}
+              ) : <WatchTable items={items} sel={sel} pick={pick} state={sortState} />}
             </section>
             {current && <Detail w={current} onClose={() => pick(null)} />}
           </div>
@@ -134,26 +127,56 @@ function Tile({ w, on, onClick }: { w: WatchItem; on: boolean; onClick: () => vo
   );
 }
 
-function WatchTable({ items, sel, pick }: { items: WatchItem[]; sel: string | null; pick: (t: string | null) => void }) {
-  const columns: Column<WatchItem>[] = [
-    { key: "company", header: "Company", sticky: true, fixed: true, sort: (w) => w.name, render: (w) => <div className="co"><b>{shortName(w.name)}</b><small>{w.ticker}</small></div> },
-    { key: "spark", header: "Today", render: (w) => <Spark values={w.quote?.spark ?? []} base={w.quote?.prev_close} width={90} height={24} /> },
-    { key: "last", header: "Last", align: "r", sort: (w) => w.quote?.last, render: (w) => <span className="mono">{num(w.quote?.last)}</span> },
-    { key: "chg", header: "Change", align: "r", sort: (w) => w.quote?.chg_pct, exportValue: (w) => pct(w.quote?.chg_pct, 2, true), render: (w) => <span className={`mono ${(w.quote?.chg_pct ?? 0) >= 0 ? "up" : "down"}`}>{pct(w.quote?.chg_pct, 2, true)}</span> },
-    { key: "day", header: "Day range", render: (w) => <Position lo={w.quote?.low} hi={w.quote?.high} value={w.quote?.last} width={80} /> },
-    { key: "volume", header: "Volume", align: "r", sort: (w) => w.quote?.volume, render: (w) => <span className="mono muted">{w.quote?.volume?.toLocaleString("en-IN") ?? "—"}</span> },
-    { key: "hm", header: "HYBRID MODEL", align: "r", sort: (w) => w.quote?.hm?.value, render: (w) => <span className="mono" style={{ color: HM_COLOR }}>{money(w.quote?.hm?.value, 0)}</span> },
-    { key: "upside", header: "Live upside", align: "r", sort: (w) => w.quote?.hm?.upside, exportValue: (w) => pct(w.quote?.hm?.upside, 1, true), render: (w) => <span className={`mono ${(w.quote?.hm?.upside ?? 0) >= 0 ? "up" : "down"}`}>{pct(w.quote?.hm?.upside, 1, true)}</span> },
-    { key: "label", header: "Label", sort: (w) => w.quote?.hm?.label ?? "", render: (w) => w.quote?.hm ? <LabelBadge label={w.quote.hm.label} /> : <span className="faint">—</span> },
-    { key: "since", header: "Since added", align: "r", sort: (w) => w.since_added, exportValue: (w) => pct(w.since_added, 1, true), render: (w) => <span className={`mono ${(w.since_added ?? 0) >= 0 ? "up" : "down"}`}>{pct(w.since_added, 1, true)}</span> },
-    { key: "alerts", header: "Alerts", render: (w) => <span className="mono xs muted">{w.alert_below ? `↓${num(w.alert_below, 0)}` : ""} {w.alert_above ? `↑${num(w.alert_above, 0)}` : ""}</span> },
-    { key: "sector", header: "Sector", visible: false, sort: (w) => w.sector, render: (w) => <span className="muted">{w.sector}</span> },
-  ];
-  const state = useGridState<WatchItem>("watch", columns, { key: "chg", asc: false });
+const LABEL_RANK = (l: string | undefined) => (l ? LABELS.length - Math.max(0, LABELS.indexOf(l as (typeof LABELS)[number])) : null);
+/** where the last price sits in the day's range, 0 (low) to 1 (high) */
+const inRange = (w: WatchItem) => { const last = w.quote?.last, lo = w.quote?.low, hi = w.quote?.high; return isNum(last) && isNum(lo) && isNum(hi) && hi > lo ? (last - lo) / (hi - lo) : null; };
+/** the move across today's sparkline */
+const intraday = (w: WatchItem) => { const s = w.quote?.spark ?? [], a = s[0], b = s[s.length - 1]; return s.length > 1 && isNum(a) && isNum(b) && a ? b / a - 1 : null; };
+
+// every column sorts: click a header (or, in tiles view, a column name above the tiles)
+const WATCH_COLUMNS: Column<WatchItem>[] = [
+  { key: "company", header: "Company", sticky: true, fixed: true, sort: (w) => w.name, render: (w) => <div className="co"><b>{shortName(w.name)}</b><small>{w.ticker}</small></div> },
+  { key: "spark", header: "Today", sort: intraday, exportValue: (w) => pct(intraday(w), 2, true), render: (w) => <Spark values={w.quote?.spark ?? []} base={w.quote?.prev_close} width={90} height={24} /> },
+  { key: "last", header: "Last", align: "r", sort: (w) => w.quote?.last, render: (w) => <span className="mono">{num(w.quote?.last)}</span> },
+  { key: "chg", header: "Change", align: "r", sort: (w) => w.quote?.chg_pct, exportValue: (w) => pct(w.quote?.chg_pct, 2, true), render: (w) => <span className={`mono ${(w.quote?.chg_pct ?? 0) >= 0 ? "up" : "down"}`}>{pct(w.quote?.chg_pct, 2, true)}</span> },
+  { key: "day", header: "Day range", sort: inRange, exportValue: (w) => pct(inRange(w), 0), render: (w) => <Position lo={w.quote?.low} hi={w.quote?.high} value={w.quote?.last} width={80} /> },
+  { key: "volume", header: "Volume", align: "r", sort: (w) => w.quote?.volume, render: (w) => <span className="mono muted">{w.quote?.volume?.toLocaleString("en-IN") ?? "—"}</span> },
+  { key: "hm", header: "HYBRID MODEL", align: "r", sort: (w) => w.quote?.hm?.value, render: (w) => <span className="mono" style={{ color: HM_COLOR }}>{money(w.quote?.hm?.value, 0)}</span> },
+  { key: "upside", header: "Live upside", align: "r", sort: (w) => w.quote?.hm?.upside, exportValue: (w) => pct(w.quote?.hm?.upside, 1, true), render: (w) => <span className={`mono ${(w.quote?.hm?.upside ?? 0) >= 0 ? "up" : "down"}`}>{pct(w.quote?.hm?.upside, 1, true)}</span> },
+  { key: "label", header: "Label", sort: (w) => LABEL_RANK(w.quote?.hm?.label), exportValue: (w) => w.quote?.hm?.label ?? "", render: (w) => w.quote?.hm ? <LabelBadge label={w.quote.hm.label} /> : <span className="faint">—</span> },
+  { key: "since", header: "Since added", align: "r", sort: (w) => w.since_added, exportValue: (w) => pct(w.since_added, 1, true), render: (w) => <span className={`mono ${(w.since_added ?? 0) >= 0 ? "up" : "down"}`}>{pct(w.since_added, 1, true)}</span> },
+  { key: "alerts", header: "Alerts", sort: (w) => (w.alert_below ? 1 : 0) + (w.alert_above ? 1 : 0) || null,
+    exportValue: (w) => `${w.alert_below ? `below ${num(w.alert_below, 0)}` : ""} ${w.alert_above ? `above ${num(w.alert_above, 0)}` : ""}`.trim(),
+    render: (w) => <span className="mono xs muted">{w.alert_below ? `↓${num(w.alert_below, 0)}` : ""} {w.alert_above ? `↑${num(w.alert_above, 0)}` : ""}</span> },
+  { key: "sector", header: "Sector", visible: false, sort: (w) => w.sector, render: (w) => <span className="muted">{w.sector}</span> },
+];
+type SortState = ReturnType<typeof useGridState<WatchItem>>;
+/** the same rule as a header click: a new column starts high-to-low (names A-Z), a second click flips it */
+const clickSort = (state: SortState, key: string) =>
+  state.setSort({ key, asc: state.sort?.key === key ? !state.sort.asc : key === "company" || key === "sector" });
+
+/** Tiles have no headers: the column names, as buttons, sort them. */
+function SortBar({ state }: { state: SortState }) {
+  return (
+    <div className="wl-sortbar" role="group" aria-label="Sort by">
+      <span className="xs faint">Sort</span>
+      {WATCH_COLUMNS.filter((c) => c.sort && c.key !== "sector" && c.key !== "alerts").map((c) => {
+        const on = state.sort?.key === c.key;
+        return (
+          <button key={c.key} className={on ? "on" : ""} onClick={() => clickSort(state, c.key)} title={`Sort by ${c.header.toLowerCase()}`}>
+            {c.header}{on && <Icon name={state.sort!.asc ? "arrow-small-up" : "arrow-small-down"} className="xs" />}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function WatchTable({ items, sel, pick, state }: { items: WatchItem[]; sel: string | null; pick: (t: string | null) => void; state: SortState }) {
   return (
     <>
-      <div className="toolbar" style={{ borderTop: 0, paddingTop: 0 }}><span className="spacer" /><GridTools columns={columns} state={state} exportRows={items} exportTitle="Watchlist" /></div>
-      <DataGrid rows={items} columns={columns} rowKey={(w) => w.ticker} state={state} selected={sel} onSelect={pick} onOpen={pick} />
+      <div className="toolbar" style={{ borderTop: 0, paddingTop: 0 }}><span className="spacer" /><GridTools columns={WATCH_COLUMNS} state={state} exportRows={items} exportTitle="Watchlist" /></div>
+      <DataGrid rows={items} columns={WATCH_COLUMNS} rowKey={(w) => w.ticker} state={state} selected={sel} onSelect={pick} onOpen={pick} />
     </>
   );
 }
@@ -176,7 +199,7 @@ function Detail({ w, onClose }: { w: WatchItem; onClose: () => void }) {
         <div className="row"><span className="grow strong">Live detail</span><button className="ibtn" onClick={onClose} title="Close"><Icon name="close" /></button></div>
       </div>
       <div className="insp-b" style={{ gap: 12 }}>
-        <ChartPanel ticker={w.ticker} watch={w} height={300} compactHead />
+        <ChartPanel ticker={w.ticker} watch={w} height={190} compactHead simple />
         <div className="wl-form">
           <div className="label">Price alerts</div>
           <div className="row">
