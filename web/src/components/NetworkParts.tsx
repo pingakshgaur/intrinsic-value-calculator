@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { AgentStatus, colorOf, Roster } from "../lib/agents";
 import { GNode, Layout } from "../lib/agentGraph";
 
@@ -32,18 +32,40 @@ export function NodeTip({ id, x, y, roster, status, node }: { id: string; x: num
   );
 }
 
-export function MiniMap({ L, nodes, view, stage, onJump, roster }: { L: Layout; nodes: GNode[]; view: { x: number; y: number; k: number }; stage: React.RefObject<HTMLDivElement>; onJump: (x: number, y: number) => void; roster: Roster }) {
+/**
+ * The whole map in miniature. Click to glide the view there; drag the
+ * highlighted box (or anywhere) and the map follows the pointer live.
+ */
+export function MiniMap({ L, nodes, view, stage, onJump, roster, gliding }: { L: Layout; nodes: GNode[]; view: { x: number; y: number; k: number }; stage: React.RefObject<HTMLDivElement>; onJump: (x: number, y: number, smooth: boolean) => void; roster: Roster; gliding: boolean }) {
   const W = 160, H = Math.round((W * L.height) / L.width);
   const s = W / L.width;
   const el = stage.current;
   const vw = el ? el.clientWidth / view.k : 0, vh = el ? el.clientHeight / view.k : 0;
   const vx = -view.x / view.k, vy = -view.y / view.k;
+  // while dragging: where in the box it was grabbed, so the box does not snap its centre to the pointer
+  const grab = useRef<{ dx: number; dy: number } | null>(null);
+  const at = (e: React.PointerEvent) => { const r = e.currentTarget.getBoundingClientRect(); return { x: (e.clientX - r.left) / s, y: (e.clientY - r.top) / s }; };
+  const down = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
+    const p = at(e), cx = vx + vw / 2, cy = vy + vh / 2;
+    const inside = p.x >= vx && p.x <= vx + vw && p.y >= vy && p.y <= vy + vh;
+    if (inside) grab.current = { dx: p.x - cx, dy: p.y - cy };
+    else { grab.current = { dx: 0, dy: 0 }; onJump(p.x, p.y, true); }
+  };
+  const move = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!grab.current) return;
+    const p = at(e);
+    onJump(Math.max(0, Math.min(L.width, p.x - grab.current.dx)), Math.max(0, Math.min(L.height, p.y - grab.current.dy)), false);
+  };
+  const up = (e: React.PointerEvent<HTMLDivElement>) => { grab.current = null; try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* already released */ } };
   return (
-    <div className="an-ov br an-mini" data-noexport onPointerDown={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); onJump((e.clientX - r.left) / s, (e.clientY - r.top) / s); }}>
+    <div className={`an-ov br an-mini ${grab.current ? "dragging" : ""}`} data-noexport onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
       <svg width={W} height={H}>
         {L.frames.map((f) => <rect key={f.team} x={f.x * s} y={f.y * s} width={f.w * s} height={f.h * s} rx={3} fill={roster.teams[f.team].color} opacity={0.12} />)}
         {nodes.map((n) => <rect key={n.id} x={n.x * s} y={n.y * s} width={Math.max(2, n.w * s)} height={Math.max(2, n.h * s)} rx={1.5} fill={n.kind === "agent" ? colorOf(roster, n.id) : "#9a9b9c"} opacity={0.8} />)}
-        <rect x={vx * s} y={vy * s} width={vw * s} height={vh * s} className="vp" />
+        <rect x={0} y={0} width={vw * s} height={vh * s} className={`vp ${gliding ? "glide" : ""}`} style={{ transform: `translate(${vx * s}px, ${vy * s}px)` }} />
       </svg>
     </div>
   );

@@ -7,6 +7,7 @@ import { ScopePicker } from "./ScopePicker";
 import { setTheme, useTheme } from "../lib/theme";
 import { ago, isNum, num, pct } from "../lib/format";
 import { Glossary } from "./Glossary";
+import { Tour, TourStart } from "./Tour";
 import { CommandPalette } from "./CommandPalette";
 import { Notifications } from "./Notifications";
 import { RunMonitor } from "./JobLog";
@@ -92,6 +93,7 @@ export function Shell() {
   const [runDrawer, setRunDrawer] = useState<string | null | false>(false);
   const [glossary, setGlossary] = useState(false);
   const [palette, setPalette] = useState(false);
+  const [tour, setTour] = useState<(TourStart & { n: number }) | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const toast = useCallback((text: string, tone: Toast["tone"] = "info") => {
@@ -101,7 +103,8 @@ export function Shell() {
   }, []);
   const showJob = useCallback((id: string) => setRunDrawer(id), []);
   const openHelp = useCallback(() => setGlossary(true), []);
-  const ctx = useMemo(() => ({ toast, showJob, openHelp }), [toast, showJob, openHelp]);
+  const startTour = useCallback((o: TourStart = {}) => { setGlossary(false); setRunDrawer(false); setTour({ ...o, n: Date.now() }); }, []);
+  const ctx = useMemo(() => ({ toast, showJob, openHelp, startTour }), [toast, showJob, openHelp, startTour]);
 
   useEffect(() => { try { localStorage.setItem("frame.collapsed", collapsed ? "1" : "0"); } catch { /* ignore */ } }, [collapsed]);
   useEffect(() => {
@@ -225,10 +228,12 @@ export function Shell() {
       )}
       {glossary && (
         <Drawer title="Glossary" icon="book" onClose={() => setGlossary(false)}>
+          <button className="gl-tour" onClick={() => startTour()}><Icon name="compass" /><span><b>New here? Take the guided tour</b><span className="xs faint">A few minutes across every page · or search “onboarding”</span></span><Icon name="arrow-right" className="sm" /></button>
           <Glossary onNavigate={() => setGlossary(false)} />
         </Drawer>
       )}
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
+      {tour && <Tour key={tour.n} start={tour} onClose={() => setTour(null)} openHelp={openHelp} />}
       <div className="toasts">
         {toasts.map((t) => (
           <div key={t.id} className={`note ${t.tone === "error" ? "err" : t.tone === "ok" ? "ok" : "inf"}`}>

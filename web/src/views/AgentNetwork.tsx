@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { AgentStatus, colorOf, dmId, Kind, KIND_META, Msg, roleName, Roster, useAgentRuns, useLiveFeed, useProfiles, useRoster, workforceSize } from "../lib/agents";
-import { at, fmtClock, geom, Geom, layout, pathD, Pt, routes } from "../lib/agentGraph";
+import { at, fmtClock, geom, Geom, GNode, layout, pathD, Pt, routes } from "../lib/agentGraph";
 import { DEFAULT_LAYERS, Layers, Link, Mesh, Note, posKey, Positions, uid, useStored, View } from "../lib/netPrefs";
 import { LABEL_HEX } from "../lib/labels";
 import { useTheme } from "../lib/theme";
@@ -20,7 +20,7 @@ interface Packet { g: Geom; t0: number; dur: number; el: SVGGElement; edge?: str
 interface Spring { x: number; y: number; vx: number; vy: number }
 type Tool = "select" | "pan" | "link" | "note" | "focus" | "erase";
 const TOOLS: { id: Tool; icon: string; key: string; label: string; help: string }[] = [
-  { id: "select", icon: "inspect", key: "V", label: "Select & move", help: "click an agent to inspect it, drag to move it" },
+  { id: "select", icon: "inspect", key: "V", label: "Select & move", help: "click an agent to inspect it, drag it to move it, drag on empty space to select several" },
   { id: "pan", icon: "move", key: "H", label: "Pan", help: "drag anywhere to move the view" },
   { id: "link", icon: "git-compare", key: "K", label: "Link", help: "drag from one node to another to draw your own connection" },
   { id: "note", icon: "note", key: "N", label: "Note", help: "click the map to pin a note" },
@@ -98,8 +98,19 @@ function Network({ roster }: { roster: Roster }) {
   // ---------- interaction state
   const [tool, setTool] = useState<Tool>("select");
   const [view, setView] = useState({ x: 20, y: 10, k: 0.8 });
+  // a mini-map click glides the map there; a drag follows the pointer without lag
+  const [gliding, setGliding] = useState(false);
+  const glideTimer = useRef<number>();
+  const glideTo = (on: boolean) => {
+    window.clearTimeout(glideTimer.current);
+    setGliding(on);
+    if (on) glideTimer.current = window.setTimeout(() => setGliding(false), 360);
+  };
   const [sel, setSel] = useState<string | null>(params.get("focus"));
   const [selEdge, setSelEdge] = useState<string | null>(null);
+  // several nodes picked with a selection box or Ctrl+click; they move and hide together
+  const [multi, setMulti] = useState<Set<string>>(new Set());
+  const [box, setBox] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [tab, setTab] = useState<InspectorTab>(params.get("focus") ? "agent" : "activity");
   const [agentTab, setAgentTab] = useState<"about" | "settings">("about");
@@ -389,6 +400,13 @@ function Network({ roster }: { roster: Roster }) {
     if (focusId === id) setFocusId(null);
     app.toast(`${id.startsWith("E:") ? "Edge" : id} hidden - Layers › Hidden brings it back`);
   };
+  const hideMany = (ids: string[]) => {
+    setHidden([...hidden, ...ids.filter((x) => !hidden.includes(x))]);
+    if (sel && ids.includes(sel)) setSel(null);
+    if (focusId && ids.includes(focusId)) setFocusId(null);
+    setMulti(new Set());
+    app.toast(`${ids.length} hidden - Layers › Hidden brings them back`);
+  };
   const addNote = (p: Pt) => {
     const n: Note = { id: uid(), x: p.x - 80, y: p.y - 20, text: "", arrange: layers.arrange };
     setMesh({ ...mesh, notes: [...mesh.notes, n] });
@@ -398,8 +416,16 @@ function Network({ roster }: { roster: Roster }) {
   };
 
   // ---------- pointer: what a press does depends on the tool
-  const drag = useRef<{ mode: "pan" | "node" | "note"; id?: string; sx: number; sy: number; ox: number; oy: number; moved: boolean } | null>(null);
+  const drag = useRef<{ mode: "pan" | "node" | "note" | "box"; id?: string; sx: number; sy: number; ox: number; oy: number; moved: boolean;
+    group?: Record<string, Pt>; base?: Set<string>; additive?: boolean } | null>(null);
   const onDown = (e: React.PointerEvent) => {
+    // the middle button pans with any tool, like most canvas apps
+    if (e.button === 1) {
+      e.preventDefault();
+      drag.current = { mode: "pan", sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y, moved: false };
+      try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* the pointer is already gone */ }
+      return;
+    }
     if (e.button !== 0) return;
     setMenu(null);
     const t = e.target as HTMLElement;
@@ -418,10 +444,26 @@ function Network({ roster }: { roster: Roster }) {
       else if (tool === "focus") { setFocusId(focusId === id ? null : id); return; }
       else if (tool === "erase") { hide(id); return; }
       else if (tool === "note") { addNote(toWorld(e.clientX, e.clientY)); return; }
-      else { const n = byId.get(id)!; drag.current = { mode: "node", id, sx: e.clientX, sy: e.clientY, ox: n.x, oy: n.y, moved: false }; }
+      else if (e.ctrlKey || e.metaKey) {
+        // Ctrl+click adds or removes one node, like files on the desktop
+        setMulti((m) => { const next = new Set(m); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+        return;
+      } else {
+        const n = byId.get(id)!;
+        // dragging one of several selected nodes carries the whole group
+        const group = multi.has(id) && multi.size > 1
+          ? Object.fromEntries([...multi].map((m) => byId.get(m)).filter((g): g is GNode => !!g).map((g) => [g.id, { x: g.x, y: g.y }]))
+          : undefined;
+        if (!group && multi.size) setMulti(new Set());
+        drag.current = { mode: "node", id, sx: e.clientX, sy: e.clientY, ox: n.x, oy: n.y, moved: false, group };
+      }
     } else if (tool === "note" && !panning) {
       addNote(toWorld(e.clientX, e.clientY));
       return;
+    } else if (tool === "select" && !panning) {
+      // empty space with Select: draw a selection box (Ctrl keeps what is already picked)
+      const additive = e.ctrlKey || e.metaKey;
+      drag.current = { mode: "box", sx: e.clientX, sy: e.clientY, ox: 0, oy: 0, moved: false, base: additive ? new Set(multi) : new Set(), additive };
     } else {
       drag.current = { mode: "pan", sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y, moved: false };
     }
@@ -434,6 +476,20 @@ function Network({ roster }: { roster: Roster }) {
     const dx = e.clientX - d.sx, dy = e.clientY - d.sy;
     if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
     if (d.mode === "pan") setView((v) => ({ ...v, x: d.ox + dx, y: d.oy + dy }));
+    else if (d.mode === "box" && d.moved) {
+      const r = stage.current!.getBoundingClientRect();
+      const b = { x0: Math.min(d.sx, e.clientX) - r.left, y0: Math.min(d.sy, e.clientY) - r.top, x1: Math.max(d.sx, e.clientX) - r.left, y1: Math.max(d.sy, e.clientY) - r.top };
+      setBox(b);
+      // every visible node the box touches, in world coordinates
+      const w0 = (b.x0 - view.x) / view.k, h0 = (b.y0 - view.y) / view.k, w1 = (b.x1 - view.x) / view.k, h1 = (b.y1 - view.y) / view.k;
+      const next = new Set(d.base);
+      for (const n of nodes) {
+        if (!visible.has(n.id) || n.x >= w1 || n.x + n.w <= w0 || n.y >= h1 || n.y + n.h <= h0) continue;
+        if (d.additive && d.base!.has(n.id)) next.delete(n.id); else next.add(n.id);
+      }
+      setMulti((m) => (m.size === next.size && [...next].every((x) => m.has(x)) ? m : next));
+    }
+    else if (d.mode === "node" && d.moved && d.group) setPos((p) => ({ ...p, ...Object.fromEntries(Object.entries(d.group!).map(([id, o]) => [id, { x: o.x + dx / view.k, y: o.y + dy / view.k }])) }));
     else if (d.mode === "node" && d.moved) setPos((p) => ({ ...p, [d.id!]: { x: d.ox + dx / view.k, y: d.oy + dy / view.k } }));
     else if (d.mode === "note" && d.moved) setMesh((m) => ({ ...m, notes: m.notes.map((n) => (n.id === d.id ? { ...n, x: d.ox + dx / view.k, y: d.oy + dy / view.k } : n)) }));
   };
@@ -455,7 +511,11 @@ function Network({ roster }: { roster: Roster }) {
     if (d?.mode === "node" && d.moved) setPos((p) => { savePos(p); return p; });
     if (d?.mode === "node" && !d.moved) inspect(d.id!);
     if (d?.mode === "note" && !d.moved) setEditNote(d.id!);
-    if (d?.mode === "pan" && !d.moved && tool !== "pan") { setSel(null); setSelEdge(null); setTab("activity"); if (tool === "focus") setFocusId(null); }
+    if (d?.mode === "box") {
+      setBox(null);
+      if (!d.moved && !d.additive) { setMulti(new Set()); setSel(null); setSelEdge(null); setTab("activity"); }
+    }
+    if (d?.mode === "pan" && !d.moved && tool !== "pan") { setMulti(new Set()); setSel(null); setSelEdge(null); setTab("activity"); if (tool === "focus") setFocusId(null); }
   };
   const onWheel = (e: React.WheelEvent) => {
     const r = stage.current!.getBoundingClientRect();
@@ -471,7 +531,9 @@ function Network({ roster }: { roster: Roster }) {
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       const tg = e.target instanceof Element ? e.target : null;
-      if (tg?.closest("input, textarea, select, [contenteditable]") || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (tg?.closest("input, textarea, select, [contenteditable]")) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a" && tool === "select") { e.preventDefault(); setMulti(new Set(nodes.filter((n) => visible.has(n.id)).map((n) => n.id))); return; }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const t = TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase());
       if (t) { setTool(t.id); return; }
       if (e.key === "f" || e.key === "F") fit();
@@ -480,12 +542,13 @@ function Network({ roster }: { roster: Roster }) {
       else if (e.key === " " && !live) { e.preventDefault(); setPlaying((p) => !p); }
       else if (e.key === "i" || e.key === "I") setSideOpen((o) => !o);
       else if (e.key === "m" || e.key === "M") setLayers((l) => ({ ...l, minimap: !l.minimap }));
-      else if (e.key === "Escape") { setSel(null); setSelEdge(null); setMenu(null); setFocusId(null); setDraft(null); setEditNote(null); setOpenInfo([]); setTab("activity"); setTool("select"); }
+      else if (e.key === "Escape") { setMulti(new Set()); setSel(null); setSelEdge(null); setMenu(null); setFocusId(null); setDraft(null); setEditNote(null); setOpenInfo([]); setTab("activity"); setTool("select"); }
+      else if ((e.key === "Delete" || e.key === "Backspace") && multi.size > 0) hideMany([...multi]);
       else if ((e.key === "Delete" || e.key === "Backspace") && selEdge?.startsWith("L:")) { setMesh((m) => ({ ...m, links: m.links.filter((l) => `L:${l.id}` !== selEdge) })); setSelEdge(null); setTab("activity"); }
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
-  }, [fit, live, selEdge]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fit, live, selEdge, multi, tool, nodes, visible]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!menu) return;
     const close = (e: PointerEvent) => { if (!(e.target instanceof Element && e.target.closest(".tc-menu"))) setMenu(null); };
@@ -615,11 +678,13 @@ function Network({ roster }: { roster: Roster }) {
               {TOOLS.map((t) => <div key={t.id}><kbd>{t.key}</kbd><span>{t.label} - {t.help}</span></div>)}
               <div><kbd>F</kbd><span>Fit the map to the screen</span></div>
               <div><kbd>+</kbd><span>Zoom in · <kbd>-</kbd> out (or the mouse wheel)</span></div>
-              <div><kbd>Shift</kbd><span>+ drag pans with any tool</span></div>
+              <div><kbd>Drag</kbd><span>on empty space draws a selection box · <kbd>Ctrl</kbd> adds to it</span></div>
+              <div><kbd>Ctrl</kbd><span>+ click picks several · <kbd>Ctrl A</kbd> picks every node</span></div>
+              <div><kbd>Shift</kbd><span>+ drag (or the middle button) pans with any tool</span></div>
               <div><kbd>Space</kbd><span>Play / pause the replay</span></div>
               <div><kbd>I</kbd><span>Inspector · <kbd>M</kbd> mini-map</span></div>
               <div><kbd>Esc</kbd><span>Clear selection and focus</span></div>
-              <div><kbd>Del</kbd><span>Delete the selected link</span></div>
+              <div><kbd>Del</kbd><span>Hide the selected nodes, or delete the selected link</span></div>
             </div>
           )}
         </Popover>
@@ -640,7 +705,7 @@ function Network({ roster }: { roster: Roster }) {
 
         <div className={`an-stage net-stage tool-${tool}`} ref={stage} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onWheel={onWheel}
           onContextMenu={(e) => { e.preventDefault(); const n = (e.target as HTMLElement).closest("[data-node]") as HTMLElement | null; setMenu({ x: e.clientX, y: e.clientY, node: n?.dataset.node ?? null, world: toWorld(e.clientX, e.clientY) }); }}>
-          <div className="an-world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})`, width: L.width, height: L.height }}>
+          <div className={`an-world ${gliding ? "glide" : ""}`} style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})`, width: L.width, height: L.height }}>
             {layers.frames && layers.arrange === "hierarchy" && L.frames.filter((f) => !teamsOff.includes(f.team)).map((f) => {
               const t = roster.teams[f.team];
               const busy = roster.agents.filter((a) => a.team === f.team && status[a.callsign]?.state === "working").length;
@@ -702,7 +767,7 @@ function Network({ roster }: { roster: Roster }) {
             {nodes.map((n) => {
               if (!visible.has(n.id)) return null;
               const st = status[n.id];
-              const isSel = sel === n.id;
+              const isSel = sel === n.id || multi.has(n.id);
               const far = !!focusSet && !focusSet.has(n.id);
               const dim = (neigh && !neigh.has(n.id)) || (searchHits.length > 0 && !searchHits.includes(n));
               const color = n.kind === "source" ? ink("#57a3f8", light) : n.kind === "output" ? ink("#e0b97f", light) : tc(n.id);
@@ -766,7 +831,7 @@ function Network({ roster }: { roster: Roster }) {
               const state = off ? "left out of runs" : st?.state === "working" ? `working on ${st.companies?.[0] ?? "…"}` : st?.state ?? "idle";
               const tuned = prof ? [prof.stance !== "balanced" && prof.stance, prof.weight !== 1 && `weight x${prof.weight}`, prof.llm !== "auto" && `AI ${prof.llm}`, prof.instructions && "has instructions"].filter(Boolean) : [];
               return (
-                <div key={`d-${id}`} data-drop className="an-drop" style={{ left: n.x, top: n.y + n.h + 8, width: Math.max(n.w, 230), ["--tc" as string]: tc(id) }}>
+                <div key={`d-${id}`} data-drop className="an-drop" style={{ left: n.x, top: n.y + n.h + 8, width: Math.max(n.w, 250), ["--tc" as string]: tc(id) }}>
                   <div className="an-drop-h"><b>{id}</b><span>{a.title}</span>
                     <button onClick={() => toggleInfo(id)} title="Close"><Icon name="close" className="xs" /></button></div>
                   <div className="an-drop-team">{roster.teams[a.team]?.name} · {roleName(a.role)}</div>
@@ -775,9 +840,9 @@ function Network({ roster }: { roster: Roster }) {
                   <p>{a.duty}</p>
                   {tuned.length > 0 && <div className="an-drop-tuned">Tuned: {tuned.join(" · ")}</div>}
                   <div className="an-drop-acts">
-                    <button onClick={() => inspect(id)}><Icon name="info" className="xs" />Inspect</button>
-                    {a.role !== "system" && <button onClick={() => nav(`/agents/chat?c=${encodeURIComponent(dmId(id, "YOU"))}`)}><Icon name="comment" className="xs" />Message</button>}
-                    {a.role !== "system" && <button onClick={() => inspect(id, "settings")}><Icon name="settings-gear" className="xs" />Settings</button>}
+                    <button onClick={() => inspect(id)} title="Inspect"><Icon name="info" className="xs" /><span>Inspect</span></button>
+                    {a.role !== "system" && <button onClick={() => nav(`/agents/chat?c=${encodeURIComponent(dmId(id, "YOU"))}`)}><Icon name="comment" className="xs" /><span>Message</span></button>}
+                    {a.role !== "system" && <button onClick={() => inspect(id, "settings")} title="Settings"><Icon name="settings-gear" className="xs" /><span>Settings</span></button>}
                   </div>
                 </div>
               );
@@ -799,12 +864,22 @@ function Network({ roster }: { roster: Roster }) {
               <span className="net-chip-ic"><Icon name="target" /></span><span className="net-chip-t">Focused on <b>{focusId}</b></span><button onClick={() => setFocusId(null)} title="Leave focus (Esc)"><Icon name="close" className="xs" /></button>
             </div>
           )}
-          {tool !== "select" && !focusId && (
+          {box && <div className="an-marquee" style={{ left: box.x0, top: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0 }} />}
+          {multi.size > 0 && !focusId && (
+            <div className="net-chip sel" data-noexport onPointerDown={(e) => e.stopPropagation()}>
+              <span className="net-chip-ic"><Icon name="checklist" /></span>
+              <span className="net-chip-t"><b>{multi.size} selected</b> · drag one to move them all</span>
+              {multi.size === 1 && <button onClick={() => inspect([...multi][0])} title="Inspect"><Icon name="info" className="xs" /></button>}
+              <button onClick={() => hideMany([...multi])} title="Hide them (Del)"><Icon name="eye-closed" className="xs" /></button>
+              <button onClick={() => setMulti(new Set())} title="Clear the selection (Esc)"><Icon name="close" className="xs" /></button>
+            </div>
+          )}
+          {tool !== "select" && !focusId && multi.size === 0 && (
             <div className="net-chip tool" data-noexport onPointerDown={(e) => e.stopPropagation()}>
               <span className="net-chip-ic"><Icon name={toolNow.icon} /></span><span className="net-chip-t"><b>{toolNow.label}</b> · {toolNow.help}</span><button onClick={() => setTool("select")} title="Back to Select (V)"><Icon name="close" className="xs" /></button>
             </div>
           )}
-          {layers.minimap && sw >= 600 && <MiniMap L={L} nodes={nodes.filter((n) => visible.has(n.id))} view={view} stage={stage} onJump={(x, y) => { const el = stage.current!; setView((v) => ({ ...v, x: el.clientWidth / 2 - x * v.k, y: el.clientHeight / 2 - y * v.k })); }} roster={roster} />}
+          {layers.minimap && sw >= 600 && <MiniMap L={L} nodes={nodes.filter((n) => visible.has(n.id))} view={view} stage={stage} onJump={(x, y, smooth) => { const el = stage.current!; glideTo(smooth); setView((v) => ({ ...v, x: el.clientWidth / 2 - x * v.k, y: el.clientHeight / 2 - y * v.k })); }} roster={roster} gliding={gliding} />}
           {hover && !menu && !drag.current && !draft && <NodeTip id={hover.id} x={hover.x} y={hover.y} roster={roster} status={status[hover.id]} node={byId.get(hover.id)} />}
           {edgeTip && !menu && (() => {
             const [a, b] = edgeTip.id.split(">");

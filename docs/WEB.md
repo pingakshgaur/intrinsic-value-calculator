@@ -22,8 +22,8 @@ An analyst workspace:
 |---|---|
 | **Command Center** | Metric band; coverage treemap (tile size = market cap, colour = upside); signals feed; upside vs confidence; label mix and extremes; model leaderboard |
 | **Markets** | Live index cards (Nifty 50, Sensex, Bank, IT, Midcap 50, Financial Services, VIX) with intraday sparklines and a sector heat strip. A scanner over every company the app knows (about 425): top gainers and losers, most active, volume spikes, near 52-week high or low, RSI extremes, and covered companies below their buy-below price. Candlestick or line charts from 1 day to the full history, with the HYBRID MODEL value and buy-below drawn on the chart. Look up any NSE or BSE symbol |
-| **Watchlists** | A library of named lists, each with a description and colour, shown as cards with their companies and today's moves. Create (empty, from your coverage, from a sector or as a copy), edit, reorder, pin, duplicate, delete, focus the app on a list, or start research on its covered companies. A company can be on several lists; up to 100 companies are tracked across all of them |
-| **A watchlist** | The companies on one list, as tiles or a table: live price, change, intraday sparkline, day range, the HYBRID MODEL re-valued at the live price, and change since you added it. Each company has a live chart (including every minute bar the tracker stored), price alerts and a note. An alerts feed lists level crossings, buy-below crossings and big daily moves |
+| **Watchlists** | A library of named lists, each with a description and colour, shown as cards with their companies and today's moves. Create one empty, by picking companies, by importing a CSV or text list (or pasting one), from your coverage, from a sector or as a copy; then pin, duplicate, delete, focus the app on a list, or start research on its covered companies. A company can be on several lists; up to 100 companies are tracked across all of them |
+| **A watchlist** | The companies on one list, as tiles or a table, each with a checkbox: tick several (Shift+click for a range) to remove them, copy or move them to another list, or research them. **Edit list** edits the name, description and colour in place. The list shows live price, change, intraday sparkline, day range, the HYBRID MODEL re-valued at the live price, and change since you added it. Each company has a live chart (including every minute bar the tracker stored), price alerts and a note. An alerts feed lists level crossings, buy-below crossings and big daily moves |
 | **Research workforce** | Overview of the 23 agents: run status, every team and agent with live status, this run's verdicts and red flags, recent runs, and each agent's profile and settings |
 | **Agent Network** | The agents as a full-screen live map: info-bits travel the edges as they exchange work; replay any run; layers, views and tools to simplify, focus, annotate and rearrange the map |
 | **Research Room** | The agents' chat: team channels, direct exchanges, live status. Talk to any agent: it answers, keeps your instructions and acts on requests |
@@ -46,6 +46,24 @@ Shortcuts:
 | `Ctrl+\` | Collapse or expand the sidebar |
 | `?` | Glossary |
 | `↑ ↓` / `Enter` | Move between rows / open one, in grids |
+
+## Onboarding
+
+Search **onboarding** (or *tour*, *welcome*, *guide*) in the top-bar search,
+or use the link at the top of the glossary, to start a guided tour of the
+whole workbench. It opens on a welcome page with nine chapters: finding your
+way, the Command Center, markets and watchlists, coverage and company
+profiles, the Studio, the research workforce, models and data, operations and
+settings, and power tips. Start from the beginning or jump into any chapter;
+each chapter is also its own search result.
+
+The tour opens each page for you, then a spotlight glides to the part it is
+describing, with a card beside it explaining what it does and, often,
+something to try. The page stays usable underneath. `←` `→` or `Enter` move,
+`Esc` leaves, and the coloured bar on the card jumps between chapters. Your
+place is remembered in this browser, so search offers **Resume onboarding**.
+A part that is missing or hidden at the current window size is explained on
+the card instead of being skipped silently.
 
 ## Charts
 
@@ -159,8 +177,8 @@ it sends. **Defaults** puts an agent back. Settings are stored in
 ## Export
 
 Every titled panel, every page header, every data grid, each price chart, the
-agent graph, the chat and the notifications panel has an **Export** menu that
-offers only the formats that suit what it holds:
+agent graph, the chat and the notifications panel has a **download** button
+whose menu offers only the formats that suit what it holds:
 
 | What | Formats |
 |---|---|

@@ -4,6 +4,8 @@ import { useIntel, useLabCompanies, useStartJob } from "../lib/hooks";
 import { shortName, slug } from "../lib/format";
 import { Icon } from "./ui";
 import { useApp } from "./workbenchContext";
+import { loadTour } from "./Tour";
+import { CHAPTERS } from "../lib/tourSteps";
 
 interface Cmd {
   id: string;
@@ -11,6 +13,8 @@ interface Cmd {
   label: string;
   icon: string;
   hint?: string;
+  /** extra words it is found by, not shown */
+  keys?: string;
   run: () => void;
 }
 
@@ -34,7 +38,12 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         { kind, options },
         { onSuccess: (j) => app.showJob(j.id), onError: (e) => app.toast(e instanceof Error ? e.message : String(e), "error") },
       );
+    const saved = loadTour();
+    const TOUR = "onboarding tour welcome guide intro help walkthrough";
     const c: Cmd[] = [
+      { id: "t-start", group: "Start here", label: "Onboarding · guided tour of INTVAL Workbench", icon: "compass", hint: "tour", keys: TOUR, run: () => app.startTour() },
+      ...(saved && !saved.finished && saved.idx > 0 ? [{ id: "t-resume", group: "Start here", label: `Resume onboarding (step ${saved.idx + 1})`, icon: "debug-continue", keys: TOUR, run: () => app.startTour({ resume: true }) }] : []),
+      ...CHAPTERS.map((ch, i) => ({ id: `t-${ch.id}`, group: "Onboarding chapters", label: `Onboarding · ${ch.title}`, icon: ch.icon, hint: `${ch.steps.length} steps`, keys: `${TOUR} ${ch.blurb}`, run: () => app.startTour({ chapter: i }) })),
       { id: "p-o", group: "Go to", label: "Command Center", icon: "pulse", hint: "Alt+1", run: go("/") },
       { id: "p-mk", group: "Go to", label: "Markets · live scanner and charts", icon: "graph", hint: "Alt+2", run: go("/markets") },
       { id: "p-wl", group: "Go to", label: "Watchlists · your lists, tracked live", icon: "eye", hint: "Alt+3", run: go("/watchlist") },
@@ -74,9 +83,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return commands.filter((c) => c.group === "Go to" || c.group === "Run");
+    if (!s) return commands.filter((c) => c.group === "Start here" || c.group === "Go to" || c.group === "Run");
     const words = s.split(/\s+/);
-    return commands.filter((c) => words.every((w) => (c.label + " " + c.group + " " + (c.hint ?? "")).toLowerCase().includes(w))).slice(0, 60);
+    return commands.filter((c) => words.every((w) => (c.label + " " + c.group + " " + (c.hint ?? "") + " " + (c.keys ?? "")).toLowerCase().includes(w))).slice(0, 60);
   }, [q, commands]);
 
   useEffect(() => setSel(0), [q]);

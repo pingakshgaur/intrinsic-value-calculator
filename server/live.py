@@ -293,11 +293,15 @@ def create_list(patch):
         x = {"id": _slug(meta["name"], {y["id"] for y in b["lists"]}), **meta, "created": now, "updated": now, "tickers": []}
         b["lists"].append(x)
         _save_book(b)
-    for t in patch.get("tickers") or []:
-        if isinstance(t, dict):
-            add(t.get("ticker"), t.get("name"), t.get("sector"), t.get("cap"), list_id=x["id"])
-        else:
-            add(t, list_id=x["id"])
+    # a company that cannot be added (bad symbol, tracking limit) is skipped, not fatal: the list exists already
+    for t in (patch.get("tickers") or [])[:200]:
+        try:
+            if isinstance(t, dict):
+                add(t.get("ticker"), t.get("name"), t.get("sector"), t.get("cap"), list_id=x["id"])
+            else:
+                add(t, list_id=x["id"])
+        except (ValueError, KeyError, TypeError):
+            continue
     return _list_view(_book(), _find_list(_book(), x["id"]))
 
 

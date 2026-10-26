@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import { useCompanies } from "../lib/hooks";
+import { useCompanies, useStartJob, useStatus } from "../lib/hooks";
 import { isOpen, TrackerState, useLiveAlerts, useLiveSearch, useSectors, useWatchlist, useWatchlistMutations, useWatchlists, useWatchMutations, WatchItem, WatchList } from "../lib/live";
 import { useScope } from "../lib/scope";
-import { ListEditor, ResearchList } from "./WatchlistLibrary";
+import { ResearchList } from "./WatchlistLibrary";
 import { ago, isNum, money, num, pct, shortName, when } from "../lib/format";
 import { HM_COLOR, LABELS } from "../lib/labels";
 import { Empty, ErrorNote, Icon, LabelBadge, PageHeader, Panel, Popover, QueryView, Toggle } from "../components/ui";
@@ -37,7 +37,14 @@ export function WatchlistDetail() {
 }
 
 function Board({ items, tracker, list, max, tracked, sel, pick }: { items: WatchItem[]; tracker: TrackerState; list: WatchList; max: number; tracked: number; sel: string | null; pick: (t: string | null) => void }) {
-  const [editing, setEditing] = useState(false);
+  // "Edit list" edits the name, notes and colour in place; companies are picked with the checkboxes below
+  const [params, setParams] = useSearchParams();
+  const editing = params.get("edit") === "1";
+  const setEditing = (on: boolean) => { const p = new URLSearchParams(params); if (on) p.set("edit", "1"); else p.delete("edit"); setParams(p, { replace: true }); };
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  useEffect(() => setChecked(new Set()), [list.id]);
+  // drop picks for companies that have left the list
+  useEffect(() => setChecked((c) => { const keep = new Set([...c].filter((t) => items.some((w) => w.ticker === t))); return keep.size === c.size ? c : keep; }), [items]);
   const scope = useScope();
   const [view, setView] = useState<"tiles" | "table">(() => { try { return (localStorage.getItem("wl.view") as "tiles" | "table") || "tiles"; } catch { return "tiles"; } });
   // one sort for both views: set by the table's column headers, or the column buttons above the tiles
@@ -77,10 +84,10 @@ function Board({ items, tracker, list, max, tracked, sel, pick }: { items: Watch
           <button className={`btn sec ${scope.id === list.id ? "on" : ""}`} onClick={() => scope.set(scope.id === list.id ? null : list.id)} title="Show only this list's companies across the app">
             <Icon name="target" className="sm" />{scope.id === list.id ? "App focused here" : "Focus the app"}</button>
           <ResearchList list={list} />
-          <button className="btn sec" onClick={() => setEditing(true)}><Icon name="edit" className="sm" />Edit list</button>
+          <button className={`btn sec ${editing ? "on" : ""}`} onClick={() => setEditing(!editing)}><Icon name="edit" className="sm" />{editing ? "Editing" : "Edit list"}</button>
           <AddCompany count={tracked} max={max} listId={list.id} listName={list.name} />
         </>} />
-      {editing && <ListEditor list={list} onClose={() => setEditing(false)} />}
+      {editing && <EditBar list={list} count={items.length} onClose={() => setEditing(false)} />}
       {tracker.error && <div className="note err"><Icon name="error" /><div>Last poll failed: {tracker.error}. The tracker keeps trying.</div></div>}
       {!items.length ? <EmptyWatch list={list} /> : (
         <>
@@ -91,11 +98,22 @@ function Board({ items, tracker, list, max, tracked, sel, pick }: { items: Watch
                 <div className="seg"><button className={view === "tiles" ? "on" : ""} onClick={() => setView("tiles")}><Icon name="layout" className="xs" />Tiles</button><button className={view === "table" ? "on" : ""} onClick={() => setView("table")}><Icon name="list-flat" className="xs" />Table</button></div>
                 {view === "tiles" && <SortBar state={sortState} />}
                 <span className="spacer" />
-                <span className="xs faint">Click a company for its live chart, alerts and note</span>
+                {view === "tiles" && (
+                  <label className="wl-pickall" title="Select every company">
+                    <input type="checkbox" className="cb" checked={checked.size > 0 && checked.size === items.length}
+                      ref={(el) => { if (el) el.indeterminate = checked.size > 0 && checked.size < items.length; }}
+                      onChange={() => setChecked(checked.size === items.length ? new Set() : new Set(items.map((w) => w.ticker)))} />
+                    <span className="xs">All</span>
+                  </label>
+                )}
+                {!checked.size && <span className="xs faint">Tick companies to remove, move or copy several · click one for its chart</span>}
               </div>
+              {checked.size > 0 && <BulkBar list={list} items={items} checked={checked} setChecked={setChecked} onClosed={(t) => { if (sel && t.includes(sel)) pick(null); }} />}
               {view === "tiles" ? (
-                <div className="tiles">{sorted.map((w) => <Tile key={w.ticker} w={w} on={w.ticker === sel} onClick={() => pick(w.ticker === sel ? null : w.ticker)} />)}</div>
-              ) : <WatchTable items={items} sel={sel} pick={pick} state={sortState} />}
+                <div className="tiles">{sorted.map((w) => <Tile key={w.ticker} w={w} on={w.ticker === sel} picked={checked.has(w.ticker)} picking={checked.size > 0}
+                  onPick={() => setChecked((c) => { const n = new Set(c); if (n.has(w.ticker)) n.delete(w.ticker); else n.add(w.ticker); return n; })}
+                  onClick={() => pick(w.ticker === sel ? null : w.ticker)} />)}</div>
+              ) : <WatchTable items={items} sel={sel} pick={pick} state={sortState} checked={checked} setChecked={setChecked} />}
             </section>
             {current && <Detail w={current} list={list} onClose={() => pick(null)} />}
           </div>
@@ -106,14 +124,16 @@ function Board({ items, tracker, list, max, tracked, sel, pick }: { items: Watch
   );
 }
 
-function Tile({ w, on, onClick }: { w: WatchItem; on: boolean; onClick: () => void }) {
+function Tile({ w, on, picked, picking, onPick, onClick }: { w: WatchItem; on: boolean; picked: boolean; picking: boolean; onPick: () => void; onClick: () => void }) {
   const q = w.quote;
   const up = (q?.chg_pct ?? 0) >= 0;
   const hm = q?.hm;
   const below = hm?.buy_below && isNum(q?.last) && q!.last! <= hm.buy_below;
   return (
-    <button className={`tile ${on ? "on" : ""} ${below ? "value" : ""}`} onClick={onClick}>
+    <div className={`tile ${on ? "on" : ""} ${below ? "value" : ""} ${picked ? "picked" : ""} ${picking ? "picking" : ""}`} role="button" tabIndex={0}
+      onClick={(e) => (e.ctrlKey || e.metaKey || picking ? onPick() : onClick())} onKeyDown={(e) => { if (e.key === "Enter") onClick(); else if (e.key === " ") { e.preventDefault(); onPick(); } }}>
       <div className="tile-h">
+        <input type="checkbox" className="cb tile-cb" checked={picked} onClick={(e) => e.stopPropagation()} onChange={onPick} aria-label={`Select ${w.name}`} title="Select" />
         <b className="ellipsis">{shortName(w.name)}</b>
         <span className="mono faint xs">{w.ticker.replace(/\.NS$/, "")}</span>
         {(w.alert_below || w.alert_above) && <Icon name="bell" className="xs" style={{ color: "var(--c-yellow)" }} />}
@@ -140,7 +160,7 @@ function Tile({ w, on, onClick }: { w: WatchItem; on: boolean; onClick: () => vo
           </div>
         </>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -189,12 +209,111 @@ function SortBar({ state }: { state: SortState }) {
   );
 }
 
-function WatchTable({ items, sel, pick, state }: { items: WatchItem[]; sel: string | null; pick: (t: string | null) => void; state: SortState }) {
+function WatchTable({ items, sel, pick, state, checked, setChecked }: { items: WatchItem[]; sel: string | null; pick: (t: string | null) => void; state: SortState; checked: Set<string>; setChecked: (s: Set<string>) => void }) {
   return (
     <>
       <div className="toolbar" style={{ borderTop: 0, paddingTop: 0 }}><span className="spacer" /><GridTools columns={WATCH_COLUMNS} state={state} exportRows={items} exportTitle="Watchlist" /></div>
-      <DataGrid rows={items} columns={WATCH_COLUMNS} rowKey={(w) => w.ticker} state={state} selected={sel} onSelect={pick} onOpen={pick} />
+      <DataGrid rows={items} columns={WATCH_COLUMNS} rowKey={(w) => w.ticker} state={state} selected={sel} onSelect={pick} onOpen={pick} checked={checked} onCheck={setChecked} />
     </>
+  );
+}
+
+/** What to do with the ticked companies: take them off, move or copy them to another list, research them. */
+function BulkBar({ list, items, checked, setChecked, onClosed }: { list: WatchList; items: WatchItem[]; checked: Set<string>; setChecked: (s: Set<string>) => void; onClosed: (tickers: string[]) => void }) {
+  const lib = useWatchlists();
+  const lm = useWatchlistMutations();
+  const companies = useCompanies();
+  const start = useStartJob();
+  const status = useStatus();
+  const app = useApp();
+  const [busy, setBusy] = useState(false);
+  const picked = items.filter((w) => checked.has(w.ticker));
+  const others = (lib.data?.lists ?? []).filter((l) => l.id !== list.id);
+  const say = (e: unknown) => app.toast(e instanceof Error ? e.message : String(e), "error");
+  const payload = picked.map((w) => ({ ticker: w.ticker, name: w.name, sector: w.sector }));
+  const takeOff = async (tickers: string[]) => { for (const t of tickers) await lm.removeOne(list.id, t); onClosed(tickers); };
+  const remove = async () => {
+    if (!confirm(`Take ${picked.length} compan${picked.length === 1 ? "y" : "ies"} off “${list.name}”? Companies on other lists stay tracked.`)) return;
+    setBusy(true);
+    try { await takeOff(picked.map((w) => w.ticker)); setChecked(new Set()); app.toast(`${picked.length} taken off “${list.name}”`, "ok"); } catch (e) { say(e); } finally { setBusy(false); }
+  };
+  const copyTo = async (id: string, move: boolean) => {
+    const to = others.find((l) => l.id === id);
+    if (!to) return;
+    setBusy(true);
+    try {
+      const r = await lm.addMany.mutateAsync({ id, tickers: payload });
+      if (move) await takeOff(picked.map((w) => w.ticker));
+      setChecked(new Set());
+      app.toast(`${move ? "Moved" : "Copied"} ${picked.length} to “${to.name}”${r.added < picked.length ? ` (${picked.length - r.added} were already there)` : ""}`, "ok");
+    } catch (e) { say(e); } finally { setBusy(false); }
+  };
+  const covered = new Set((companies.data ?? []).map((c) => (c.ticker || "").toUpperCase().split(".")[0]));
+  const researchable = picked.map((w) => w.ticker.toUpperCase().split(".")[0]).filter((t) => covered.has(t));
+  const research = (quick: boolean) => start.mutate({ kind: "agents", options: { quick, tickers: researchable.join(",") } }, {
+    onSuccess: (j) => { app.toast(`Researching ${researchable.length} compan${researchable.length === 1 ? "y" : "ies"}`, "ok"); app.showJob(j.id); }, onError: say,
+  });
+  return (
+    <div className="toolbar wl-bulk">
+      <span className="tag info">{checked.size} selected</span>
+      <button className="btn sm ghost" onClick={() => setChecked(new Set(items.map((w) => w.ticker)))} disabled={checked.size === items.length}>Select all {items.length}</button>
+      {others.length > 0 && (
+        <>
+          <select className="sel sm" value="" disabled={busy} onChange={(e) => copyTo(e.target.value, false)} title="Add them to another list as well">
+            <option value="">Copy to…</option>{others.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+          <select className="sel sm" value="" disabled={busy} onChange={(e) => copyTo(e.target.value, true)} title="Move them to another list">
+            <option value="">Move to…</option>{others.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        </>
+      )}
+      <select className="sel sm" value="" disabled={busy || !researchable.length || !!status.data?.active_job || start.isPending}
+        onChange={(e) => e.target.value && research(e.target.value === "quick")}
+        title={!researchable.length ? "None of the selected companies is in Coverage yet" : status.data?.active_job ? "Another run is in progress" : `Research the ${researchable.length} covered companies`}>
+        <option value="">Research…</option><option value="quick">Quick sweep ({researchable.length})</option><option value="full">Full research ({researchable.length})</option>
+      </select>
+      <button className="btn danger sm" onClick={remove} disabled={busy}><Icon name={busy ? "loading" : "trash"} className={`sm ${busy ? "spin" : ""}`} />Remove from list</button>
+      <span className="spacer" />
+      <button className="btn sm ghost" onClick={() => setChecked(new Set())} title="Clear the selection"><Icon name="close" className="xs" />Clear</button>
+    </div>
+  );
+}
+
+/** The list's name, notes and colour, edited in place under the header. */
+function EditBar({ list, count, onClose }: { list: WatchList; count: number; onClose: () => void }) {
+  const lib = useWatchlists();
+  const lm = useWatchlistMutations();
+  const app = useApp();
+  const nav = useNavigate();
+  const [name, setName] = useState(list.name);
+  const [desc, setDesc] = useState(list.description ?? "");
+  const [color, setColor] = useState(list.color);
+  const dirty = name.trim() !== list.name || desc.trim() !== (list.description ?? "") || color !== list.color;
+  const save = () => lm.edit.mutate({ id: list.id, name: name.trim(), description: desc.trim(), color }, {
+    onSuccess: () => { app.toast(`“${name.trim()}” saved`, "ok"); onClose(); },
+    onError: (e) => app.toast(e instanceof Error ? e.message : String(e), "error"),
+  });
+  const del = () => {
+    if (!confirm(`Delete “${list.name}”? Companies on other lists stay tracked.`)) return;
+    lm.remove.mutate(list.id, { onSuccess: () => { app.toast(`“${list.name}” deleted`, "ok"); nav("/watchlist"); }, onError: (e) => app.toast(e instanceof Error ? e.message : String(e), "error") });
+  };
+  return (
+    <section className="panel wl-editbar" onKeyDown={(e) => { if (e.key === "Escape") onClose(); else if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && dirty && name.trim()) save(); }}>
+      <div className="wl-editbar-f">
+        <label className="fld"><span>Name</span><input className="inp" autoFocus maxLength={60} value={name} onChange={(e) => setName(e.target.value)} /></label>
+        <label className="fld grow"><span>Description</span><input className="inp" maxLength={400} value={desc} placeholder="What this list is for" onChange={(e) => setDesc(e.target.value)} /></label>
+        <div className="fld"><span>Colour</span>
+          <div className="wl-colors">{(lib.data?.colors ?? [list.color]).map((c) => <button key={c} className={c === color ? "on" : ""} style={{ background: c }} onClick={() => setColor(c)} title={c} aria-label={`Colour ${c}`} />)}</div>
+        </div>
+      </div>
+      <div className="wl-editbar-b">
+        <Icon name="info" className="xs faint" />
+        <span className="xs faint grow">{count ? <>Tick companies below to remove them, or move or copy them to another list. <b>Add company</b> brings in more.</> : <>Add companies with <b>Add company</b> above.</>}</span>
+        <button className="btn sm ghost danger-text" onClick={del}><Icon name="trash" className="xs" />Delete list</button>
+        <button className="btn sm sec" onClick={onClose}>Done</button>
+        <button className="btn sm" disabled={!dirty || !name.trim() || lm.edit.isPending} onClick={save}><Icon name="check" className="sm" />Save</button>
+      </div>
+    </section>
   );
 }
 

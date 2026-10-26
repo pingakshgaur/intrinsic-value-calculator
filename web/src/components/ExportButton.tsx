@@ -5,6 +5,15 @@ import { captureElement, ExportKind, exportImageAs, exportTableAs, Fmt, FMT_META
 import { Icon, Popover, Toggle } from "./ui";
 import { useApp } from "./workbenchContext";
 
+/** The download mark: an arrow into a tray, drawn to match the codicons' weight. */
+function DownloadGlyph() {
+  return (
+    <svg className="dl-glyph" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 2.2v8" /><path d="M4.6 7.2 8 10.6l3.4-3.4" /><path d="M2.6 10.4v2.1c0 .7.5 1.2 1.2 1.2h8.4c.7 0 1.2-.5 1.2-1.2v-2.1" />
+    </svg>
+  );
+}
+
 export interface TableData { head: Cell[]; rows: Cell[][]; subtitle?: string }
 
 /**
@@ -29,19 +38,21 @@ export function ExportButton({ title, table, target, canvas, kind, label, classN
   return (
     <>
       <Popover className="menu export-menu" trigger={(on, toggle) => (
-        <button className={`${className} ${on ? "on" : ""}`} data-noexport onClick={toggle} aria-haspopup="menu" aria-expanded={on}
-          title={tip ?? `Export “${title}” (${formats.map((f) => f.toUpperCase()).join(", ")})`}>
-          <Icon name="export" className="sm" />{label}{label && <Icon name="chevron-down" className="xs" />}
+        // one look everywhere: a download icon; the formats are in the menu
+        <button className={`${className} dl ${on ? "on" : ""}`} data-noexport onClick={toggle} aria-haspopup="menu" aria-expanded={on}
+          aria-label={label ? `${label}: ${title}` : `Download ${title}`}
+          title={tip ?? `Download “${title}” (${formats.map((f) => f.toUpperCase()).join(", ")})`}>
+          <DownloadGlyph />
         </button>
       )}>
         {(close) => (
           <div data-noexport>
-            <div className="label" style={{ padding: "6px 10px 4px" }}>Export {what === "table" ? "data" : what === "page" ? "the whole page" : "this view"} as</div>
+            <div className="label export-h">Download {what === "table" ? "the data" : what === "page" ? "the whole page" : "this view"} as</div>
             {formats.map((f) => (
               <button key={f} className="export-item" onClick={() => { close(); setOpen(f); }}>
-                <Icon name={FMT_META[f].icon} className="sm" />
-                <span className="grow"><b>{FMT_META[f].label}</b><small>{FMT_META[f].hint}</small></span>
-                <span className="mono xs faint">{f.toUpperCase()}</span>
+                <span className="ic"><Icon name={FMT_META[f].icon} className="sm" /></span>
+                <span className="tx"><b>{FMT_META[f].label}</b><small>{FMT_META[f].hint}</small></span>
+                <span className="ext">{f.toUpperCase()}</span>
               </button>
             ))}
           </div>
@@ -171,7 +182,7 @@ function ExportDialog({ fmt, kind, title, table, target, canvas, onClose, onForm
       <div className="xd" role="dialog" aria-label={`Export ${title}`} data-noexport>
         <header className="xd-h">
           <Icon name={FMT_META[fmt].icon} />
-          <div className="grow"><b>Export as {FMT_META[fmt].label}</b><small>{title}</small></div>
+          <div className="grow"><b>Download as {FMT_META[fmt].label}</b><small>{title}</small></div>
           <button className="ibtn" onClick={onClose} title="Close (Esc)"><Icon name="close" /></button>
         </header>
         <div className="xd-b">

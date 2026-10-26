@@ -90,7 +90,7 @@ export function GridTools<T>({ columns, state, exportRows, exportTitle }: { colu
   );
 }
 
-export function DataGrid<T>({ rows, columns, rowKey, state, selected, onSelect, onOpen, empty, maxHeight }: {
+export function DataGrid<T>({ rows, columns, rowKey, state, selected, onSelect, onOpen, empty, maxHeight, checked, onCheck }: {
   rows: T[];
   columns: Column<T>[];
   rowKey: (r: T) => string;
@@ -100,11 +100,28 @@ export function DataGrid<T>({ rows, columns, rowKey, state, selected, onSelect, 
   onOpen?: (key: string) => void;
   empty?: ReactNode;
   maxHeight?: string;
+  /** square checkboxes for picking several rows; Shift+click picks a range */
+  checked?: Set<string>;
+  onCheck?: (keys: Set<string>) => void;
 }) {
   const cols = columns.filter((c) => c.fixed || !state.hidden.includes(c.key));
   const sorted = useMemo(() => sortRows(rows, columns, state.sort), [rows, columns, state.sort]);
 
   const body = useRef<HTMLDivElement>(null);
+  const lastCheck = useRef<number | null>(null);
+  const keys = sorted.map(rowKey);
+  const allOn = !!checked && keys.length > 0 && keys.every((k) => checked.has(k));
+  const someOn = !!checked && keys.some((k) => checked.has(k));
+  const toggle = (i: number, shift: boolean) => {
+    if (!checked || !onCheck) return;
+    const next = new Set(checked);
+    const on = !checked.has(keys[i]);
+    const from = shift && lastCheck.current != null ? Math.min(lastCheck.current, i) : i;
+    const to = shift && lastCheck.current != null ? Math.max(lastCheck.current, i) : i;
+    for (let j = from; j <= to; j++) { if (on) next.add(keys[j]); else next.delete(keys[j]); }
+    lastCheck.current = i;
+    onCheck(next);
+  };
   const onKey = (e: React.KeyboardEvent) => {
     if (!onSelect || !sorted.length) return;
     const i = sorted.findIndex((r) => rowKey(r) === selected);
@@ -118,9 +135,15 @@ export function DataGrid<T>({ rows, columns, rowKey, state, selected, onSelect, 
 
   return (
     <div className="dg-wrap" ref={body} tabIndex={onSelect ? 0 : undefined} onKeyDown={onKey} style={maxHeight ? { maxHeight } : undefined}>
-      <table className={`dg ${state.dense ? "dense" : ""}`}>
+      <table className={`dg ${state.dense ? "dense" : ""} ${onCheck ? "has-cb" : ""}`}>
         <thead>
           <tr>
+            {onCheck && (
+              <th className="cbcol sticky">
+                <input type="checkbox" className="cb" checked={allOn} ref={(el) => { if (el) el.indeterminate = someOn && !allOn; }} aria-label="Select every row"
+                  onChange={() => { const next = new Set(checked); for (const k of keys) { if (allOn) next.delete(k); else next.add(k); } onCheck(next); }} />
+              </th>
+            )}
             {cols.map((c) => (
               <th key={c.key} className={`${c.sort ? "sortable" : ""} ${c.align === "r" ? "r" : ""} ${c.sticky ? "sticky" : ""}`} style={c.width ? { width: c.width } : undefined}
                 onClick={() => c.sort && state.setSort({ key: c.key, asc: state.sort?.key === c.key ? !state.sort.asc : c.key === "company" || c.key === "name" })}>
@@ -131,11 +154,16 @@ export function DataGrid<T>({ rows, columns, rowKey, state, selected, onSelect, 
           </tr>
         </thead>
         <tbody>
-          {sorted.map((r) => {
+          {sorted.map((r, i) => {
             const k = rowKey(r);
             return (
-              <tr key={k} className={`${onSelect || onOpen ? "click" : ""} ${k === selected ? "sel" : ""}`}
+              <tr key={k} className={`${onSelect || onOpen ? "click" : ""} ${k === selected ? "sel" : ""} ${checked?.has(k) ? "checked" : ""}`}
                 onClick={() => onSelect?.(k)} onDoubleClick={() => onOpen?.(k)}>
+                {onCheck && (
+                  <td className="cbcol sticky" onClick={(e) => { e.stopPropagation(); toggle(i, e.shiftKey); }}>
+                    <input type="checkbox" className="cb" checked={!!checked?.has(k)} readOnly tabIndex={-1} aria-label="Select this row" />
+                  </td>
+                )}
                 {cols.map((c) => <td key={c.key} className={`${c.align === "r" ? "r" : ""} ${c.sticky ? "sticky" : ""}`}>{c.render(r)}</td>)}
               </tr>
             );

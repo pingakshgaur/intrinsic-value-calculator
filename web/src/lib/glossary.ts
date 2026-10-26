@@ -8,6 +8,7 @@ export const GLOSSARY: Topic[] = [
   {
     id: "basics", title: "The basics", icon: "book", blurb: "The words every page uses.",
     terms: [
+      { term: "Onboarding", text: "A guided tour of the whole workbench, page by page. Search “onboarding” in the top bar to start it, jump to a chapter, or pick up where you left off." },
       { term: "Intrinsic value", text: "What the business is estimated to be worth from its published accounts, as opposed to what people are paying for the shares today. A gap means either the market knows something the accounts do not, or the shares are mispriced — the app does not say which." },
       { term: "Price", where: "/markets", text: "The latest share price. Live while the market is open (polled every 30 seconds for watched companies); otherwise the last close." },
       { term: "Upside", text: "How far the HYBRID MODEL value sits above (or below, when negative) today's price: value ÷ price − 1." },

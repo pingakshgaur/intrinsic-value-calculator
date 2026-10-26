@@ -176,7 +176,14 @@
 .an-drop-stats b { color: var(--fg-1); font-family: var(--mono); font-weight: 600; }
 .an-drop p { margin: 0; color: var(--fg-2); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .an-drop-tuned { color: var(--hm); font-size: 11px; }
-.an-drop-acts { display: flex; gap: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
-.an-drop-acts button { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border: 0; border-radius: 5px; background: none; color: var(--fg-2); font-size: 11.5px; cursor: pointer; }
+.an-drop-acts { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 2px; padding-top: 4px; border-top: 1px solid var(--line); }
+.an-drop-acts button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; height: 26px; padding: 0 4px; border: 0; border-radius: 5px; background: none; color: var(--fg-2); font-size: 11.5px; cursor: pointer; white-space: nowrap; overflow: hidden; }
+.an-drop-acts button .codicon { flex: none; }
+.an-drop-acts button span { overflow: hidden; text-overflow: ellipsis; }
 .an-drop-acts button:hover { background: var(--hover); color: var(--fg-1); }
 .net.light .an-drop { background: #fff; box-shadow: 0 10px 24px #00000024; }
+
+/* selection box and multi-select */
+.an-marquee { position: absolute; z-index: 9; pointer-events: none; border: 1px solid var(--accent-2); background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 2px; }
+.net-stage.tool-select { cursor: default; }
+.net-chip.sel { color: var(--fg-2); }

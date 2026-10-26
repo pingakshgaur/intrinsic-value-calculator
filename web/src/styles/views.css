@@ -429,3 +429,45 @@
 .fc-conv b { width: 22px; text-align: right; font-size: 12px; }
 .fc-note { display: flex; gap: 6px; align-items: flex-start; padding: 10px 14px; border-top: 1px solid var(--line); line-height: 1.5; }
 .fc-note .codicon { margin-top: 2px; flex: none; }
+
+/* Watchlist: picking several companies, and editing the list in place */
+.tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tile-cb { flex: none; }
+.tile.picked { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel-2)); }
+.tile.picked.value { box-shadow: inset 3px 0 0 var(--up); }
+.wl-pickall { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--fg-2); padding: 0 4px; }
+.wl-bulk { background: color-mix(in srgb, var(--accent) 7%, var(--panel)); border-bottom: 1px solid var(--line); flex-wrap: wrap; gap: 8px; }
+.wl-bulk .sel.sm { min-width: 0; }
+.wl-editbar { padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 12px; border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.wl-editbar-f { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; }
+.wl-editbar-f .fld:first-child { width: 240px; }
+.wl-editbar-f .fld.grow { flex: 1; min-width: 220px; }
+.wl-editbar-b { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.btn.danger-text { color: var(--down); }
+.btn.danger-text:hover { background: color-mix(in srgb, var(--down) 12%, transparent); }
+
+/* New watchlist: where it starts */
+.wl-start { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.wl-start button { display: grid; grid-template-columns: 18px minmax(0, 1fr); column-gap: 8px; align-items: center; text-align: left; padding: 8px 10px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--bg); color: var(--fg-2); cursor: pointer; }
+.wl-start button .codicon { grid-row: span 2; color: var(--fg-3); }
+.wl-start button b { color: var(--fg-1); font-size: 12.5px; font-weight: 600; }
+.wl-start button span { font-size: 11px; color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wl-start button:hover { border-color: var(--fg-3); }
+.wl-start button.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, var(--bg)); }
+.wl-start button.on .codicon { color: var(--accent-2); }
+.wl-pick { display: flex; flex-direction: column; gap: 8px; }
+.wl-pick .search { width: 100%; }
+.wl-pick .search input { flex: 1; }
+.wl-pick-hits { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; max-height: 240px; overflow-y: auto; }
+.wl-pick-hits button { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 0; background: none; color: var(--fg); text-align: left; cursor: pointer; font-size: 12.5px; }
+.wl-pick-hits button + button { border-top: 1px solid var(--line); }
+.wl-pick-hits button:hover:not(:disabled) { background: var(--hover); }
+.wl-pick-hits button:disabled { color: var(--fg-3); cursor: default; }
+.wl-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.wl-chip-x { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 4px 0 9px; border-radius: 12px; background: var(--raise-2); color: var(--fg-1); font-size: 11.5px; }
+.wl-chip-x:not(:has(button)) { padding-right: 9px; }
+.wl-chip-x button { border: 0; background: none; color: var(--fg-3); cursor: pointer; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; }
+.wl-chip-x button:hover { background: var(--hover); color: var(--fg-1); }
+.wl-import-r { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; }
+.wl-import-r span { display: inline-flex; align-items: center; gap: 4px; }
+@media (max-width: 520px) { .wl-start { grid-template-columns: 1fr; } }

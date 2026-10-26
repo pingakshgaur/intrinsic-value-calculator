@@ -235,6 +235,11 @@
 .an-density { width: 120px; height: 22px; flex: none; }
 .an-density rect { fill: var(--accent-2); opacity: .55; }
 .an-mini svg { display: block; border-radius: 6px; background: var(--panel); }
+.an-mini { cursor: pointer; touch-action: none; user-select: none; }
+.an-mini.dragging { cursor: grabbing; }
+.an-mini .vp { cursor: grab; will-change: transform; }
+.an-mini .vp.glide, .an-world.glide { transition: transform .34s cubic-bezier(.22, .8, .24, 1); }
+.an-world { will-change: transform; }
 .an-mini .vp { fill: color-mix(in srgb, var(--accent) 10%, transparent); stroke: var(--accent-2); stroke-width: 1.2; }
 .an-tip { position: fixed; z-index: 95; max-width: 300px; background: var(--raise); border: 1px solid var(--line-2); border-radius: 9px; padding: 8px 11px; box-shadow: var(--shadow-pop); pointer-events: none; font-size: 12px; color: var(--fg); display: flex; flex-direction: column; gap: 2px; }
 .an-side { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
