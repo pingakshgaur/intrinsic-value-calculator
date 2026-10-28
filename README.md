@@ -10,6 +10,10 @@ It ships with a command-line interface, a browser app (`python run.py --web`), a
 
 > **New: Market Intelligence Agents.** `python run.py --agents` runs a 23-agent research team: news, filings, forensics, ownership, macro and geopolitics, plus bull/bear review. The team turns its findings into an agent-adjusted intrinsic value, with every constant editable in [`agent_settings.yaml`](agent_settings.yaml). It can run on GitHub's cloud on a schedule, using free Groq / Gemini / NVIDIA API keys. See [docs/AGENTS.md](docs/AGENTS.md).
 
+> **New: local AI with Ollama.** The agents can also use free models running on your own computer, with no API key or daily limit. Configuration → AI providers → *Local models (Ollama)* finds the models you already have, downloads new ones sized to the disk space you can spare, and switches them on or off. Ollama opens with INTVAL and stays open after it stops. See [docs/WEB.md](docs/WEB.md#ai-models).
+
+> **New: installers.** Share INTVAL with people who don't have Python: `packaging/` builds a Windows setup `.exe` and a Linux setup wizard (folder choice, desktop shortcut, launch when finished, uninstaller). See [Installers](#installers-share-it-without-python).
+
 ---
 
 ## Table of contents
@@ -71,6 +75,8 @@ For each company in your list and each financial year in the chosen window, the 
 
 ## 2. Quick start
 
+**Just want to use it?** Run an installer from [Installers](#installers-share-it-without-python) (`INTVAL-Setup-…-windows-x64.exe` or `INTVAL-Setup-…-linux-x86_64`). It needs no Python, and the app opens in your browser. The steps below are for running it from the source code.
+
 ### Requirements
 
 - **Python 3.10+** (the code uses `X | None` type syntax; the local `.venv` runs Python 3.14).
@@ -116,13 +122,26 @@ This reads `data/companies.csv`, values FY2021 to FY2025, and writes everything 
 python run.py --web
 ```
 
-This opens the web app in your browser instead (see §7).
+This opens the web app in your browser instead (see §7). On Windows, double-clicking `Launch Workbench.bat` (or the `INTVAL Workbench` shortcut) does the same with the project's `.venv`, and just opens the browser if the app is already running.
 
 ```bash
 python run.py --offline
 ```
 
 This runs against the built-in synthetic dataset, with no network access needed.
+
+### Installers (share it without Python)
+
+`packaging/` turns the project into installers that need no Python or Node on the other computer. They land in `installers/`, which is git-ignored because each is several hundred MB; share them as GitHub release downloads.
+
+| Platform | Build it with | You get |
+|---|---|---|
+| Windows 10/11 x64 | `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1` | `INTVAL-Setup-<version>-windows-x64.exe`: a setup wizard (Inno Setup) with install folder choice, just-me or all-users, Start-menu and desktop shortcuts, launch when finished, and an uninstaller in Settings → Apps that asks before deleting your data |
+| Linux x86_64 | `powershell -File packaging\build_linux.ps1` (Docker), or `bash packaging/linux/build_linux.sh` on Linux | `INTVAL-Setup-<version>-linux-x86_64`: a graphical setup wizard with the same choices (folder, desktop shortcut, applications menu, launch when finished) and an `uninstall.sh`; `--silent` installs without a display |
+
+The installed app is one program (`INTVAL.exe` / `INTVAL`) that opens the workbench in your browser. Its data, settings and reports live in the install folder, which the Windows installer makes writable even under Program Files; an upgrade keeps your settings and company lists. macOS installers have to be built on a Mac and are not set up.
+
+How the installed app differs from a source checkout: it sets `INTVAL_HOME` to its own folder (read by `config.PROJECT_ROOT` and `server/data.py`), opens the web app when started with no arguments, and runs background jobs by calling itself (`INTVAL.exe <run.py flags>`) instead of `python run.py`. It ships `agent_settings.defaults.yaml` as its starting settings, never your `.env`, `llm_providers.json`, `output/` or `data/live/`. The Linux build uses the CPU-only `xgboost-cpu` package, which leaves out NVIDIA's ~300 MB GPU library.
 
 ---
 
@@ -139,7 +158,7 @@ intrinsic-value-calculator/
 ├── agent_settings.defaults.yaml  Factory defaults for the above (the web app's "reset").
 ├── requirements.txt              Python dependencies.
 ├── .env.example                  Template for API keys (copy to .env).
-├── .gitignore                    Ignores output/, .cache/, .venv/, __pycache__/, secrets, editor files.
+├── .gitignore                    Ignores output/, .cache/, .venv/, build/, installers/, secrets, editor files.
 ├── .vscode/settings.json         python.analysis.extraPaths so the flat imports resolve in VS Code.
 ├── .github/workflows/
 │   └── market-intel.yml          Scheduled cloud run of the research agents.
@@ -229,6 +248,7 @@ intrinsic-value-calculator/
 │   ├── agent_chat.py             The Research Room chat with the agents.
 │   ├── autostart.py              Starts the research workforce with the web app.
 │   ├── llm_api.py                AI provider management.
+│   ├── ollama_api.py             Ollama: local models, downloads, launch with INTVAL.
 │   └── yaml_patch.py             Edits agent_settings.yaml without losing its comments.
 │
 ├── web/                          React front end (src/ = source, dist/ = the built app).
@@ -241,7 +261,19 @@ intrinsic-value-calculator/
 │
 ├── tests/
 │   ├── test_agents.py            HYBRID MODEL and research agents (offline).
-│   └── test_live.py              Live market layer, watchlist and learning data (offline).
+│   ├── test_live.py              Live market layer, watchlist and learning data (offline).
+│   └── test_ollama.py            The Ollama section and local-model calls (offline).
+│
+├── packaging/                    Builds the installers into installers/ (see §2).
+│   ├── intval.spec               PyInstaller recipe: the app frozen into one folder.
+│   ├── stage.py                  Adds web/dist, starter data and default settings.
+│   ├── wizard_art.py             Draws the installers' artwork from the icon.
+│   ├── build_windows.ps1         Windows: freeze → stage → Inno Setup.
+│   ├── windows/intval.iss        The Windows setup wizard.
+│   ├── build_linux.ps1           Linux, from Windows through Docker.
+│   └── linux/
+│       ├── build_linux.sh        Linux: freeze → stage → one-file installer.
+│       └── installer.py          The Linux setup wizard (Tk), with a text mode.
 │
 ├── data/
 │   ├── companies.csv             Main input (~42 companies, 9 sectors, explicit NSE tickers).
@@ -252,6 +284,8 @@ intrinsic-value-calculator/
 │
 ├── output/                       Generated on each run (git-ignored; see §14).
 │   └── intel/                    The research agents' memory and reports.
+├── installers/                   The built setup files (git-ignored; see §2).
+├── build/                        PyInstaller work folders (git-ignored, safe to delete).
 └── .cache/                       Ticker lookups and the training-data download cache (git-ignored).
 ```
 
@@ -422,7 +456,7 @@ Tkinter desktop GUI, and every one of that GUI's features is in it:
 | **Models** | Every model by year for any company, the HYBRID MODEL's band and lens weights, the Ensemble, accuracy, the chart gallery, companies left out, downloads |
 | **Run Center** | Tick companies in or out for one run, choose the years ("Last 5 / 10 years"), calculate, check data, research, or auto-train with live controls (pause, skip, skip sector, retrain, target ±5, finish) |
 | **Companies** | Edit `data/companies.csv` |
-| **Settings** | The old GUI's data-quality, price, model, report and file settings; AI providers with a live model picker and a Test button; agent weights; macro inputs; the raw settings file |
+| **Settings** | The old GUI's data-quality, price, model, report and file settings; AI providers with a live model picker and a Test button; local models through Ollama (download, choose, switch on or off); agent weights; macro inputs; the raw settings file |
 
 [docs/WEB.md](docs/WEB.md) has the details.
 
@@ -1008,6 +1042,12 @@ The mock benchmark date is 2 May, which exercises the "nearest session" path. A 
 | `LIBRARY NOT INSTALLED` | `pip install xgboost lightgbm scikit-learn` |
 | `Web UI unavailable: ...` | `pip install fastapi uvicorn` |
 | The browser shows "The web UI is not built yet" | `cd web`, `npm install`, `npm run build` |
+| The Ollama section says "not installed" | Install Ollama from ollama.com/download, then reload the page; INTVAL finds it in its usual places |
+| Ollama is installed but "not running" | Press **Start Ollama**, or leave *Open Ollama whenever INTVAL starts* on |
+| A local model's Test takes a minute or fails with a timeout | Large models are slow on a CPU. Local servers get 5 minutes per reply (`LOCAL_TIMEOUT` in `src/agents/llm_providers.py`); pick a smaller model such as `llama3.2:3b` |
+| Windows says "Windows protected your PC" when running the setup | The installer is not code-signed. Click **More info → Run anyway** |
+| The Linux installer won't start | Downloads lose the executable bit: `chmod +x INTVAL-Setup-*-linux-x86_64` |
+| The installed app can't save settings or reports | Install it in a folder you can write to; the Windows installer makes its folder writable, even in Program Files |
 | The NSE fallback never returns anything | NSE blocks VPN and datacentre IPs. Run from a home connection. |
 | Yahoo rate-limit errors | Raise `REQUEST_PAUSE` to 1.5–2.0 |
 | ₹ shows as `â‚¹` in Excel | Open the `.xlsx`, or import the CSV as UTF-8 |

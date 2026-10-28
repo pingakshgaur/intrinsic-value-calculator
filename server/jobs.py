@@ -201,7 +201,8 @@ class JobManager:
 
     def _run(self, job):
         env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8", MPLBACKEND="Agg", NO_COLOR="1", PYTHON_COLORS="0")
-        cmd = [sys.executable, "-u", str(ROOT / "run.py"), *job.args]
+        # the installed app is one executable that takes run.py's arguments
+        cmd = [sys.executable, *job.args] if getattr(sys, "frozen", False) else [sys.executable, "-u", str(ROOT / "run.py"), *job.args]
         flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             job.proc = subprocess.Popen(

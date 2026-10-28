@@ -171,6 +171,7 @@ the web app (Configuration → AI providers).
 | Bad key | That key is skipped for the rest of the run; when every key is rejected the provider is switched off |
 | Cache | Identical prompts within `llm.cache_hours` cost nothing |
 | Budget | `llm.max_calls_per_run` caps one run |
+| Local models | The `ollama` provider runs models on this computer: no key, no daily limit. Switch it on, pick its models and choose whether it goes first or last in the order in Configuration → AI providers → *Local models (Ollama)*. A local server gets up to 5 minutes per reply (`LOCAL_TIMEOUT`); if Ollama is not running, its calls fail at once and fall through to the next provider |
 
 A full run makes roughly 7–9 LLM calls per company, plus 2 shared ones per
 run. For 43 companies that's about 350 calls, which fits Groq's free daily
@@ -229,6 +230,12 @@ to a full run, lets it use the AI models, sets a "skip if a run finished in
 the last N minutes" window, and starts a run on demand. The settings are
 saved in `data/live/autostart.json`; the API is `GET`/`PUT
 /api/agents/autostart` and `POST /api/agents/autostart/run`.
+
+The web app also opens **Ollama** when it starts, if Ollama is installed and
+*Open Ollama whenever INTVAL starts* is on (the default; saved in
+`data/live/ollama.json`). Ollama is started detached from INTVAL, so it stays
+open when INTVAL stops. The automatic research sweep is rule-based, so it uses
+Ollama only if you let the workforce use AI.
 
 ## Running it in the cloud (PC can stay off)
 

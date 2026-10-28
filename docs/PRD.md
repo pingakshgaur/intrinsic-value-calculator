@@ -1,6 +1,6 @@
 # INTVAL — Product Requirements Document
 
-Oct 26, 2026 · @Rajni Gaur
+Oct 26, 2026 · @Pingaksh Gaur
 
 ## Summary
 
@@ -22,7 +22,8 @@ INTVAL aims to give one honest, explained value per company and to show its work
 4. **Never hide a gap.** Every empty cell says why it is empty; every estimated number is marked as estimated.
 5. **Research beyond the numbers.** A 23-agent team reads news, filings, ownership, market activity and the economy, and checks its own evidence before the chief signs a verdict.
 6. **Let the user stay in control.** Every constant can be tuned, every agent can be instructed, switched off or re-weighted, and nothing is saved until the user commits it.
-7. **Run cheaply.** Work offline, run without paid services, and use only free-tier AI providers when AI is switched on.
+7. **Run cheaply.** Work offline, run without paid services, and use only free-tier AI providers or free models on the user's own computer when AI is switched on.
+8. **Easy to share.** Someone without Python can install it with a normal setup program on Windows or Linux and open it from a shortcut.
 
 **Non-goals**
 
@@ -157,6 +158,14 @@ AI is optional: every number is calculated by ordinary code, and AI is used only
 
 **Providers.** INTVAL talks to free-tier services from Groq, Google Gemini and NVIDIA through the same standard interface, so any similar service can be added in settings. The user pastes their own keys in Configuration → AI providers, picks a model from each provider's live list, and presses **Test** to see the provider's exact reply.
 
+**Local models.** Below the keys, a *Local models (Ollama)* section lets the agents use free models running on the user's own computer, with no key and no daily limit:
+
+- It shows whether Ollama is installed and running, the models already downloaded, and the free disk space.
+- The user downloads a free model from a list of 18, filtered by how much storage they can spare (up to 1, 2, 5 or 10 GB), or names any other model. Progress is shown live, and models that would not fit on the disk cannot be chosen.
+- The user picks a fast and a smart model, tests them, and switches local models **on or off**. A second switch decides whether local models are tried **before** the cloud providers or only as the fallback.
+- Ollama opens automatically when INTVAL starts (this can be turned off) and stays open after INTVAL stops.
+- Local models are free and private but slower: a large model on an ordinary laptop takes about a minute per answer, so each answer is allowed up to five minutes.
+
 **Two kinds of task.** *Fast* models handle bulk sorting (is this headline positive?). *Smart* models handle reasoning and writing. Each kind has an ordered list of providers to try.
 
 **Staying within free limits.**
@@ -255,7 +264,7 @@ The web app is where all of INTVAL is used. It opens in the browser at `http://1
 
 **Operations** — start and watch jobs. A form picks the job type (valuation report, data check, research, AI key check, learning feed), scope, years and options. Beside it, the live job shows its stages and log, and a table lists past jobs. Only one job runs at a time.
 
-**Configuration** — every setting: run and data-quality settings, AI providers (key, model picker, test, fail-over order), research agents, economic inputs, notifications and sounds, and the raw settings file.
+**Configuration** — every setting: run and data-quality settings, AI providers (key, model picker, test, fail-over order), local models through Ollama, research agents, economic inputs, notifications and sounds, and the raw settings file.
 
 ## Talking to and tuning the agents
 
@@ -348,9 +357,16 @@ A mistyped or deleted setting never crashes a run: the built-in default is used 
 
 ## Running it
 
-INTVAL runs on any computer with Python; most people use the web app, and the cloud option keeps research going with the computer off.
+INTVAL runs on any computer with Python, or without Python through its installers; most people use the web app, and the cloud option keeps research going with the computer off.
 
-**On your computer.** Install the requirements once, then:
+**Installing it.** A setup program installs INTVAL with no Python needed:
+
+- **Windows 10/11:** a setup wizard. The user picks the folder (Program Files or any other) and whether to install for everyone or just themselves. They can add a desktop shortcut and a Start-menu entry, and launch INTVAL when setup finishes. It appears in Settings → Apps with an uninstaller, which asks before deleting the user's data.
+- **Linux:** a graphical setup wizard with the same choices (folder, desktop shortcut, applications menu, launch when finished), an uninstall script, and a text mode for computers without a screen.
+
+The installed app opens the web app from its shortcut. Reinstalling or upgrading keeps the user's settings, company lists and reports. There is no macOS installer yet.
+
+**On your computer, from the source code.** Install the requirements once, then:
 
 | To | Run |
 | --- | --- |
@@ -403,6 +419,8 @@ The main limits come from free data: few years of accounts, delayed prices and a
 - **What "accurate" means.** All methods are scored against the price one month after the year closes, so the calibration inherits that definition.
 - **Machine-learning scores look better than real use,** because early years fall back to a method that uses future years for training.
 - **AI providers retire models often;** a saved model may stop working and must be re-picked in Configuration.
+- **Local models are slow on ordinary laptops** (about a minute per answer for a large model), so a full research run that uses them first can take hours; small models are much faster but write less well.
+- **Installers are large and unsigned.** Each is roughly 120–190 MB, too big to keep in the code repository, so they are shared as release downloads. Windows warns before running an unsigned setup program, and Linux users must mark the file as runnable first.
 - **Single user, single computer.** The app listens only on this computer; annotations and layouts live in one browser.
 - **Map annotations** (your links and notes on the Agent Network) are visual only; they do not rewire how agents work.
 

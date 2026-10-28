@@ -380,6 +380,28 @@ export interface Provider {
 export interface ProviderPreset { name: string; label: string; style: LlmStyle; base_url: string; auth: LlmAuth; models: Record<string, string>; rpm: number; rpd: number; tpm: number; keys_url: string; note: string; query?: string }
 export interface ProvidersInfo { providers: Provider[]; routes: Record<string, string[]>; presets: ProviderPreset[]; styles: LlmStyle[]; auths: LlmAuth[] }
 
+/** Ollama on this computer (server/ollama_api.py). */
+export interface OllamaModel { name: string; size: number; modified: string | null; family: string; params: string; quant: string }
+export interface OllamaCatalogItem { name: string; family: string; params: string; size_gb: number; ram_gb: number; note: string }
+export interface OllamaPull { status: string; completed: number; total: number; error: string | null; done: boolean; started: number }
+export interface OllamaStatus {
+  installed: boolean;
+  executable: string | null;
+  running: boolean;
+  version: string | null;
+  models: OllamaModel[];
+  enabled: boolean;
+  chosen: { fast?: string; smart?: string };
+  prefer_local: boolean;
+  autostart: boolean;
+  disk: { path: string; free: number | null; total: number | null };
+  pulls: Record<string, OllamaPull>;
+  catalog: OllamaCatalogItem[];
+  download_url: string;
+  library_url: string;
+  platform: string;
+}
+
 export interface ModelTestResult {
   ok: boolean;
   status: number | null;

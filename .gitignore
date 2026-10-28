@@ -59,6 +59,12 @@ Thumbs.db
 # --- Notebooks --------------------------------------------------------------
 .ipynb_checkpoints/
 
+# --- Packaging --------------------------------------------------------------
+# PyInstaller work folders and the finished installers (hundreds of MB each,
+# over GitHub's file limit - share them as release downloads instead)
+build/
+installers/
+
 # --- Scratch ----------------------------------------------------------------
 *.log
 *.tmp

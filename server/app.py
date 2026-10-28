@@ -21,6 +21,7 @@ from server import (
     learning_api,
     live,
     llm_api,
+    ollama_api,
     prefs,
     yaml_patch,
 )
@@ -497,6 +498,64 @@ def llm_routes(body: Routes):
     return llm_api.providers(ENV_FILE)
 
 
+# ================================================================ Ollama (local models)
+class OllamaPull(BaseModel):
+    model: str
+
+
+@app.get("/api/ollama")
+def ollama_status():
+    return ollama_api.status()
+
+
+@app.post("/api/ollama/start")
+def ollama_start():
+    ok, msg = ollama_api.launch()
+    if not ok:
+        raise HTTPException(409, msg)
+    return {"message": msg, **ollama_api.status()}
+
+
+@app.put("/api/ollama/settings")
+def ollama_settings(body: dict):
+    try:
+        routes = ollama_api.save(body)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if routes is not None:
+        text = llm_api.set_routes(SETTINGS.read_text(encoding="utf-8"), routes)
+        _write_settings(text)
+    return ollama_api.status()
+
+
+@app.post("/api/ollama/pull")
+def ollama_pull(body: OllamaPull):
+    try:
+        ollama_api.pull(body.model)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+    return ollama_api.status()
+
+
+@app.delete("/api/ollama/pull")
+def ollama_pull_dismiss(model: str):
+    ollama_api.dismiss_pull(model)
+    return ollama_api.status()
+
+
+@app.delete("/api/ollama/models")
+def ollama_delete(model: str):
+    try:
+        ollama_api.delete(model)
+    except KeyError:
+        raise HTTPException(404, f"{model} is not downloaded")
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+    return ollama_api.status()
+
+
 # ================================================================ HYBRID MODEL Lab
 @app.get("/api/hybrid/companies")
 def hybrid_companies():
@@ -586,6 +645,7 @@ def _start_background():
     jobs.on_done.append(lambda j: learning_api.after_job(j, jobs))
     learning_api.start_scheduler(jobs)
     autostart.schedule(jobs)  # the research workforce gets to work at once
+    ollama_api.launch_on_startup()  # detached: Ollama stays open after INTVAL stops
 
 
 def _live(fn, *a):

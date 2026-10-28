@@ -471,3 +471,16 @@
 .wl-import-r { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; }
 .wl-import-r span { display: inline-flex; align-items: center; gap: 4px; }
 @media (max-width: 520px) { .wl-start { grid-template-columns: 1fr; } }
+
+/* Ollama (AI providers -> local models) */
+.ol-status { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); flex-wrap: wrap; }
+.ol-status b { color: var(--fg-1); font-size: 13px; }
+.ol-disk { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.ol-opts { display: flex; flex-direction: column; gap: 8px; }
+.ol-tiers { display: flex; gap: 12px; flex-wrap: wrap; }
+.ol-tiers .fld { min-width: 200px; }
+.ol-pull { padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font-size: 12.5px; }
+.ol-card { cursor: default; }
+.ol-card:hover { border-color: var(--line-2); background: var(--panel); }
+.ol-card.got { border-color: #86cf8645; }
+.scroll-x { overflow-x: auto; }

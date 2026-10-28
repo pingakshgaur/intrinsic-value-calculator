@@ -31,6 +31,18 @@ for sub in ("src", "src/sources", "src/models", "src/io_layer", "tools"):
     if p not in sys.path:
         sys.path.insert(0, p)
 
+FROZEN = getattr(sys, "frozen", False)  # the installed app (packaging/), not a source checkout
+if FROZEN:
+    # data, settings and web/dist sit next to the executable; this must be set
+    # before config is imported, since config fixes every path at import time
+    os.environ.setdefault("INTVAL_HOME", str(Path(sys.executable).resolve().parent))
+    os.environ.setdefault("MPLBACKEND", "Agg")
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None:
+            stream.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+    if len(sys.argv) == 1:  # double-clicked or started from a shortcut
+        sys.argv.append("--web")
+
 import argparse
 import logging
 
@@ -490,6 +502,14 @@ def run_agents(args):
         sys.exit(1)
 
 
+def _already_serving(port):
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
 def main():
     log_path = setup_logging()
     import ssl_trust
@@ -498,6 +518,14 @@ def main():
     args = build_parser().parse_args()
 
     if args.web:
+        if _already_serving(args.port):
+            # a second launch (shortcut clicked twice) just shows the running app
+            print(f"[web] already running on http://127.0.0.1:{args.port} - opening it")
+            if not args.no_browser:
+                import webbrowser
+
+                webbrowser.open(f"http://127.0.0.1:{args.port}")
+            return
         try:
             from server.app import serve
         except ImportError as e:
@@ -579,4 +607,7 @@ def main():
 
 
 if __name__ == "__main__":
+    import multiprocessing
+
+    multiprocessing.freeze_support()  # the ML models' worker processes, in the installed app
     main()

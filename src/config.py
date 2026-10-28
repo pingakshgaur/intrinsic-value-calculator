@@ -5,7 +5,9 @@ import os
 from pathlib import Path
 
 # ---------------- Paths ----------------
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# INTVAL_HOME is set by the installed app (packaging/) to the folder holding
+# its data, settings and web/dist; a source checkout uses the repository root.
+PROJECT_ROOT = Path(os.environ.get("INTVAL_HOME") or Path(__file__).resolve().parent.parent)
 DATA_DIR = PROJECT_ROOT / "data"
 # INTVAL_OUTPUT_DIR redirects every report file - used by the tests so a test
 # run can never overwrite a real report.

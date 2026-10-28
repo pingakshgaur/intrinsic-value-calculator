@@ -3,12 +3,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, LlmAuth, LlmStyle, ModelTestResult, Provider, ProviderPreset, ProvidersInfo } from "../lib/api";
 import { useProviders } from "../lib/hooks";
 import { Drawer, ErrorNote, Icon, Panel, QueryView, Toggle } from "./ui";
+import { OllamaPanel } from "./OllamaPanel";
 import { useApp } from "./workbenchContext";
 
 const STYLE_TEXT: Record<LlmStyle, string> = { openai: "OpenAI-compatible", anthropic: "Anthropic Messages API" };
 const AUTH_TEXT: Record<LlmAuth, string> = { bearer: "Authorization: Bearer <key>", "x-api-key": "x-api-key header", "api-key": "api-key header (Azure)", none: "No key (local server)" };
 
 const err = (e: unknown) => (e instanceof Error ? e.message : String(e));
+// Ollama has its own section below the keys (OllamaPanel)
+const cloud = (d: ProvidersInfo) => d.providers.filter((p) => p.name !== "ollama");
 
 /** Every AI provider: add any service, several keys each, models, limits, the fail-over order. */
 export function AiProviders() {
@@ -23,11 +26,12 @@ export function AiProviders() {
       <QueryView q={q}>
         {(d) => (
           <>
-            <Panel title="Providers" meta={`${d.providers.filter((p) => p.enabled && p.has_key).length} ready of ${d.providers.length} · fast = bulk reading · smart = reasoning and writing`} flush
+            <Panel title="Providers" meta={`${cloud(d).filter((p) => p.enabled && p.has_key).length} ready of ${cloud(d).length} · fast = bulk reading · smart = reasoning and writing`} flush
               tools={<button className="btn xs" onClick={() => setAdding(true)}><Icon name="add" className="xs" />Add provider</button>}>
-              <div className="provs">{d.providers.map((p) => <ProviderCard key={p.name} p={p} onChanged={refresh} onEdit={() => setEditing(p)} />)}</div>
-              {!d.providers.length && <div className="empty" style={{ padding: 24 }}><span className="small">No providers yet. Add one to let the agents read and write with AI.</span></div>}
+              <div className="provs">{cloud(d).map((p) => <ProviderCard key={p.name} p={p} onChanged={refresh} onEdit={() => setEditing(p)} />)}</div>
+              {!cloud(d).length && <div className="empty" style={{ padding: 24 }}><span className="small">No providers yet. Add one to let the agents read and write with AI.</span></div>}
             </Panel>
+            <OllamaPanel />
             <Routes info={d} />
             {adding && <AddProvider info={d} onClose={() => setAdding(false)} onDone={refresh} />}
             {editing && <EditProvider p={editing} info={d} onClose={() => setEditing(null)} onDone={refresh} />}
@@ -211,7 +215,7 @@ function AddProvider({ info, onClose, onDone }: { info: ProvidersInfo; onClose: 
         <div className="col" style={{ gap: 12 }}>
           <span className="small muted">Pick a service, or set up any OpenAI-compatible or Anthropic endpoint yourself.</span>
           <div className="preset-grid">
-            {info.presets.map((p) => (
+            {info.presets.filter((p) => p.name !== "ollama").map((p) => (
               <button key={p.name} className="preset" onClick={() => choose(p)}>
                 <b>{p.label}{taken.has(p.name) && <span className="tag xs">added</span>}</b>
                 <small>{p.note}</small>

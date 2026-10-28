@@ -11,10 +11,11 @@ import csv
 import json
 import math
 import re
+import os
 import sqlite3
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(os.environ.get("INTVAL_HOME") or Path(__file__).resolve().parent.parent)  # see config.PROJECT_ROOT
 OUTPUT = ROOT / "output"
 DATA = ROOT / "data"
 COMPANIES_CSV = DATA / "companies.csv"

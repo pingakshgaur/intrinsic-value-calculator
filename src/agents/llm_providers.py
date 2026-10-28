@@ -30,6 +30,7 @@ from agents import settings as S
 STYLES = ("openai", "anthropic")
 AUTHS = ("bearer", "x-api-key", "api-key", "none")
 NAME = re.compile(r"^[a-z0-9][a-z0-9_\-]{0,31}$")
+LOCAL_TIMEOUT = 300  # seconds a local server (Ollama, LM Studio) gets per reply
 ENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]{1,63}$")
 
 # Known services, so adding one is a click. Free tiers change; the notes say what to check.
@@ -337,6 +338,9 @@ def _anthropic(p, key, timeout):
 
 def chat(p, key, model, system, user, max_tokens=600, json_mode=False, timeout=60, temperature=0.2, tier="smart"):
     """One reply. -> (text, tokens). Raises CallError(status, message)."""
+    if p["auth"] == "none":
+        # a model on this computer may need minutes to load and answer on a CPU
+        timeout = max(timeout, LOCAL_TIMEOUT)
     if p["style"] == "anthropic":
         anthropic, client = _anthropic(p, key, timeout)
         try:

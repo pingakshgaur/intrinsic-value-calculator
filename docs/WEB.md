@@ -10,6 +10,11 @@ Use `--port 9000` to change the port, or `--no-browser` if you don't want a
 tab opened. The built app ships in `web/dist`, so Node is only needed if you
 want to change the UI.
 
+Other ways to open it: on Windows, double-click `Launch Workbench.bat` or the
+`INTVAL Workbench` shortcut in the project folder; with an installed copy (see
+the README's *Installers*), use the INTVAL desktop or menu shortcut. Starting
+it a second time just opens the browser on the running app.
+
 The colours are VS Code's **Dark 2026** theme; the layout, type (Inter and JetBrains Mono, bundled) and components are the app's own.
 
 ## Layout
@@ -34,7 +39,7 @@ An analyst workspace:
 | **Model Performance** | Leaderboard, error by year, win rate, sector × model matrix, company explorer, HYBRID MODEL and Ensemble detail, chart gallery, companies left out, files |
 | **Universe** | Editable grid of the company list: bulk select, delete, set sector or add to a watchlist, CSV import, export, checks |
 | **Operations** | New-job form (type, scope, period, options, auto-train) beside a live job detail (stage timeline, auto-train controls, log) and the jobs table |
-| **Configuration** | Run settings (everything the old desktop app had), AI providers (any OpenAI-compatible service or Anthropic, several keys each, live model picker, Test for each key, fail-over order), research agents, macro inputs, the settings file |
+| **Configuration** | Run settings (everything the old desktop app had), AI providers (any OpenAI-compatible service or Anthropic, several keys each, live model picker, Test for each key, fail-over order), local models through Ollama (download, choose, switch on or off, open with INTVAL), research agents, macro inputs, the settings file |
 
 Shortcuts:
 
@@ -288,9 +293,9 @@ original defaults worked. So:
   error. For example: "reached its end of life", or "Function not found for
   account" (NVIDIA lists some models that a free key cannot call).
 - A saved model that is no longer offered is flagged.
-- **Any provider.** Add one from 16 presets (Groq, Gemini, NVIDIA, Anthropic,
+- **Any provider.** Add one from 15 presets (Groq, Gemini, NVIDIA, Anthropic,
   OpenAI, OpenRouter, Mistral, DeepSeek, Together, Fireworks, Cerebras, xAI,
-  Perplexity, Azure OpenAI, Ollama, LM Studio) or as a custom
+  Perplexity, Azure OpenAI, LM Studio; Ollama has its own section below) or as a custom
   OpenAI-compatible endpoint. Edit its address, key header, limits and models,
   switch it off, or remove it. Web-app providers are saved in
   `llm_providers.json` on top of `agent_settings.yaml`.
@@ -298,6 +303,23 @@ original defaults worked. So:
   They are tried in order: a rate-limited key hands over to the next, a
   rejected key is skipped for the rest of the run. Test, reorder or remove
   each key; only the last four characters are ever shown.
+- **Local models (Ollama)**, in their own section below the keys
+  ([`server/ollama_api.py`](../server/ollama_api.py)):
+  - Shows whether Ollama is installed and running, the models already on
+    this computer, and the free disk space where Ollama keeps them.
+  - **Download** any of 18 free models, filtered by how much storage you can
+    spare (≤ 1, 2, 5, 10 GB), or any other tag from the Ollama library. Live
+    progress, and models that would not fit on the disk are disabled. Delete a
+    model to free its space.
+  - Pick the **fast** and **smart** model and press **Test** on any of them.
+  - **On / Off** switches the `ollama` provider for the agents. **Try local
+    models before cloud providers** puts it first in the fail-over order;
+    otherwise it is the fallback when the cloud keys run out.
+  - **Open Ollama whenever INTVAL starts** (on by default) launches Ollama
+    with the web app. It is started detached, so it stays open after INTVAL
+    stops. The choice is saved in `data/live/ollama.json`.
+  - A local model gets up to 5 minutes per reply (`LOCAL_TIMEOUT` in
+    `llm_providers.py`): a 12B model on a laptop CPU takes about a minute.
 
 ## Why it doesn't break
 
