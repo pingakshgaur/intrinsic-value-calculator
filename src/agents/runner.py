@@ -1,3 +1,4 @@
+# FILE: src/agents/runner.py
 """
 One research cycle, start to finish.
 
@@ -63,7 +64,7 @@ def make_base(rec, rows, live_price):
     The HYBRID MODEL's inputs for the latest year that has the Ensemble's
     components, priced at the live quote. -> (base, signals from accounts).
     """
-    import hybrid_model as HM
+    import hybrid_formula as HM
 
     mine = [r for r in rows if "_comps" in r and r["company"] in (rec.get("_name"),)]
     if not mine:
@@ -81,7 +82,7 @@ def base_valuation(companies, feeds, offline=False, ml=False):
     """-> ({name: base}, {name: accounts signals}, {name: universe rec})"""
     import capital
     import estimation
-    import hybrid_model as HM
+    import hybrid_formula as HM
     import ml_common
     import model_ev_ebitda
     import model_pe

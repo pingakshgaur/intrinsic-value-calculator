@@ -1,3 +1,4 @@
+# FILE: src/agents/forensics.py
 """
 Forensic accounting scores. Pure functions over one or two years of figures.
 

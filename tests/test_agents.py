@@ -1,3 +1,4 @@
+# FILE: tests/test_agents.py
 """
 Tests for the HYBRID MODEL and the market intelligence agents. No network,
 no API keys, and nothing is written to the real output folder:
@@ -23,7 +24,7 @@ for sub in ("", "src", "src/sources", "src/models", "src/io_layer", "tools"):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-import hybrid_model as HM  # noqa: E402
+import hybrid_formula as HM  # noqa: E402
 from agents import forensics as FX  # noqa: E402
 from agents import settings as S  # noqa: E402
 from agents.base import Agent, Evidence, Finding, cited  # noqa: E402

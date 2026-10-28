@@ -1,3 +1,4 @@
+# FILE: server/agents_api.py
 """
 The research workforce in the web app: roster, the agents' messages and live
 status (read from the blackboard while a run writes it), and your side of the

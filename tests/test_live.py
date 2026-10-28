@@ -1,3 +1,4 @@
+# FILE: tests/test_live.py
 """
 Tests for the live market layer, the watchlist tracker and the learning
 feed. No network: every Yahoo download is replaced by a synthetic frame, and
@@ -198,7 +199,7 @@ def test_build_universe_uses_the_cache(monkeypatch):
 def test_verdict_without_saved_calibration_is_rebuilt():
     """Old research runs saved their inputs without lens_calibration; the
     Studio and the live views must still reproduce the verdict's value."""
-    import hybrid_model as HM
+    import hybrid_formula as HM
     from agents import settings as S
     from server import hybrid_api
 

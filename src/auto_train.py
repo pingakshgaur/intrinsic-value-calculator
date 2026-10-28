@@ -1,3 +1,4 @@
+# FILE: src/auto_train.py
 """
 Auto-train: grow the ML training universe one company at a time until the
 Hybrid is confident enough, then stop.

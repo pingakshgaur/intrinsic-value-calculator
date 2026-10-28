@@ -1,7 +1,7 @@
 # HYBRID MODEL
 
 The project's headline intrinsic value. The code is in
-[`src/hybrid_model.py`](../src/hybrid_model.py), the constants are in
+[`src/hybrid_formula.py`](../src/hybrid_formula.py), the constants are in
 `agent_settings.yaml → hybrid_model`, and you can try every constant live in
 the web app's **Hybrid Lab**.
 

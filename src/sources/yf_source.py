@@ -1,4 +1,4 @@
-# FILE: yf_source.py
+# FILE: src/sources/yf_source.py
 """
 yfinance extraction layer with per-field diagnosis.
 

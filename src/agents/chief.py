@@ -1,3 +1,4 @@
+# FILE: src/agents/chief.py
 """
 The five research leads and the Chief Market Intelligence Officer.
 
@@ -24,13 +25,13 @@ THE CHIEF turns the team's findings into the formula's inputs, by name:
     scenario  Bull / Bear conviction
     overlay   mean(sentiment, relative strength, accumulation, holdings)
 
-then runs the HYBRID MODEL (src/hybrid_model.py) and writes the verdict, with an LLM-written
+then runs the HYBRID MODEL (src/hybrid_formula.py) and writes the verdict, with an LLM-written
 executive summary that may cite only validated evidence (template fallback).
 """
 
 import statistics
 
-import hybrid_model as HM
+import hybrid_formula as HM
 from agents import settings as S
 from agents import profiles
 from agents.base import cited, clamp, weighted_mean

@@ -1,3 +1,4 @@
+# FILE: src/agents/context.py
 """
 CompanyContext: everything the team knows about one company during a run.
 

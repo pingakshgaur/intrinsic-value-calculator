@@ -1,3 +1,4 @@
+# FILE: src/agents/base.py
 """
 The vocabulary every agent speaks: Evidence, Finding, Agent.
 

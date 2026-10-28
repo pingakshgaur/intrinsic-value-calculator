@@ -1,3 +1,4 @@
+# FILE: src/agents/blackboard.py
 """
 The blackboard: one SQLite file every agent writes to and reads from.
 

@@ -1,3 +1,4 @@
+# FILE: src/models/capital.py
 """
 Cost-of-capital helpers shared by the Residual Income model and the Hybrid.
 

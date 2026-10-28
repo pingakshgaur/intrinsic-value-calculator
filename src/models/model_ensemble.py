@@ -1,3 +1,4 @@
+# FILE: src/models/model_ensemble.py
 """
 Ensemble intrinsic value (formerly 'Hybrid') - an applicability-gated, error-weighted ensemble with
 an uncertainty band.
@@ -103,7 +104,7 @@ WHAT IT CANNOT DO
 It cannot see data the source never supplied, cannot know the future, and
 its weights reward closeness to the 1-May market price - so it inherits the
 study's own definition of "accurate". Those are stated, not hidden: every
-row's regime, weights, band and confidence land in Hybrid_Detail.csv.
+row's regime, weights, band and confidence land in Ensemble_Detail.csv.
 """
 
 import csv
@@ -662,7 +663,7 @@ def attach(
 ):
     """
     Compute row["hybrid"] for every report row, in place, and (when write is
-    set) write Hybrid_Detail.csv and print the summary. Runs after every other
+    set) write Ensemble_Detail.csv and print the summary. Runs after every other
     model, because the weights are learned from the whole panel's earlier-year
     errors. -> the detail rows, which the auto-trainer reads its meter from.
     """

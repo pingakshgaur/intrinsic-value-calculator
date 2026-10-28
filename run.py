@@ -1,6 +1,5 @@
 # FILE: run.py
 """
-+#!/usr/bin/env python3
 
 Intrinsic Value Calculator - entry point.
 

@@ -1,3 +1,4 @@
+# FILE: src/sources/nse_source.py
 """
 Direct NSE portal access (fallback price source when yfinance is thin/blocked).
 NSE requires cookie priming; it also rate-limits aggressively. Everything here

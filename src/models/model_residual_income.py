@@ -1,3 +1,4 @@
+# FILE: src/models/model_residual_income.py
 """
 Residual Income (Edwards-Bell-Ohlson) - Result-returning.
 

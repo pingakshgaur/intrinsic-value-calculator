@@ -1,3 +1,4 @@
+# FILE: src/agents/comms.py
 """
 Agent communications: the roster (who is who), the message bus (what the
 agents tell each other) and live status (who is doing what, right now).

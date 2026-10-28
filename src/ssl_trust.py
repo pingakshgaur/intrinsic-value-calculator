@@ -1,3 +1,4 @@
+# FILE: src/ssl_trust.py
 """
 Make Python trust the certificates Windows already trusts.
 

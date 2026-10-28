@@ -1,3 +1,4 @@
+# FILE: server/yaml_patch.py
 """
 Change scalar values in agent_settings.yaml without losing its comments.
 

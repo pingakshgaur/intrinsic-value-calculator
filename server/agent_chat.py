@@ -1,3 +1,4 @@
+# FILE: server/agent_chat.py
 """
 Your side of the Research Room: the agents answer you, take instructions and
 act on commands.

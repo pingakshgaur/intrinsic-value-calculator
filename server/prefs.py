@@ -1,3 +1,4 @@
+# FILE: server/prefs.py
 """
 Run preferences: everything the old desktop app's Settings dialog held.
 

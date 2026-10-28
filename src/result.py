@@ -1,3 +1,4 @@
+# FILE: src/result.py
 """
 Result carrier + reason vocabulary.
 

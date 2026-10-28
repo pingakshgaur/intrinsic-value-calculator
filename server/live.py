@@ -1,3 +1,4 @@
+# FILE: server/live.py
 """
 Live market data for the web app: index quotes, charts, a market scanner and
 the watchlist tracker.
@@ -419,7 +420,7 @@ class Valuer:
         s = self._load().get(ticker)
         if not s or not price:
             return None
-        import hybrid_model as HM
+        import hybrid_formula as HM
 
         base = {**s["base"], "price": float(price)}
         if base.get("shares"):  # as a quick sweep does: market cap follows the price

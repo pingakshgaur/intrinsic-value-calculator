@@ -178,7 +178,7 @@ RI_ROE_LOOKBACK = 3  # years of ROE in the normalised median (point-in-time)
 RI_ROE_BOUNDS = (-0.50, 0.60)
 
 # ---------------- Hybrid ----------------
-# See src/models/model_hybrid.py for the full method.
+# See src/models/model_ensemble.py for the full method.
 HYBRID_FADE_YEARS = 5  # DCF+ growth fades to terminal over these years
 HYBRID_TERMINAL_GROWTH = None  # None -> TERMINAL_GROWTH
 HYBRID_RONIC_PREMIUM = 0.02  # return on new invested capital = WACC + this

@@ -114,7 +114,7 @@ export interface Gate {
   after: number;
 }
 
-/** One HYBRID MODEL evaluation (src/hybrid_model.py -> evaluate). */
+/** One HYBRID MODEL evaluation (src/hybrid_formula.py -> evaluate). */
 export interface HMResult {
   value: Num;
   low: Num;

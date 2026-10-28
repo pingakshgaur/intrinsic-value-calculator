@@ -1,3 +1,4 @@
+# FILE: src/agents/notify.py
 """
 Optional Telegram alert after a run - only the changes, never the full report.
 

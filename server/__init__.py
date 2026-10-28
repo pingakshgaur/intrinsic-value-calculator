@@ -1,3 +1,4 @@
+# FILE: server/__init__.py
 """
 Local web API for the browser UI.
 

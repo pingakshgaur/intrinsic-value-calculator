@@ -1,10 +1,11 @@
+# FILE: src/models/model_hybrid_model.py
 """
 HYBRID MODEL inside the valuation report.
 
 Runs after the Ensemble, over every company-year, from the accounts alone and
 point-in-time: the signals come from years up to the one being valued, and
 the price it is labelled against is that year's in-FY anchor price, never the
-1-May benchmark it is scored against. The formula itself is src/hybrid_model.py.
+1-May benchmark it is scored against. The formula itself is src/hybrid_formula.py.
 
 Writes Hybrid_Model_Detail.csv (every lens, weight, gate and band per row) and
 hybrid_model_bases.json (each company's latest inputs, which the web app's
@@ -17,7 +18,7 @@ import logging
 import statistics
 
 import config
-import hybrid_model as HM
+import hybrid_formula as HM
 from fy_utils import fy_label
 from result import R, Result
 

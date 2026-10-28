@@ -1,3 +1,4 @@
+# FILE: src/agents/profiles.py
 """
 Per-agent tuning, set from the web app (Agents -> an agent -> Settings) or by
 talking to the agent in the Research Room.

@@ -1,3 +1,4 @@
+# FILE: src/hybrid_formula.py
 """
 HYBRID MODEL - the project's headline intrinsic value.
 

@@ -1,3 +1,4 @@
+# FILE: src/agents/report.py
 """
 Run outputs: Markdown note, JSON for machines, a self-contained HTML
 dashboard. Each run writes a dated folder under <state>/reports/ and

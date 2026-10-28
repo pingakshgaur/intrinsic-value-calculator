@@ -1,3 +1,4 @@
+# FILE: server/app.py
 """
 FastAPI app: JSON under /api, the built React app everywhere else.
 """

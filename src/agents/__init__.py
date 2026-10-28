@@ -1,3 +1,4 @@
+# FILE: src/agents/__init__.py
 """
 Market Intelligence Agents.
 

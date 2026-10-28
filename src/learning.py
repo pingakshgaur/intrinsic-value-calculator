@@ -1,3 +1,4 @@
+# FILE: src/learning.py
 """
 Learning data: every company the app knows about beyond the ones being
 valued - the training list, the auto-trainer's picks and the watchlist -

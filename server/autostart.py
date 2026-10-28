@@ -1,3 +1,4 @@
+# FILE: server/autostart.py
 """
 The research workforce starts working as soon as the web app starts.
 

@@ -1,3 +1,4 @@
+# FILE: server/llm_api.py
 """
 AI provider management for the browser: which providers have keys, which
 models each key can actually reach, a one-click test of any model, and the

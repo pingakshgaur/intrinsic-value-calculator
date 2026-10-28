@@ -1,3 +1,4 @@
+# FILE: src/sources/ticker_resolver.py
 """Company name -> Yahoo ticker. Explicit -> manual map -> cache -> search -> BSE."""
 
 import json

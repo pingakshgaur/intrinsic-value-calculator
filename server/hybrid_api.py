@@ -1,3 +1,4 @@
+# FILE: server/hybrid_api.py
 """
 The Hybrid Model Lab's backend: live what-if evaluations of the HYBRID MODEL.
 
@@ -9,7 +10,7 @@ nothing is written until /api/hybrid/save.
 
 import math
 
-import hybrid_model as HM
+import hybrid_formula as HM
 from agents import settings as S
 from server import data as D
 

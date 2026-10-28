@@ -1,3 +1,4 @@
+# FILE: src/agents/team_news.py
 """
 Market News Research Lead's team.
 

@@ -1,3 +1,4 @@
+# FILE: tools/make_override_template.py
 """
 Generate a fill-in sheet for every missing fundamental.
 

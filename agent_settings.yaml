@@ -186,7 +186,7 @@ sector_index:
 
 # ====================================================== HYBRID MODEL ========
 # The project's headline intrinsic value. The full method is written out at
-# the top of src/hybrid_model.py; every number below can also be changed live
+# the top of src/hybrid_formula.py; every number below can also be changed live
 # in the web app's Hybrid Model Lab (and saved back here from there).
 #
 #   k  = max(Rf + beta x ERP, floor) + SUM premia            cost of equity

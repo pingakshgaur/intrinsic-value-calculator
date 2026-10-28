@@ -1,3 +1,4 @@
+# FILE: server/jobs.py
 """
 Background jobs: each one is a child `python run.py ...` process.
 

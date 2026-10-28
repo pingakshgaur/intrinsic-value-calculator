@@ -133,17 +133,28 @@ intrinsic-value-calculator/
 │
 ├── run.py                        Entry point (CLI + --web). Sets up sys.path and logging,
 │                                 parses flags, pushes them onto config, dispatches.
-├── agent_settings.yaml           Every HYBRID MODEL constant and research-agent setting.
-├── server/                       Local web API (FastAPI) for the browser app.
-├── web/                          React front end; web/dist is the built app.
-├── yf_source.py                  Yahoo Finance extraction layer (statements, prices, benchmark,
-│                                 per-field diagnosis). Lives at the root, imported flat.
-├── requirements.txt
-├── README.md
-├── .gitignore                    Ignores output/, .cache/, .venv/, __pycache__/, editor files
-├── .vscode/settings.json         python.analysis.extraPaths so the flat imports resolve in VS Code
+├── Launch Workbench.bat          Double-click launcher: starts the web app and opens the browser.
+├── INTVAL Workbench.lnk          Shortcut to the launcher, with the project icon.
+├── agent_settings.yaml           Your HYBRID MODEL constants and research-agent settings.
+├── agent_settings.defaults.yaml  Factory defaults for the above (the web app's "reset").
+├── requirements.txt              Python dependencies.
+├── .env.example                  Template for API keys (copy to .env).
+├── .gitignore                    Ignores output/, .cache/, .venv/, __pycache__/, secrets, editor files.
+├── .vscode/settings.json         python.analysis.extraPaths so the flat imports resolve in VS Code.
+├── .github/workflows/
+│   └── market-intel.yml          Scheduled cloud run of the research agents.
 │
-├── src/
+├── assets/
+│   ├── intval.ico                Project icon (same as the web app's tab icon), for Windows.
+│   └── intval.png                The same icon as a 512 px PNG.
+│
+├── docs/
+│   ├── PRD.md                    Product requirements document.
+│   ├── WEB.md                    The browser workbench.
+│   ├── AGENTS.md                 The market intelligence agents.
+│   └── HYBRID_MODEL.md           The HYBRID MODEL formula.
+│
+├── src/                          The valuation engine and the research agents.
 │   ├── config.py                 ALL assumptions and switches. Single source of truth.
 │   ├── model_registry.py         The one list of models; which are enabled; column names.
 │   ├── pipeline.py               Orchestrator: fetch → screen → estimate → value → export → analyse.
@@ -154,41 +165,94 @@ intrinsic-value-calculator/
 │   ├── fy_utils.py               FY date maths, benchmark date, FY labels, numeric helpers.
 │   ├── plain_reasons.py          Translates exclusion verdicts into plain English.
 │   ├── csv_analyzer.py           Accuracy metrics, HD charts, HTML report.
+│   ├── hybrid_formula.py         The HYBRID MODEL formula, shared by the report and the agents.
+│   ├── auto_train.py             Grows the ML training universe one company at a time.
+│   ├── learning.py               Learning data: every company the app knows beyond the input list.
+│   ├── ssl_trust.py              Makes Python trust the certificates Windows trusts.
 │   │
-│   ├── sources/
+│   ├── sources/                  Where the data comes from.
+│   │   ├── yf_source.py          Yahoo Finance: statements, prices, benchmark, per-field diagnosis.
 │   │   ├── ticker_resolver.py    Company name → Yahoo ticker (explicit → manual map → cache → search).
 │   │   ├── nse_source.py         NSE portal fallback for closing prices only.
 │   │   └── mock_source.py        Deterministic offline dataset that triggers every reason code.
 │   │
-│   ├── models/
+│   ├── models/                   One file per valuation model.
 │   │   ├── model_dcf.py          Two-stage FCFF DCF.
 │   │   ├── model_pe.py           Sector-median P/E relative valuation.
 │   │   ├── model_ev_ebitda.py    Sector-median EV/EBITDA relative valuation.
 │   │   ├── model_graham.py       Graham Number.
+│   │   ├── model_residual_income.py Residual Income (Edwards-Bell-Ohlson).
+│   │   ├── capital.py            Cost-of-capital helpers for Residual Income and the Hybrid.
+│   │   ├── model_ensemble.py     Ensemble (formerly "Hybrid"): gated, error-weighted blend.
+│   │   ├── model_hybrid_model.py Runs the HYBRID MODEL over every company-year in the report.
 │   │   ├── ml_common.py          Shared ML pipeline: features, labels, folds, preprocessing, metrics.
 │   │   ├── model_xgboost.py      XGBoost estimator spec.
 │   │   ├── model_random_forest.py Random Forest estimator spec.
 │   │   ├── model_lightgbm.py     LightGBM estimator spec.
 │   │   └── model_mlp.py          MLP (StandardScaler + MLPRegressor pipeline).
 │   │
-│   └── io_layer/
-│       ├── inputs.py             Tolerant CSV reader (auto-detects delimiter/header) + terminal input.
-│       └── exporter.py           Writes report, numeric twin, diagnostics, methods, exclusions.
+│   ├── io_layer/
+│   │   ├── inputs.py             Tolerant CSV reader (auto-detects delimiter/header) + terminal input.
+│   │   └── exporter.py           Writes report, numeric twin, diagnostics, methods, exclusions.
+│   │
+│   └── agents/                   The 23-agent research team (see docs/AGENTS.md).
+│       ├── runner.py             One research cycle, start to finish.
+│       ├── chief.py              The five research leads and the Chief Market Intelligence Officer.
+│       ├── team_equity.py        Equity research team (numbers only).
+│       ├── team_news.py          Market news team.
+│       ├── team_market.py        Market activity and ownership team.
+│       ├── team_industry.py      Industry and geopolitical team.
+│       ├── team_review.py        Independent review team (runs last).
+│       ├── base.py               Evidence, Finding, Agent: the shared vocabulary.
+│       ├── blackboard.py         The SQLite file every agent reads and writes.
+│       ├── comms.py              Roster and message bus.
+│       ├── protocol.py           Who tells whom what, and when, for one company.
+│       ├── context.py            Everything the team knows about one company during a run.
+│       ├── feeds.py              Every outside fact the agents use.
+│       ├── forensics.py          Forensic accounting scores.
+│       ├── llm.py                LLM router across free API tiers.
+│       ├── llm_providers.py      Every AI provider, how to reach it, and its keys.
+│       ├── profiles.py           Per-agent tuning set from the web app.
+│       ├── settings.py           Loads agent_settings.yaml.
+│       ├── report.py             Markdown, JSON and HTML run outputs.
+│       └── notify.py             Optional Telegram alert after a run.
 │
-├── tools/
+├── server/                       Local web API (FastAPI) for the browser app.
+│   ├── app.py                    Routes: JSON under /api, the built React app everywhere else.
+│   ├── data.py                   Readers for everything the calculator and agents write to disk.
+│   ├── jobs.py                   Background runs (each a child `python run.py ...`).
+│   ├── prefs.py                  Run preferences.
+│   ├── live.py                   Live market data, scanner and watchlist.
+│   ├── learning_api.py           The web side of src/learning.py.
+│   ├── hybrid_api.py             Hybrid Model Lab: live what-if evaluations.
+│   ├── agents_api.py             The research workforce: roster, messages, live state.
+│   ├── agent_chat.py             The Research Room chat with the agents.
+│   ├── autostart.py              Starts the research workforce with the web app.
+│   ├── llm_api.py                AI provider management.
+│   └── yaml_patch.py             Edits agent_settings.yaml without losing its comments.
+│
+├── web/                          React front end (src/ = source, dist/ = the built app).
+│
+├── tools/                        Standalone scripts.
 │   ├── analyze.py                Re-run the analysis stage on an existing results CSV.
 │   ├── make_override_template.py Builds a fill-in sheet of every missing fundamental.
+│   ├── build_training_universe.py Builds data/training_universe.csv from NSE lists.
 │   └── screener.py               Optional: screens a candidate universe into a companies CSV.
+│
+├── tests/
+│   ├── test_agents.py            HYBRID MODEL and research agents (offline).
+│   └── test_live.py              Live market layer, watchlist and learning data (offline).
 │
 ├── data/
 │   ├── companies.csv             Main input (~42 companies, 9 sectors, explicit NSE tickers).
-│   ├── companies_raw1.csv        Raw source list (unnormalised: sector, name, cap range).
-│   ├── companies_raw2.csv        Raw source list (another unnormalised variant).
-│   ├── companies_raw3.csv        Alternative normalised list (~66 companies).
-│   └── fundamentals_override.csv Manual fundamentals sheet (currently header only).
+│   ├── training_universe.csv     ML training universe (tools/build_training_universe.py).
+│   ├── auto_training_universe.csv Candidate pool for auto-train.
+│   ├── fundamentals_override.csv Manual fundamentals sheet (currently header only).
+│   └── live/                     Watchlist and minute-bar store (git-ignored).
 │
 ├── output/                       Generated on each run (git-ignored; see §14).
-└── .cache/                       tickers.json — cached name→ticker lookups (git-ignored).
+│   └── intel/                    The research agents' memory and reports.
+└── .cache/                       Ticker lookups and the training-data download cache (git-ignored).
 ```
 
 ### Import convention
@@ -288,7 +352,7 @@ ticker,fy,ebit,ebitda,eps,net_income,da,capex,delta_nwc,ocf,total_debt,cash,shar
 
 ### Other files in `data/`
 
-`companies_raw1.csv` and `companies_raw2.csv` are raw research lists (sector, name, cap range, cap structure) in a non-standard layout, kept for reference. `companies_raw3.csv` is a larger list in the standard 4-column format. Pass any standard-format list with `--input`.
+`training_universe.csv` and `auto_training_universe.csv` feed the ML training and auto-train stages. To value a different list, pass any standard-format companies CSV with `--input`.
 
 ---
 
@@ -401,7 +465,7 @@ The resolver tries these sources in order:
 
 Successful search results are cached. A failure becomes `TICKER NOT RESOLVED` for that company.
 
-### Yahoo extraction: [`yf_source.py`](yf_source.py)
+### Yahoo extraction: [`yf_source.py`](src/sources/yf_source.py)
 
 - Downloads the income statement, balance sheet, cash flow, price history (from the start of the first FY to the end of FY+1) and the `info` block for beta. **Each download is wrapped separately.**
 - **Alias lists** resolve renamed line items. For example, `ebit` matches `EBIT` → `Operating Income` → `Total Operating Income As Reported`, and `eps` prefers Diluted over Basic.
@@ -534,7 +598,7 @@ This model works for **banks** and **loss-makers**: a below-par ROE gives a valu
 
 **Adjusted beta** ([`capital.py`](src/models/capital.py)): `β_adj = 0.67 × β_company + 0.33 × β_sector-median`. When Yahoo has no beta for the company, the sector median is used. The original DCF keeps the raw beta so that the baseline stays unchanged.
 
-### 12.4c Ensemble (formerly "Hybrid"): [`model_hybrid.py`](src/models/model_hybrid.py)
+### 12.4c Ensemble (formerly "Hybrid"): [`model_ensemble.py`](src/models/model_ensemble.py)
 
 ```
 Ensemble = exp( Σ_k w_k · (ln V_k − c_k) )   over the components k that apply to this company-year
@@ -559,7 +623,7 @@ Every row's regime, component values, calibrations, weights, range and confidenc
 
 **Limits:** the first year of any window has no error history, so it falls back to the regime-weighted equal mix. The weights reward closeness to the 1-May price, so the Ensemble inherits the study's own definition of "accurate".
 
-### 12.4d HYBRID MODEL: [`hybrid_model.py`](src/hybrid_model.py)
+### 12.4d HYBRID MODEL: [`hybrid_formula.py`](src/hybrid_formula.py)
 
 The headline value. Six lenses (cash flow, earnings power, asset, market, conservative, learning) are each calibrated against their own earlier misses. They are blended by company type, with a growth-credibility gate that only pays for growth the moat earns. The result is then adjusted for quality and governance, and run through bull / base / bear scenarios. It runs in the valuation report for every company-year (from the accounts alone, point-in-time) and in the research runs (with the agents' signals). Every constant is in `agent_settings.yaml -> hybrid_model` and can be tuned live in the web app's Hybrid Lab. Full method: [docs/HYBRID_MODEL.md](docs/HYBRID_MODEL.md). Per-row detail: `output/Hybrid_Model_Detail.csv`.
 

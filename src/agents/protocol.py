@@ -1,3 +1,4 @@
+# FILE: src/agents/protocol.py
 """
 The research protocol: who tells whom what, and when, for one company.
 

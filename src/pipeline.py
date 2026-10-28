@@ -17,7 +17,7 @@ import model_pe
 import model_ev_ebitda
 import model_graham
 import model_residual_income
-import model_hybrid
+import model_ensemble
 import model_hybrid_model
 import capital
 import exporter
@@ -478,7 +478,7 @@ def value_rows(ctx, ml_store, write_hybrid=True):
     want_hm = "hybrid_model" in enabled
     if want_ens or want_hm:
         try:
-            detail = model_hybrid.attach(
+            detail = model_ensemble.attach(
                 rows,
                 universe,
                 peer_universe,

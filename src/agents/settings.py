@@ -1,3 +1,4 @@
+# FILE: src/agents/settings.py
 """
 Loads agent_settings.yaml and answers dotted lookups with a default.
 

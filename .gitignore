@@ -25,6 +25,8 @@ __pycache__/
 .env
 .env.*
 !.env.example
+# AI providers added or edited in the web app (per machine)
+llm_providers.json
 
 # --- Web UI -----------------------------------------------------------------
 # web/dist IS tracked on purpose: 'python run.py --web' then works on a fresh

@@ -1,3 +1,4 @@
+# FILE: src/agents/team_equity.py
 """
 Equity Research Lead's team. Numbers only - no LLM is needed here, which is
 also why this team carries the most weight in the chief's score.

@@ -1,3 +1,4 @@
+# FILE: tools/screener.py
 """
 screener.py - builds companies.csv by screening a candidate universe.
 
