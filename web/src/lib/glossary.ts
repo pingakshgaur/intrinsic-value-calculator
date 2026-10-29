@@ -104,10 +104,10 @@ export const GLOSSARY: Topic[] = [
   {
     id: "watchlists", title: "Watchlists & data", icon: "eye", blurb: "Where companies come from and how they are followed.",
     terms: [
-      { term: "Universe", where: "/universe", text: "The master list of companies every valuation and research job works through." },
-      { term: "Coverage", where: "/coverage", text: "Companies with a research verdict from the latest run." },
+      { term: "Watchlists", where: "/watchlist", text: "Your named lists of companies, tracked live. Each company opens to its full analysis: live chart and forecast, research, valuation and model forecasts." },
+      { term: "Live forecast", text: "A company's likely price in 15 minutes, an hour, a day … five years: a median with a band holding 8 in 10 outcomes, recomputed with every price update. Short horizons follow its own volatility and recent moves; long ones are pulled towards the HYBRID MODEL value." },
       { term: "Watchlist library", where: "/watchlist", text: "Named lists of companies, each with a description and colour. A company can be on several lists; up to 100 companies are tracked across all of them." },
-      { term: "Focus", text: "Choose a watchlist in the top bar and Coverage, the Command Center, Universe, Model Performance and the research workforce show only its companies. “All companies” brings everything back." },
+      { term: "Focus", text: "Choose a watchlist in the top bar and the Command Center, Model Performance and the research workforce show only its companies. “All companies” brings everything back." },
       { term: "Tracker", text: "While the market is open, polls watched companies every 30 seconds, stores every minute bar on this computer, re-values covered companies at the live price, and raises your alerts." },
       { term: "Ticker", text: "NSE symbol plus .NS (BSE: .BO), for example TCS.NS." },
     ],

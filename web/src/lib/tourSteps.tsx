@@ -20,21 +20,21 @@ export interface TourStep {
 export interface Chapter { id: string; title: string; icon: string; color: string; blurb: string; steps: TourStep[] }
 
 const K = ({ children }: { children: ReactNode }) => <kbd>{children}</kbd>;
-const company = (path: string) => (c: TourCtx) => (c.company ? `/coverage/${c.company}${path}` : null);
+const company = (path: string) => (c: TourCtx) => (c.company ? `/company/${c.company}${path}` : null);
 
 export const CHAPTERS: Chapter[] = [
   {
     id: "frame", title: "Find your way", icon: "compass", color: "#57A3F8", blurb: "The frame around every page",
     steps: [
       { route: "/", target: ".sidebar", side: "right", title: "The sidebar",
-        body: <>Every page lives here, in three groups: <b>Analysis</b> (markets, watchlists, coverage, the Studio), the <b>Research workforce</b> (the AI agents) and <b>Models &amp; data</b>. <b>Operations</b> runs jobs and holds the settings.</>,
+        body: <>Every page lives here, in three groups: <b>Analysis</b> (markets, watchlists, the Studio), the <b>Research workforce</b> (the AI agents) and <b>Operations</b>, which runs jobs, scores the models and holds the settings.</>,
         try: <>Press <K>Alt</K> + <K>1</K>…<K>9</K> to jump between pages, or <K>Ctrl</K> + <K>\</K> to fold the sidebar.</> },
       { target: ".sb-foot", side: "right", title: "System status",
         body: <>A live health check: is the local server up, how many AI providers have working keys, when the valuation report and the last research were made, and whether the market tracker is running. Click it for the details.</> },
       { target: ".tape", side: "bottom", title: "The market tape",
         body: <>Nifty 50, India VIX, the rupee, oil, US yields and gold, each with its one-month change. Hover any of them for the 1-year move.</> },
       { target: ".scope-btn", side: "bottom", title: "Focus on a watchlist",
-        body: <>Pick one of your watchlists here and the whole app narrows to its companies: Coverage, the Command Center, Universe, Model Performance and the agents. <b>All companies</b> brings everything back.</> },
+        body: <>Pick one of your watchlists here and the whole app narrows to its companies: the Command Center, Model Performance and the agents. <b>All companies</b> brings everything back.</> },
       { target: ".cmdk", side: "bottom", title: "Search everything",
         body: <>Companies, pages and actions in one box. Type a company to open its profile, its live chart or the Studio; type <i>research</i> or <i>valuation</i> to start a run. This tour lives here too: search <b>onboarding</b> any time.</>,
         try: <><K>Ctrl</K> + <K>K</K> opens it from anywhere.</> },
@@ -64,31 +64,24 @@ export const CHAPTERS: Chapter[] = [
   {
     id: "markets", title: "Markets & watchlists", icon: "graph", color: "#86CF86", blurb: "Live prices and the lists you follow",
     steps: [
-      { route: "/markets", target: ".ixstrip", side: "bottom", title: "Indices, live",
-        body: <>The main NSE indices with intraday sparklines. Click one to chart it below.</> },
-      { target: ".sectheat", side: "bottom", title: "Sector heat",
-        body: <>Today's move for every sector at a glance: green up, red down.</> },
+      { route: "/markets", target: ".radar", side: "bottom", title: "Research radar",
+        body: <>What deserves a look right now, refreshed with every price update: companies that have just dropped under their HYBRID MODEL buy-below price, the biggest gaps to value, what the live forecast leans towards for today, and today's unusual moves. Click one to chart it below.</> },
       { target: ".mkt", title: "Charts and the scanner",
         body: <>Candles or lines from one day to the full history, with the HYBRID MODEL value and buy-below drawn on the chart. The scanner finds gainers, losers, volume spikes, 52-week extremes, RSI extremes, and covered companies trading below their buy-below price.</>,
         try: <>Every chart has an <b>Export</b> menu: PNG, PDF or Word.</> },
       { route: "/watchlist", target: ".wl-lib", title: "Your watchlist library",
         body: <>Named lists, each with a description and colour: a theme, a sector, a strategy, a shortlist. Cards show today's movers and who is in the buy zone. A company can sit on several lists.</> },
       { target: ".ph .acts", side: "bottom", title: "Make a list",
-        body: <>Fill it as you create it, or later with <b>Add companies</b>: search for names, take whole sectors at once, import a spreadsheet (Excel, CSV or pasted text), or copy another list. Open any list for live tiles, charts, price alerts and notes, and research it in one click.</> },
+        body: <>Fill it as you create it, or later with <b>Add companies</b>: search for names, type an index (NIFTY 50, NIFTY 500, Bank Nifty, Large cap…) to take all of it, pick whole sectors, import a spreadsheet (Excel, CSV or pasted text), or copy another list. Open any list for live tiles, search, charts, forecasts, price alerts and notes, and research it in one click.</> },
     ],
   },
   {
-    id: "coverage", title: "Coverage & company profiles", icon: "table", color: "#E0B97F", blurb: "The research verdicts",
+    id: "coverage", title: "Company analysis", icon: "go-to-file", color: "#E0B97F", blurb: "Everything on one company",
     steps: [
-      { route: "/coverage", target: ".split .toolbar", side: "bottom", title: "Coverage",
-        body: <>Every researched company with its label, value, range, upside, buy-below price, confidence and red flags. Filter by text, label or sector; choose columns; export the grid as Excel, CSV, Word, Markdown or PDF.</>,
-        try: <>In the grid, <K>↑</K> <K>↓</K> move between rows and <K>Enter</K> opens the profile.</> },
-      { target: ".split .dg-wrap", title: "The grid",
-        body: <>Click a column header to sort. Selecting a row opens a quick inspector on the right without leaving the list.</> },
       { route: company(""), target: ".profile-bar", side: "bottom", title: "A company profile",
-        body: <>The sticky bar keeps the essentials in view: price, the HYBRID MODEL value, upside, buy-below and confidence. <b>Studio</b> opens the company's valuation to tinker with; <b>Re-check</b> sends the agents back to it.</> },
+        body: <>Open any company on a watchlist with <b>Full analysis</b>. The sticky bar keeps the essentials in view: the live price, the HYBRID MODEL value, upside, buy-below and confidence. <b>Studio</b> opens the valuation to tinker with; <b>Re-check</b> sends the agents back to it.</> },
       { target: "nav.anchors", side: "right", title: "Sections",
-        body: <>Summary, valuation, model forecasts, drivers and risk, the agents' evidence, bull versus bear and history. The index follows you as you scroll.</> },
+        body: <>Live (chart, forecast from 15 minutes to 5 years, alerts), then the research: summary, valuation, model forecasts, drivers and risk, the agents' evidence, bull versus bear and history. The index follows you as you scroll.</> },
       { target: "#summary", title: "The research note",
         body: <>The chief agent's note, with every point traced to a cited finding, and each research lead's score from −1 to +1.</> },
       { target: "#forecast", title: "Model forecasts",
@@ -132,21 +125,19 @@ export const CHAPTERS: Chapter[] = [
     ],
   },
   {
-    id: "models", title: "Models & data", icon: "graph-line", color: "#CD861A", blurb: "How well it all works",
+    id: "models", title: "Model Performance", icon: "graph-line", color: "#CD861A", blurb: "How well it all works",
     steps: [
       { route: "/performance", target: ".page > .tabs", side: "bottom", title: "Model Performance",
         body: <>Every model scored against the market for every financial year: the typical miss, the hit rate within ±20%, bias and rank correlation. <b>Sectors</b> shows which model suits each sector and what each model forecasts for it; <b>Training data</b> shows what the AI models learn from and whether more of it helps.</> },
       { route: "/performance?tab=sectors", target: ".page > .band", side: "bottom", title: "Sectors",
         body: <>The most accurate model in every sector, each model's view of every sector against today's price with a one-year projection, and how each sector splits into companies below, near and above value.</> },
-      { route: "/universe", target: ".page .toolbar", side: "bottom", title: "Universe",
-        body: <>The master list every job works through. Edit inline, import or export CSV, set sectors in bulk, or add the selected companies to a watchlist.</> },
     ],
   },
   {
     id: "ops", title: "Operations & settings", icon: "server-process", color: "#C586C0", blurb: "Runs, keys and preferences",
     steps: [
-      { route: "/operations", target: ".ops > .panel", side: "right", title: "Operations",
-        body: <>Start any job from one form: the valuation report, research, a training-data refresh or a data check — on every company, a watchlist, or the ones you pick. Each shows its stages and full log as it runs.</> },
+      { route: "/operations", target: ".panel.nj", side: "bottom", title: "Operations",
+        body: <>Start any job from one row: the valuation report, research, a training-data refresh or a data check — on every covered company or on a watchlist. The job detail below shows its stages and full log as it runs; recent jobs sit under it.</> },
       { route: "/configuration", target: ".cfg-nav", side: "right", title: "Configuration",
         body: <>Run settings, data sources (Yahoo, Screener.in, NSE, BSE and key-based providers, in the order you trust them), AI providers, the research agents, notifications, macro inputs and the raw settings file.</> },
       { route: "/configuration?section=ai", target: ".cfg .col", side: "left", title: "AI providers",

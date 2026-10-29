@@ -17,10 +17,13 @@ It ships with a command-line interface, a browser app (`python run.py --web`), a
 > **New in 1.1.**
 > - **More data sources, with fallback.** Yahoo Finance is no longer the only source. Screener.in fills the years Yahoo lacks (ten or more years of accounts against Yahoo's ~4), and the NSE and BSE websites take over prices and live quotes when Yahoo has none. Financial Modeling Prep, EODHD and Alpha Vantage join with a free key. You set the order in Configuration → Data sources. See [§9](#9-data-layer).
 > - **Sector analysis.** Model Performance → Sectors shows which model is most accurate in each sector, what every model says each sector is worth today with a one-year projection, and how each sector splits into companies below, near and above value.
-> - **Watchlists by sector or spreadsheet.** Fill a list as you create it, or later: search, take whole sectors at once (including NSE's index lists of ~1,000 companies), import Excel/CSV/pasted text, or copy another list.
-> - **Research any watchlist** in one click from the Research workforce, the Agent Network, the Command Center or Coverage. Every company on the list is researched, valued before or not.
-> - **A plain-English summary** at the top of every company's profile.
-> - **A simpler workbench.** One place to start each kind of run, and no repeated buttons. Learning is now Model Performance → Training data.
+> - **Watchlists by index, sector or spreadsheet.** Fill a list as you create it, or later: search, type an index (NIFTY 50, NIFTY 500, Bank Nifty, Large / Mid / Small cap…) to take all of it, take whole sectors, import Excel/CSV/pasted text, or copy another list. Up to 600 companies are tracked live across all lists.
+> - **The watchlist is the research notebook.** Coverage and Universe are gone: open any company on a watchlist (**Full analysis**) for its live chart, a **live forecast from 15 minutes to 5 years**, alerts and note, then everything the research found: summary, valuation, model forecasts, drivers, evidence, bull vs bear, history. Search inside a list, and research columns (confidence, research score, red flags) in its table.
+> - **Live forecasts.** Recomputed with every price update while the market is open, from the stock's own minute and daily prices and the HYBRID MODEL value, with how often the same rules were right on its own past. See [docs/WEB.md](docs/WEB.md#live-forecasts).
+> - **A research radar on Markets:** who has just dropped under its buy-below price, the biggest gaps to value, today's forecast lean and today's unusual moves.
+> - **Research any watchlist** in one click from the Research workforce, the Agent Network, the Command Center or the list itself. Every company on the list is researched, valued before or not.
+> - **A plain-English summary** at the top of every company's analysis.
+> - **A simpler workbench.** One row to start each kind of run on Operations, with the job and the recent jobs below it; Model Performance sits under Operations; no repeated buttons. Learning is now Model Performance → Training data, and a model in the leaderboard opens to its breakdown. Charts in Files & charts open in a viewer with previous / next, thumbnails and zoom.
 > - **An updater** (`INTVAL-Update-<version>-…`) that upgrades an existing install in place. It backs up your data first and keeps it all: companies, watchlists, research history, the agents' memory, training data, settings and keys.
 
 ---
@@ -269,6 +272,8 @@ intrinsic-value-calculator/
 │   ├── prefs.py                  Run preferences.
 │   ├── live.py                   Live market data, scanner and watchlists (quotes fall back to NSE / BSE).
 │   ├── directory.py              The sector directory: known companies + NSE's index lists, by sector.
+│   ├── indices.py                Whole indices for the watchlists: NIFTY 50/500…, SENSEX, large/mid/small cap.
+│   ├── forecast_live.py          Live forecasts from 15 minutes to 5 years (minute bars, daily closes, HYBRID MODEL).
 │   ├── learning_api.py           The web side of src/learning.py.
 │   ├── hybrid_api.py             HYBRID MODEL Studio: live what-if evaluations.
 │   ├── agents_api.py             The research workforce: roster, messages, live state.
@@ -480,14 +485,12 @@ Tkinter desktop GUI, and every one of that GUI's features is in it:
 | Page | What it does |
 |---|---|
 | **Command Center** | Headline numbers, a coverage map of every researched company, signals, upside vs confidence, the model leaderboard, and one **Research** button |
-| **Markets** | Live indices, a market scanner and charts |
-| **Watchlists** | Named lists tracked live, with alerts and notes. Add companies by search, whole sectors, a spreadsheet or another list; research a list in one click |
-| **Coverage** | Every researched company. Each has a profile: a plain-English summary, the valuation, every model's forecast (with Show all / Remove all), drivers and risk, the agents' evidence, bull vs bear, history |
+| **Markets** | A research radar (buy zone, gaps to value, today's forecast lean, unusual moves), a market scanner and charts |
+| **Watchlists** | Named lists tracked live, with search, alerts and notes. Add companies by search, a whole index (NIFTY 50, NIFTY 500, Large cap…), whole sectors, a spreadsheet or another list; research a list in one click. Every company opens to its **full analysis**: live chart, live forecast (15 minutes to 5 years), alerts, then a plain-English summary, the valuation, every model's forecast (with Show all / Remove all), drivers and risk, the agents' evidence, bull vs bear, history |
 | **HYBRID MODEL Studio** | Change any constant and see values, ranges, lenses and the bridge respond live, then commit |
 | **Research workforce** | The 23 agents: Overview (teams, run output, past runs, **Research** on any watchlist, auto-start), the live Agent Network (with your own links and notes) and the Research Room chat |
 | **Model Performance** | Leaderboard · **Sectors** (best model per sector, sector forecast by model, sector segregation and prediction) · Company (every model, HYBRID MODEL and Ensemble detail) · **Training data** (what the AI models learn from, in plain words) · Files & charts |
-| **Universe** | Edit `data/companies.csv` |
-| **Operations** | One form for every job: a valuation report, research (quick or full), a training-data refresh or a data check, on every company, a watchlist or the ones you pick. Jobs are followed live |
+| **Operations** | One row to start any job: a valuation report, research (quick or full), a training-data refresh or a data check, on every covered company or a watchlist. The job is followed live below, with the recent jobs under it |
 | **Configuration** | Run settings, **data sources**, AI providers (including local Ollama models), research agents, notifications, macro inputs, the raw settings file |
 
 [docs/WEB.md](docs/WEB.md) has the details.
@@ -563,6 +566,8 @@ The pipeline, the learning feed and the auto-trainer fetch through `data_hub.fet
 - **Notes say where each number came from**, e.g. "filled from Screener.in: ebit, eps, shares". The console run log adds `via Screener.in` per company.
 - **Live quotes:** when Yahoo has no quote for a tracked company, the tracker asks NSE, then BSE.
 - **Sector lists:** NSE's index lists (Total Market, Nifty 500, Microcap 250) feed the watchlists' sector import (`server/directory.py`), cached for a week.
+- **Index lists:** any one index (NIFTY 50, NIFTY 500, Bank Nifty, Midcap 150, …) for the watchlists' index import and search (`server/indices.py`), cached for a week; NIFTY 50 and SENSEX are also bundled for offline use.
+- **Test a provider:** Configuration → Data sources → **Test** asks it for one well-known company, to see whether it answers from your network.
 - **Unofficial endpoints:** the NSE and BSE endpoints are the ones their own websites use. They need cookies and a browser-like header, change without notice, and **block many datacentre and VPN addresses**, so they work best from a home connection. A provider that does not answer is skipped; nothing stops a run.
 
 ---

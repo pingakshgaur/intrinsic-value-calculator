@@ -47,7 +47,7 @@ The valuation engine turns a company's accounts into an estimate of its worth pe
 
 ### Step 1 — Gather the data
 
-- **Company list.** The user keeps a list of companies (name, sector, size, stock symbol) on the Universe page.
+- **Company list.** The core list of companies (name, sector, size, stock symbol) is `data/companies.csv`; any watchlist can also be valued or researched on its own, and every watchlist company joins the learning data.
 - **Finding the symbol.** If a symbol is missing, INTVAL looks it up: first a hand-checked list, then a saved cache, then a search.
 - **Downloading.** For each company it downloads the income statement, balance sheet, cash-flow statement, daily prices and a risk measure (beta). It uses several providers, in an order the user sets in Configuration → Data sources:
   - **Yahoo Finance** goes first.
@@ -195,7 +195,7 @@ The web app is where all of INTVAL is used. It opens in the browser at `http://1
 
 ### The frame around every page
 
-- **Sidebar (left):** the pages, grouped into Analysis, Research workforce, Models & data and Operations. At the bottom, one compact **System** line shows five status dots (server, AI providers, last report, last research, price tracker); click it for the details. The collapse button (or `Ctrl+\`) shrinks the sidebar to icons.
+- **Sidebar (left):** the pages, grouped into Analysis, Research workforce and Operations (jobs, Model Performance, Configuration). At the bottom, one compact **System** line shows five status dots (server, AI providers, last report, last research, price tracker); click it for the details. The collapse button (or `Ctrl+\`) shrinks the sidebar to icons.
 - **Top bar:** a live market tape (Nifty 50, India VIX, USD/INR, Brent crude, US 10-year yield, gold, each with its one-month change), a light/dark switch, search (`Ctrl+K`) across companies, pages and actions, the alerts bell, the glossary (`?`), and a run indicator that opens the list of runs.
 - **Every page** has its own loading, empty and error states, and a PDF button that exports the page.
 
@@ -210,26 +210,27 @@ The web app is where all of INTVAL is used. It opens in the browser at `http://1
 
 **Markets** — the live market.
 
-- Index cards (Nifty 50, Sensex, Bank, IT, Midcap 50, Financial Services, VIX) with intraday mini-charts, and a sector heat strip.
+- A **research radar**, refreshed with every price update: companies under their HYBRID MODEL buy-below price, the biggest gaps to value, the live forecast's lean for today, and today's unusual moves (volume spikes, big moves, alerts that fired).
 - A **scanner** over about 425 companies: top gainers and losers, most active, volume spikes, near 52-week highs or lows, overbought or oversold, and covered companies below their buy-below price.
 - A full trading chart for any company or symbol: candles, bars, line and area styles; indicators (moving averages, Bollinger bands, VWAP, RSI, MACD); drawing tools (trend lines, rectangles, Fibonacci, measure, notes); right-click to add a price alert; the HYBRID MODEL value and buy-below drawn as lines.
 
-**Watchlists** — named lists of the companies you follow closely (up to 250 across all lists).
+**Watchlists** — named lists of the companies you follow closely (up to 600 across all lists). The watchlist is the research notebook: every company opens to its full analysis.
 
-- **Adding companies**, when a list is created or later, four ways:
-  - **search** by name or symbol;
+- **Adding companies**, when a list is created or later, five ways:
+  - **search** by name or symbol — or an index name (`NIFTY50`, `Nifty 500`, `Bank Nifty`, `Large cap`), which offers every company in it;
+  - **a whole index**: NIFTY 50 / Next 50 / 100 / 200 / 500 / Total Market, SENSEX, large / mid / small / micro cap, or an NSE sector index, from NSE's published lists (a bundled list or the known companies when offline);
   - **whole sectors**: tick one or several sectors and take all of their companies or a few. The app's own lists plus NSE's index lists give about 1,000 companies, each with its industry;
   - **a spreadsheet**: Excel, CSV or pasted text;
   - **another list**.
 - A list's page has three buttons: **Add companies**, **Research this list** and **More** (edit, focus the app, update prices, pause tracking, tracking settings).
 - A headline band: how many are tracked, advancing vs declining, average change, how many sit below their buy-below price, and today's alerts.
-- **Tiles or Table** view. In the table, click any column header to sort (click again to reverse); in tiles, the same column names appear as sort buttons.
+- **Tiles or Table** view, with a **search box** for the list. In the table, click any column header to sort (click again to reverse); in tiles, the same column names appear as sort buttons. The table also shows confidence, the research score and red flags.
 - Clicking a company opens a **detail panel** beside the list, with its own scroll: a simple price chart (1 day to 1 year), the HYBRID MODEL re-valued at today's price, price-alert levels, a note, and a link to the full chart.
 - A **live alerts** feed below.
 
-**Coverage** — every researched company in a sortable grid with a column chooser, compact rows and CSV export. Selecting a row opens a quick inspector; `Enter` opens the full profile.
+**Company analysis** — one company in depth, opened from its watchlist (**Full analysis**, double-click, or `Enter` in the table). A sticky bar shows the live price, HYBRID MODEL value, upside, buy-below and confidence, with previous / next through the list. A section menu on the left follows your scrolling and highlights where you are:
 
-**Company profile** — one company in depth. A sticky bar shows price, HYBRID MODEL value, upside, buy-below and confidence. A section menu on the left follows your scrolling and highlights where you are:
+- **Live:** the price chart, a **live forecast** for 15 minutes, 1 hour, 1 day, 1 week, 1 / 3 / 6 months and 1 / 3 / 5 years (median, a band holding 8 in 10 outcomes, the chance it ends higher, the main driver, and how often the same rules were right on its own past), and the price alerts and note. Recomputed with every price update while the market is open.
 
 - **Summary:** first **In plain words**, a short reading in everyday language. It says whether the share looks cheap, fairly priced or expensive and by how much, how sure the models are, the price a cautious buyer would wait for, what the models expect in a year, and the good and bad cases. It ends with short lists of what is in the company's favour and what to keep an eye on. Then the research note and key points.
 - **Forecasts:** every model's predicted price over days, months or years, with **Show all** and **Remove all** at the right edge of the chart, and a forecast table.
@@ -266,11 +267,11 @@ The web app is where all of INTVAL is used. It opens in the browser at `http://1
 
 **Research Room** — the team's chat (see the next section).
 
-### Models & data
+### Operations
 
 **Model Performance** — how accurate each method has been, in five tabs:
 
-- **Leaderboard:** each method's error, hit rate, bias and rank correlation; error by year; how often each wins.
+- **Leaderboard:** each method's error, hit rate, bias and rank correlation; error by year; how often each wins. Click a method for its breakdown: error by year, sectors won, where it is most and least accurate.
 - **Sectors:**
   - *which model suits each sector*: the most accurate method, its error, the runner-up, and the HYBRID MODEL's error;
   - how many sectors each method wins;
@@ -279,20 +280,13 @@ The web app is where all of INTVAL is used. It opens in the browser at `http://1
   - *sector segregation and prediction*: per sector, how many companies sit below, near or above value, the top pick, and a chart of each sector's upside and one-year projection. Click a sector to list its companies.
 - **Company:** every method by year for one company, plus HYBRID MODEL and Ensemble detail.
 - **Training data:** how the machine-learning models grow, in plain words (see *Learning data* below).
-- **Files & charts:** downloads, companies left out, the chart gallery.
+- **Files & charts:** downloads, companies left out, the chart gallery, opening in a viewer with previous / next, thumbnails and zoom.
 
-**Universe** — the editable company list: add, delete, set sectors in bulk, import and export CSV, and checks for problems.
+**Operations** — start and watch jobs, top to bottom:
 
-### Operations
-
-**Operations** — start and watch jobs from one form:
-
-- **What to run:** a valuation report, research (quick or full), a training-data refresh, or a data check.
-- **Which companies:** all covered ones, a watchlist, or the ones you pick.
-- **Which years.**
-- **Options:** only the ones that apply. The rare ones (auto-train, rule-based research, offline test data) sit under *More options*.
-
-Beside it, the live job shows its stages and log, and a table lists past jobs. Only one job runs at a time.
+- **New job:** what to run (a valuation report, research, a training-data refresh, or a data check), then one row: which companies (every covered one or a watchlist), the research depth or the years, the one option that applies, **Advanced** (auto-train, rule-based research, offline test data) and **Start**.
+- **Job detail**, full width: the live job's stages and log.
+- **Recent jobs**, full width, under it. Only one job runs at a time.
 
 **Configuration** — every setting: run and data-quality settings, **data sources** (each provider on or off, the order they are trusted in, free keys), AI providers (key, model picker, test, fail-over order), local models through Ollama, research agents, economic inputs, notifications and sounds, and the raw settings file.
 
@@ -370,7 +364,7 @@ Everything INTVAL knows lives in plain files inside the project folder; nothing 
 
 | What | Where | Notes |
 | --- | --- | --- |
-| Company list | `data/companies.csv` | Edited on the Universe page |
+| Company list | `data/companies.csv` | The core coverage list; watchlists add to what is researched and learned from |
 | Hand-entered figures | `data/fundamentals_override.csv` | Always wins over downloaded data |
 | Valuation assumptions | `src/config.py` | Years, prices, discount rates, model switches |
 | HYBRID MODEL and agent settings | `agent_settings.yaml` | Every constant, with comments; edited in the Studio and Configuration |
@@ -538,7 +532,6 @@ Plain-language meanings of every term used in this document and in the app, in a
 | Team report | A lead's combined score from its analysts' findings. |
 | Tracker | The background process that follows watchlist prices while the app runs. |
 | Upside | How far the value is above (+) or below (−) the current price, in percent. |
-| Universe | The editable list of companies INTVAL knows about. |
 | Validation | The review step that rejects findings lacking proper evidence. |
 | Verdict | The chief's final call on a company: value, range, confidence, buy-below and label. |
 | Watchlist | Up to 60 companies followed live, with alerts. |

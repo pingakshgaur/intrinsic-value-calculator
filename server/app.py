@@ -27,6 +27,8 @@ from server import (
 )
 from server import data as D
 from server import directory
+from server import indices
+from server import forecast_live
 from server.jobs import JobManager
 import source_settings  # noqa: E402  (src/sources is on sys.path via `server`)
 
@@ -672,6 +674,19 @@ def live_scan(refresh: bool = False):
     return _live(live.SCANNER.snapshot, refresh)
 
 
+@app.get("/api/live/forecast")
+def live_forecast(ticker: str):
+    """Price forecasts from 15 minutes to 5 years, computed on request from the stored prices and the HYBRID MODEL value."""
+    return _live(forecast_live.forecast, ticker)
+
+
+@app.get("/api/live/forecast/quick")
+def live_forecast_quick(tickers: str = ""):
+    """The 1-hour / 1-day / 1-month view for many tracked companies (comma-separated; default every tracked one)."""
+    ts = [t for t in tickers.split(",") if t] or [w["ticker"] for w in live.watchlist()]
+    return _live(forecast_live.quick, ts[: live.MAX_TRACKED])
+
+
 @app.get("/api/live/chart")
 def live_chart(ticker: str, range: str = "1d"):
     return _live(live.chart, ticker, range)
@@ -945,6 +960,17 @@ def data_sources_save(body: SourceOrder):
     return {"providers": source_settings.status()}
 
 
+@app.post("/api/data-sources/{key}/test")
+def data_source_test(key: str):
+    """Does this provider answer from here? Asks it for one well-known company."""
+    import price_chain
+
+    try:
+        return price_chain.probe(key)
+    except KeyError:
+        raise HTTPException(404, f"no data source {key}")
+
+
 @app.get("/api/directory/sectors")
 def directory_sectors():
     return _live(directory.sectors)
@@ -963,6 +989,20 @@ def directory_refresh():
     except RuntimeError as e:
         raise HTTPException(502, str(e))
     return {"companies": n, **directory.sectors()}
+
+
+@app.get("/api/indices")
+def index_catalog(q: str = ""):
+    """Every index a watchlist can take whole; with ?q= only the ones a search text names."""
+    return indices.match(q) if q else indices.catalog()
+
+
+@app.get("/api/indices/{key}")
+def index_members(key: str, refresh: bool = False):
+    try:
+        return indices.members(key, refresh)
+    except KeyError as e:
+        raise HTTPException(404, str(e).strip("'\""))
 
 
 @app.get("/api/health")

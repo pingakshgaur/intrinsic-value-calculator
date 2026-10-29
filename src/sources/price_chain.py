@@ -104,3 +104,39 @@ def last_price(ticker):
         _site_fail[key] = (fails + 1, now)
     _quote_miss[ticker] = now
     return None, None
+
+
+def probe(key, ticker="RELIANCE.NS", timeout=25):
+    """Ask one provider for a well-known company, to check it answers from this network.
+    -> {ok, seconds, detail}"""
+    import concurrent.futures as cf
+    import datetime as dt
+
+    if key not in source_settings.BY_KEY:
+        raise KeyError(key)
+    p = source_settings.BY_KEY[key]
+    if p["env"] and not source_settings.has_key(key):
+        return {"ok": False, "seconds": 0, "detail": f"needs a free key ({p['env']}) first"}
+    end = dt.date.today()
+
+    def go():
+        if key == "screener":
+            import screener_source
+
+            years = screener_source.fetch(ticker) or {}
+            return bool(years), f"{len(years)} years of accounts" if years else "no accounts came back"
+        s = FETCH[key](ticker, end - dt.timedelta(days=30), end)
+        n = 0 if s is None else len(s.dropna())
+        return n > 0, f"{n} daily prices for the last month" if n else "no prices came back"
+
+    t0 = time.time()
+    ex = cf.ThreadPoolExecutor(max_workers=1)
+    try:
+        ok, detail = ex.submit(go).result(timeout=timeout)
+    except cf.TimeoutError:
+        ok, detail = False, f"no answer within {timeout} seconds"
+    except Exception as e:  # noqa: BLE001
+        ok, detail = False, f"{type(e).__name__}: {str(e)[:160]}"
+    finally:
+        ex.shutdown(wait=False)  # a provider that hangs is left behind, not waited for
+    return {"ok": ok, "seconds": round(time.time() - t0, 1), "detail": f"{ticker.split('.')[0]}: {detail}"}

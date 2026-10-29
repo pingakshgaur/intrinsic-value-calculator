@@ -11,6 +11,7 @@ import { Column, DataGrid, useGridState } from "../components/DataGrid";
 import { RunButton } from "../components/RunButton";
 import { useApp } from "../components/workbenchContext";
 import { Select } from "../components/Select";
+import { companyPath } from "../lib/company";
 
 type Overrides = Record<string, number | boolean>;
 const CUR = "studio.overrides.v1";
@@ -302,7 +303,7 @@ function CompanyCanvas({ company, list, onPick, overrides, byPath, setOverrides,
           {sim && <span className={`tag ${sim.source === "research" ? "hm" : ""}`}>{sim.source === "research" ? "agent signals" : "accounts only"} · FY{sim.fy}</span>}
           {busy && <Icon name="loading" className="spin faint sm" />}
           <span className="spacer" />
-          {sim?.source === "research" && <Link to={`/coverage/${slug(company)}`} className="btn xs ghost">Profile <Icon name="arrow-right" className="xs" /></Link>}
+          {sim?.source === "research" && <Link to={companyPath(company)} className="btn xs ghost">Full analysis <Icon name="arrow-right" className="xs" /></Link>}
         </div>
         <div className="pane-b">
           {err != null && <div style={{ padding: 12 }}><ErrorNote error={err} /></div>}

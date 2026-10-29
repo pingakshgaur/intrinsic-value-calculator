@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AgentStatus, colorOf, Msg, Profiles, roleName, Roster, timeOf, tuned, useAgentRuns, useLiveFeed, useProfiles, useRoster, workforceSize } from "../lib/agents";
-import { ago, isNum, isoWhen, pct, slug } from "../lib/format";
+import { ago, isNum, isoWhen, pct } from "../lib/format";
 import { AgentAvatar } from "../components/AgentAvatar";
 import { AgentProfile } from "../components/AgentProfile";
 import { WorkforceControl } from "../components/WorkforceControl";
@@ -9,6 +9,7 @@ import { Drawer, Empty, Icon, LabelBadge, PageHeader, Panel, QueryView } from ".
 import { ScopeNote } from "../components/ScopePicker";
 import { useScope } from "../lib/scope";
 import { ResearchLauncher } from "../components/ResearchLauncher";
+import { companyPath } from "../lib/company";
 
 const TEAM_ORDER = ["CMD", "NWS", "EQR", "IGR", "MAO", "IRV"];
 
@@ -160,7 +161,7 @@ function Highlights({ verdicts, flags, roster }: { verdicts: Msg[]; flags: Msg[]
       {items.map((m) => {
         const d = m.data as Record<string, unknown>;
         return (
-          <Link key={m.id} className="ov-hl-row" to={m.company ? `/coverage/${slug(m.company)}` : "/agents/chat"} title={m.text}>
+          <Link key={m.id} className="ov-hl-row" to={m.company ? companyPath(m.company) : "/agents/chat"} title={m.text}>
             {m.kind === "verdict" ? <LabelBadge label={String(d.label ?? "")} /> : <span className="tag down xs"><Icon name="warning" className="xs" />flag</span>}
             <span className="grow ellipsis">{m.company ?? m.text}</span>
             {m.kind === "verdict" && isNum(d.upside) && <b className={`mono xs ${d.upside >= 0 ? "up" : "down"}`}>{pct(d.upside, 0, true)}</b>}

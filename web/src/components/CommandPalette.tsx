@@ -6,6 +6,7 @@ import { Icon } from "./ui";
 import { useApp } from "./workbenchContext";
 import { loadTour } from "./Tour";
 import { CHAPTERS } from "../lib/tourSteps";
+import { companyPath } from "../lib/company";
 
 interface Cmd {
   id: string;
@@ -47,16 +48,14 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       { id: "p-o", group: "Go to", label: "Command Center", icon: "pulse", hint: "Alt+1", run: go("/") },
       { id: "p-mk", group: "Go to", label: "Markets · live scanner and charts", icon: "graph", hint: "Alt+2", run: go("/markets") },
       { id: "p-wl", group: "Go to", label: "Watchlists · your lists, tracked live", icon: "eye", hint: "Alt+3", run: go("/watchlist") },
-      { id: "p-r", group: "Go to", label: "Coverage", icon: "table", hint: "Alt+4", run: go("/coverage") },
-      { id: "p-l", group: "Go to", label: "HYBRID MODEL Studio", icon: "beaker", hint: "Alt+5", run: go("/studio") },
-      { id: "p-agents", group: "Go to", label: "Research workforce · overview of the agents and runs", icon: "organization", hint: "Alt+6", run: go("/agents") },
-      { id: "p-net", group: "Go to", label: "Agent Network · live graph of the 23 agents", icon: "type-hierarchy", hint: "Alt+7", run: go("/agents/network") },
-      { id: "p-room", group: "Go to", label: "Research Room · agent chat", icon: "comment-discussion", hint: "Alt+8", run: go("/agents/chat") },
+      { id: "p-l", group: "Go to", label: "HYBRID MODEL Studio", icon: "beaker", hint: "Alt+4", run: go("/studio") },
+      { id: "p-agents", group: "Go to", label: "Research workforce · overview of the agents and runs", icon: "organization", hint: "Alt+5", run: go("/agents") },
+      { id: "p-net", group: "Go to", label: "Agent Network · live graph of the 23 agents", icon: "type-hierarchy", hint: "Alt+6", run: go("/agents/network") },
+      { id: "p-room", group: "Go to", label: "Research Room · agent chat", icon: "comment-discussion", hint: "Alt+7", run: go("/agents/chat") },
       { id: "p-m", group: "Go to", label: "Model Performance", icon: "graph-line", hint: "Alt+9", run: go("/performance") },
       { id: "p-sec", group: "Go to", label: "Model Performance · which model suits each sector", icon: "symbol-class", run: go("/performance?tab=sectors") },
       { id: "p-le", group: "Go to", label: "Model Performance · training data", icon: "mortar-board", run: go("/performance?tab=training") },
-      { id: "p-u", group: "Go to", label: "Universe", icon: "database", run: go("/universe") },
-      { id: "p-run", group: "Go to", label: "Operations", icon: "server-process", run: go("/operations") },
+      { id: "p-run", group: "Go to", label: "Operations", icon: "server-process", hint: "Alt+8", run: go("/operations") },
       { id: "p-s", group: "Go to", label: "Configuration", icon: "settings", run: go("/configuration") },
       { id: "r-learn", group: "Run", label: "Refresh training data", icon: "cloud-download", run: job("learn") },
       { id: "r-retrain", group: "Run", label: "Refresh training data and retrain", icon: "sync", run: job("learn", { retrain: true }) },
@@ -73,7 +72,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     const seen = new Set<string>();
     for (const v of intel.data?.verdicts ?? []) {
       seen.add(v.company);
-      c.push({ id: "c-" + v.company, group: "Companies", label: shortName(v.company), icon: "symbol-class", hint: v.label, run: go(`/coverage/${slug(v.company)}`) });
+      c.push({ id: "c-" + v.company, group: "Companies", label: shortName(v.company), icon: "symbol-class", hint: v.label, run: go(companyPath(v.company)) });
       c.push({ id: "l-" + v.company, group: "Open in Studio", label: shortName(v.company), icon: "beaker", run: go(`/studio?company=${slug(v.company)}`) });
       if (v.ticker) c.push({ id: "k-" + v.company, group: "Live chart", label: shortName(v.company), icon: "graph", hint: v.ticker, run: go(`/markets?t=${encodeURIComponent(v.ticker)}`) });
     }

@@ -1,11 +1,12 @@
 import { ReactNode, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { isOpen, useChart, useWatchMutations, WatchItem } from "../lib/live";
-import { isNum, money, num, pct, shortName, slug, when } from "../lib/format";
+import { isNum, money, num, pct, shortName, when } from "../lib/format";
 import { ErrorNote, Icon, LabelBadge, Skeleton } from "./ui";
 import { Level, TradingChart } from "./TradingChart";
 import { SimpleChart } from "./SimpleChart";
 import { useApp } from "./workbenchContext";
+import { companyPath } from "../lib/company";
 
 const RANGES = [["1d", "1D"], ["5d", "5D"], ["1mo", "1M"], ["6mo", "6M"], ["1y", "1Y"], ["5y", "5Y"], ["max", "Max"]] as const;
 const SIMPLE_RANGES = ["1d", "5d", "1mo", "6mo", "1y"];
@@ -112,7 +113,7 @@ export function ChartPanel({ ticker, watch, height = 400, extra, compactHead, si
             <span className="tag hm">HYBRID MODEL at the live price</span>
             <LabelBadge label={hm.label} />
             <span className="spacer" />
-            <Link className="xs" to={`/coverage/${slug(hm.company)}`}>Open profile</Link>
+            <Link className="xs" to={companyPath(hm.company)}>Full analysis</Link>
           </div>
           <div className="cp-figs" style={{ border: 0, padding: 0 }}>
             <div><span>Value</span><b style={{ color: "var(--hm)" }}>{money(hm.value, 0)}</b></div>
@@ -126,6 +127,7 @@ export function ChartPanel({ ticker, watch, height = 400, extra, compactHead, si
       )}
       {extra}
       {simple && <Link className="xs cp-full" to={`/markets?t=${encodeURIComponent(ticker)}`}><Icon name="graph-line" className="xs" />Full chart with indicators and drawing tools</Link>}
+      {d?.note && <div className="xs warn cp-foot"><Icon name="info" className="xs" /> {d.note}</div>}
       {d && <div className="xs faint cp-foot">{d.market.delay_note}. {d.market.ist}.</div>}
     </div>
   );

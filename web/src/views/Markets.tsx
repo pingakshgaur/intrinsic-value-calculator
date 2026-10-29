@@ -1,14 +1,15 @@
-import { useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { isOpen, IndexQuote, ScanRow, useIndices, useLiveSearch, useScan, useWatchlist, useWatchMutations } from "../lib/live";
+import { ReactNode, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { isOpen, LiveHM, ScanRow, useIndices, useLiveAlerts, useLiveSearch, useQuickForecasts, useScan, useWatchlist, useWatchMutations } from "../lib/live";
 import { ago, isNum, money, num, pct, shortName } from "../lib/format";
 import { HM_COLOR, LABEL_HEX } from "../lib/labels";
-import { ErrorNote, Icon, LabelBadge, PageHeader, Popover, Skeleton } from "../components/ui";
+import { ErrorNote, Icon, LabelBadge, PageHeader, Popover } from "../components/ui";
 import { Column, DataGrid, GridTools, useGridState } from "../components/DataGrid";
 import { ChartPanel } from "../components/ChartPanel";
 import { Position, Spark } from "../components/Spark";
 import { useApp } from "../components/workbenchContext";
 import { Select } from "../components/Select";
+import { listCompanyPath } from "../lib/company";
 
 type Preset = "all" | "gainers" | "losers" | "active" | "volume" | "high52" | "low52" | "oversold" | "value";
 const PRESETS: { id: Preset; label: string; icon: string; hint: string }[] = [
@@ -57,7 +58,7 @@ export function Markets() {
       <PageHeader crumbs={[{ label: "Analysis" }, { label: "Markets" }]} title="Markets"
         sub={market ? <span className="row" style={{ gap: 8 }}><span className={`live-dot ${isOpen(market) ? "on" : ""}`}>{isOpen(market) ? (market.state === "pre-open" ? "Pre-open" : "Market open") : "Market closed"}</span><span>{market.ist}</span><span className="faint">· {market.delay_note}</span></span> : "Live NSE prices, a market-wide scanner and charts for any listed company."}
         actions={<TickerSearch onPick={open} />} />
-      <IndexStrip q={ix} selected={ticker} onPick={open} />
+      <Radar selected={ticker} onPick={(t) => { open(t); reveal(); }} />
       <div className="mkt">
         <div ref={chartRef}><ChartPanel ticker={ticker} height={560} /></div>
         <Scanner selected={ticker} onPick={(t) => { open(t); reveal(); }} />
@@ -66,43 +67,70 @@ export function Markets() {
   );
 }
 
-function IndexStrip({ q, selected, onPick }: { q: ReturnType<typeof useIndices>; selected: string; onPick: (t: string) => void }) {
-  if (q.isError) return <ErrorNote error={q.error} onRetry={() => q.refetch()} />;
-  if (!q.data) return <div className="ixstrip">{Array.from({ length: 7 }, (_, i) => <div key={i} className="ix"><Skeleton h={54} /></div>)}</div>;
-  const sectors = q.data.sectors.filter((s) => isNum(s.chg_pct)).sort((a, b) => b.chg_pct! - a.chg_pct!);
-  return (
-    <>
-      <div className="ixstrip">
-        {q.data.indices.map((r) => <IndexCard key={r.ticker} r={r} on={selected === r.ticker} onPick={onPick} />)}
-      </div>
-      {sectors.length > 0 && (
-        <div className="sectheat">
-          <span className="label">Sectors today</span>
-          {sectors.map((s) => {
-            const c = s.chg_pct!;
-            const a = Math.min(1, Math.abs(c) / 0.03);
-            return (
-              <button key={s.ticker} className={`sh ${selected === s.ticker ? "on" : ""}`} onClick={() => onPick(s.ticker)}
-                style={{ background: c >= 0 ? `rgba(134,207,134,${0.08 + a * 0.3})` : `rgba(239,135,115,${0.08 + a * 0.3})` }}>
-                {s.name}<b>{pct(c, 1, true)}</b>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </>
-  );
-}
+interface RadarRow { ticker: string; name: string; last: number | null; chg: number | null; hm?: LiveHM | null; vol?: number | null; list?: string }
 
-function IndexCard({ r, on, onPick }: { r: IndexQuote; on: boolean; onPick: (t: string) => void }) {
-  const up = (r.chg_pct ?? 0) >= 0;
+/**
+ * What deserves a look right now, refreshed with every price update: who has
+ * just dropped into the HYBRID MODEL buy zone, the biggest gaps to value, what
+ * the live forecast leans towards for today, and today's unusual moves.
+ * Tracked (watchlist) prices win over the scanner's, being fresher.
+ */
+function Radar({ selected, onPick }: { selected: string; onPick: (t: string) => void }) {
+  const scan = useScan();
+  const wl = useWatchlist();
+  const fc = useQuickForecasts();
+  const alerts = useLiveAlerts();
+  const rows = useMemo(() => {
+    const by = new Map<string, RadarRow>();
+    for (const r of scan.data?.rows ?? []) by.set(r.ticker, { ticker: r.ticker, name: r.name, last: r.last, chg: r.chg_pct, hm: r.hm, vol: r.vol_ratio });
+    for (const w of wl.data?.items ?? []) {
+      const q = w.quote;
+      if (!q?.last) continue;
+      const old = by.get(w.ticker);
+      by.set(w.ticker, { ticker: w.ticker, name: w.name, last: q.last, chg: q.chg_pct ?? null, hm: q.hm ?? old?.hm, vol: old?.vol, list: w.lists?.[0] });
+    }
+    return [...by.values()];
+  }, [scan.data, wl.data]);
+  const buyZone = rows.filter((r) => r.hm?.buy_below && isNum(r.last) && r.last <= r.hm.buy_below).sort((a, b) => a.last! / a.hm!.buy_below! - b.last! / b.hm!.buy_below!);
+  const gaps = rows.filter((r) => isNum(r.hm?.upside) && r.hm!.upside! > 0).sort((a, b) => b.hm!.upside! - a.hm!.upside!);
+  const outlook = rows.filter((r) => fc.data?.[r.ticker]).sort((a, b) => Math.abs(fc.data![b.ticker]["1d"].p_up - 0.5) - Math.abs(fc.data![a.ticker]["1d"].p_up - 0.5));
+  const today = new Date().toISOString().slice(0, 10);
+  const fired = new Map<string, number>();
+  for (const al of alerts.data ?? []) if (new Date(al.t * 1000).toISOString().slice(0, 10) === today) fired.set(al.ticker, (fired.get(al.ticker) ?? 0) + 1);
+  const unusual = rows.filter((r) => (r.vol ?? 0) >= 2 || Math.abs(r.chg ?? 0) >= 0.04 || fired.has(r.ticker))
+    .sort((a, b) => (b.vol ?? 1) * Math.abs(b.chg ?? 0) + (fired.get(b.ticker) ?? 0) - ((a.vol ?? 1) * Math.abs(a.chg ?? 0) + (fired.get(a.ticker) ?? 0)));
+  const loading = !scan.data && !wl.data;
+  const item = (r: RadarRow, right: ReactNode, sub: ReactNode) => (
+    <div key={r.ticker} className={`rd-row ${selected === r.ticker ? "on" : ""}`} role="button" tabIndex={0} onClick={() => onPick(r.ticker)} onKeyDown={(e) => e.key === "Enter" && onPick(r.ticker)}>
+      <div className="rd-n"><b className="ellipsis">{shortName(r.name)}</b><small className="ellipsis">{sub}</small></div>
+      <div className="rd-v">{right}</div>
+      {r.list && <Link className="ibtn sm rd-open" to={listCompanyPath(r.list, r.ticker)} onClick={(e) => e.stopPropagation()} title="Full analysis"><Icon name="go-to-file" className="xs" /></Link>}
+    </div>
+  );
+  const chg = (r: RadarRow) => <span className={`mono xs ${(r.chg ?? 0) >= 0 ? "up" : "down"}`}>{pct(r.chg, 1, true)}</span>;
+  const cols: { t: string; icon: string; hint: string; rows: RadarRow[]; empty: string; render: (r: RadarRow) => ReactNode }[] = [
+    { t: "In the buy zone", icon: "tag", hint: "trading under the HYBRID MODEL buy-below price", rows: buyZone, empty: "No valued company is under its buy-below price.",
+      render: (r) => item(r, <><b className="mono up">{pct(r.last! / r.hm!.buy_below! - 1, 1, true)}</b>{chg(r)}</>, <>under buy-below {money(r.hm!.buy_below, 0)}</>) },
+    { t: "Biggest gap to value", icon: "symbol-operator", hint: "live price furthest below the HYBRID MODEL value", rows: gaps, empty: "Value companies (a valuation report or research run) to see their gaps.",
+      render: (r) => item(r, <><b className="mono up">{pct(r.hm!.upside, 0, true)}</b>{chg(r)}</>, <>{money(r.last)} → <span style={{ color: HM_COLOR }}>{money(r.hm!.value, 0)}</span></>) },
+    { t: "Today's lean", icon: "graph-line", hint: "live forecast for the rest of the day, tracked companies", rows: outlook, empty: "Track companies on a watchlist for live forecasts.",
+      render: (r) => { const f = fc.data![r.ticker]; const up = f["1d"].p_up >= 0.5; return item(r, <><b className={`mono ${up ? "up" : "down"}`}>{Math.round((up ? f["1d"].p_up : 1 - f["1d"].p_up) * 100)}% {up ? "up" : "down"}</b><span className="mono xs faint">1 hr {pct(f["1h"].change, 2, true)}</span></>, <>today {money(f["1d"].low, 0)}–{money(f["1d"].high, 0)}</>); } },
+    { t: "Unusual today", icon: "pulse", hint: "volume spikes, moves over 4% and alerts that fired", rows: unusual, empty: "Nothing unusual so far today.",
+      render: (r) => item(r, <>{chg(r)}{isNum(r.vol) && r.vol >= 2 ? <span className="mono xs warn">{r.vol.toFixed(1)}× vol</span> : fired.has(r.ticker) ? <span className="xs warn">{fired.get(r.ticker)} alert{fired.get(r.ticker)! > 1 ? "s" : ""}</span> : null}</>, <>{money(r.last)}</>) },
+  ];
   return (
-    <button className={`ix ${on ? "on" : ""}`} onClick={() => onPick(r.ticker)}>
-      <div className="ix-n">{r.name}</div>
-      <div className="ix-v">{num(r.last, r.name === "INDIA VIX" ? 2 : 0)}</div>
-      <div className={`ix-d ${up ? "up" : "down"}`}>{up ? "▲" : "▼"} {pct(Math.abs(r.chg_pct ?? 0), 2)}</div>
-      <Spark values={r.spark.length > 1 ? r.spark : r.month} base={r.spark.length > 1 ? r.prev : undefined} width={120} height={30} />
-    </button>
+    <section className="panel radar">
+      <div className="panel-h"><h3>Research radar</h3><span className="meta">what deserves a look right now · refreshed with every price update · click one for its chart</span></div>
+      <div className="rd-cols">
+        {cols.map((c) => (
+          <div key={c.t} className="rd-col">
+            <div className="rd-h"><Icon name={c.icon} className="sm" /><b>{c.t}</b><span className="n">{c.rows.length}</span></div>
+            <div className="xs faint rd-hint">{c.hint}</div>
+            {loading ? <div className="xs faint rd-empty">Loading…</div> : c.rows.length ? c.rows.slice(0, 6).map(c.render) : <div className="xs faint rd-empty">{c.empty}</div>}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

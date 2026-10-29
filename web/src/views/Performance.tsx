@@ -14,6 +14,8 @@ import { RunButton } from "../components/RunButton";
 import { TrainingData } from "../components/TrainingData";
 import { Leaderboard } from "./CommandCenter";
 import { Select } from "../components/Select";
+import { ImageViewer } from "../components/ImageViewer";
+import { companyPath } from "../lib/company";
 
 type Tab = "board" | "sectors" | "company" | "training" | "files";
 // addresses of the tabs this page used to have
@@ -34,7 +36,7 @@ export function Performance() {
   const needsReport = tab === "sectors" || tab === "company";
   return (
     <div className="page">
-      <PageHeader crumbs={[{ label: "Models & data" }, { label: "Model Performance" }]} title="Model Performance"
+      <PageHeader crumbs={[{ label: "Operations" }, { label: "Model Performance" }]} title="Model Performance"
         sub={q.data?.available ? `${cos} companies · ${q.data.models.length} models · report ${ago(q.data.updated)} · scored against the 1-May price` : "Every model, every financial year, scored against the market"}
         actions={<RunButton kind="valuation" label="Run valuation report" icon="graph" />} />
       <Tabs<Tab> value={tab} onChange={setTab} tabs={[
@@ -48,7 +50,7 @@ export function Performance() {
       {tab === "training" ? <TrainingData /> : tab === "files" ? <FilesTab /> : (
         <QueryView q={q} rows={10}>
           {(all) => { const d = scoped ?? all; return scope.list && d.available && !d.rows.length
-            ? <Panel><Empty icon="library" title={`No company on “${scope.list.name}” is in the valuation report`} action={<button className="btn sec" onClick={() => scope.set(null)}>Show every company</button>}>Add them to Coverage on the Universe page, then run the valuation report.</Empty></Panel>
+            ? <Panel><Empty icon="library" title={`No company on “${scope.list.name}” is in the valuation report`} action={<button className="btn sec" onClick={() => scope.set(null)}>Show every company</button>}>Run the valuation report on this watchlist from Operations to value its companies.</Empty></Panel>
             : !d.available && needsReport
             ? <Panel><Empty icon="graph-line" title="No valuation report yet" action={<RunButton kind="valuation" label="Run valuation report" icon="graph" />}>The report values every company for every year with every model, including the HYBRID MODEL.</Empty></Panel>
             : <>
@@ -83,7 +85,7 @@ function Board({ scoped }: { scoped: Valuation | null }) {
         const wins = m.win_rate.map((r) => ({ model: String(r.Model), win: r["Win rate %"] }));
         return (
           <>
-            <Leaderboard rows={m.overall} updated={m.updated} />
+            <Leaderboard rows={m.overall} updated={m.updated} detail={(model) => <ModelDetail model={model} m={m} />} />
             <div className="grid c-21">
               <Panel title="Median error by financial year" meta="lower is better">
                 <ResponsiveContainer width="100%" height={280}>
@@ -104,11 +106,45 @@ function Board({ scoped }: { scoped: Valuation | null }) {
                 </ResponsiveContainer>
               </Panel>
             </div>
-            <div className="note inf"><Icon name="symbol-class" /><div>Which model works best in which sector, and what each model forecasts for every sector, is on the <Link to="/performance?tab=sectors">Sectors</Link> tab.</div></div>
           </>
         );
       }}
     </QueryView>
+  );
+}
+
+/** One model, opened from the leaderboard: its error year by year, and the sectors it values best and worst. */
+function ModelDetail({ model, m }: { model: string; m: Board4 }) {
+  const years = m.by_year.filter((r) => String(r.Model) === model && isNum(r["MedAPE %"])).map((r) => ({ fy: String(r["Financial Year"]), err: r["MedAPE %"] as number }));
+  const best = bestBySector(m.by_sector);
+  const mine = best.map((b) => { const i = b.ranked.findIndex((x) => x.model === model); return i < 0 ? null : { sector: b.sector, err: b.ranked[i].err, rank: i + 1, of: b.ranked.length }; })
+    .filter(Boolean).sort((a, b) => a!.err - b!.err) as { sector: string; err: number; rank: number; of: number }[];
+  const won = mine.filter((x) => x.rank === 1).length;
+  const wr = m.win_rate.find((r) => String(r.Model) === model);
+  const list = (xs: typeof mine) => xs.map((x) => <li key={x.sector}><span className="ellipsis">{x.sector}</span><span className="mono">{pctUnits(x.err, 0)}</span><span className="faint xs">#{x.rank} of {x.of}</span></li>);
+  return (
+    <div className="md">
+      <div className="md-figs">
+        <div><div className="k">Sectors won</div><div className="v">{won} <span className="faint xs">of {mine.length}</span></div></div>
+        <div><div className="k">Closest to the price</div><div className="v">{wr ? pctUnits(wr["Win rate %"], 0) : "—"}</div><div className="s">of company-years</div></div>
+        <div><div className="k">Latest year</div><div className="v">{years.length ? pctUnits(years[years.length - 1].err, 1) : "—"}</div><div className="s">{years.length ? `FY ${years[years.length - 1].fy}` : ""}</div></div>
+      </div>
+      {years.length > 1 && (
+        <ResponsiveContainer width="100%" height={120}>
+          <LineChart data={years} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
+            <CartesianGrid strokeDasharray="2 4" /><XAxis dataKey="fy" tickLine={false} axisLine={{ stroke: "var(--line)" }} minTickGap={20} /><YAxis unit="%" tickLine={false} axisLine={false} width={44} />
+            <Tooltip content={<Tip fmt={(x) => pctUnits(x)} title={(l) => `FY ${l}`} />} />
+            <Line dataKey="err" name="Median error" stroke={model === "HYBRID MODEL" ? HM_COLOR : "#57A3F8"} strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+      {mine.length > 0 && (
+        <div className="md-lists">
+          <div><div className="label">Most accurate in</div><ul>{list(mine.slice(0, 4))}</ul></div>
+          <div><div className="label">Least accurate in</div><ul>{list(mine.slice(-4).reverse())}</ul></div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -254,12 +290,12 @@ function Segregation({ fc }: { fc: SectorForecast[] }) {
                     </div><span className="xs faint">{s.below} · {s.near} · {s.above}</span></td>
                     <td className={`r mono ${(s.consensusUpside ?? 0) >= 0 ? "up" : "down"}`}>{pct(s.consensusUpside, 0, true)}</td>
                     <td className={`r mono ${(s.consensusMove ?? 0) >= 0 ? "up" : "down"}`}>{pct(s.consensusMove, 1, true)}</td>
-                    <td className="ellipsis" style={{ maxWidth: 200 }}>{s.names[0] ? <Link to={`/coverage/${slug(s.names[0].company)}`} onClick={(e) => e.stopPropagation()}>{shortName(s.names[0].company)}</Link> : "—"}</td>
+                    <td className="ellipsis" style={{ maxWidth: 200 }}>{s.names[0] ? <Link to={companyPath(s.names[0].company)} onClick={(e) => e.stopPropagation()}>{shortName(s.names[0].company)}</Link> : "—"}</td>
                   </tr>
                   {open === s.sector && (
                     <tr className="analyst-row"><td colSpan={5} style={{ whiteSpace: "normal", padding: "8px 12px 12px" }}>
                       <div className="sec-names">{s.names.map((x) => (
-                        <Link key={x.company} to={`/coverage/${slug(x.company)}`} className="sec-name">
+                        <Link key={x.company} to={companyPath(x.company)} className="sec-name">
                           <span className="ellipsis">{shortName(x.company)}</span>
                           <b className={`mono ${x.upside >= 0 ? "up" : "down"}`}>{pct(x.upside, 0, true)}</b>
                         </Link>
@@ -471,15 +507,23 @@ function EnsembleDetail({ d }: { d: Valuation }) {
 
 function Gallery() {
   const q = useCharts();
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<number | null>(null);
   return (
     <QueryView q={q}>
-      {(names) => !names.length ? <Empty icon="file-media" title="No charts yet">The analysis stage of a valuation run draws them.</Empty> : (
-        <>
-          <div className="gallery">{names.map((n) => <figure key={n} onClick={() => setOpen(n)}><img src={`/api/charts/${n}`} alt={n} loading="lazy" /><figcaption>{titleCase(n.replace(/\.png$/, ""))}</figcaption></figure>)}</div>
-          {open && <div className="lightbox" onClick={() => setOpen(null)}><img src={`/api/charts/${open}`} alt={open} /></div>}
-        </>
-      )}
+      {(names) => {
+        if (!names.length) return <Empty icon="file-media" title="No charts yet">The analysis stage of a valuation run draws them.</Empty>;
+        const images = names.map((n) => ({ src: `/api/charts/${n}`, title: titleCase(n.replace(/\.png$/, "").replace(/_/g, " ")) }));
+        return (
+          <>
+            <div className="gallery">{images.map((im, i) => (
+              <figure key={im.src} onClick={() => setOpen(i)} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setOpen(i)} tabIndex={0} role="button" aria-label={`Open ${im.title}`}>
+                <img src={im.src} alt={im.title} loading="lazy" /><figcaption>{im.title}</figcaption>
+              </figure>
+            ))}</div>
+            {open != null && <ImageViewer images={images} index={Math.min(open, images.length - 1)} onIndex={setOpen} onClose={() => setOpen(null)} />}
+          </>
+        );
+      }}
     </QueryView>
   );
 }

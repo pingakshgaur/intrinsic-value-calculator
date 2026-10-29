@@ -208,3 +208,16 @@ def test_quote_fallback_backs_off(monkeypatch):
     n = len(calls)
     price_chain.last_price("D.NS")                                 # both websites failed three times: skipped
     assert len(calls) == n
+
+
+def test_probe_reports_a_provider_answering(monkeypatch):
+    import pandas as pd
+    import price_chain
+
+    monkeypatch.setitem(price_chain.FETCH, "nse", lambda t, a, b: pd.Series([1.0, 2.0], index=pd.to_datetime(["2026-01-01", "2026-01-02"])))
+    r = price_chain.probe("nse")
+    assert r["ok"] and "2 daily prices" in r["detail"]
+    monkeypatch.setitem(price_chain.FETCH, "bse", lambda t, a, b: None)
+    assert not price_chain.probe("bse")["ok"]
+    monkeypatch.setattr(price_chain.source_settings, "has_key", lambda k: False)
+    assert "needs a free key" in price_chain.probe("fmp")["detail"]

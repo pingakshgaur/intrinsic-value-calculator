@@ -358,3 +358,57 @@ def test_research_and_valuation_on_a_watchlist(isolated):
     assert "--input" in v
     with pytest.raises(ValueError):
         J.build_args("agents", {"watchlist": "nope"}, "w3")
+
+
+def test_index_search_and_members(monkeypatch, isolated):
+    from server import indices as IX
+
+    monkeypatch.setattr(IX, "CACHE", isolated / "live" / "indices")
+    # a search box text names an index however it is typed
+    assert IX.match("NIFTY50")[0]["key"] == "nifty50"
+    assert IX.match("nifty 500")[0]["key"] == "nifty500"
+    assert IX.match("Large Cap")[0]["key"] == "largecap"
+    assert IX.match("bank nifty")[0]["key"] == "niftybank"
+    assert IX.match("HAL") == []
+    import nse_source
+
+    monkeypatch.setattr(nse_source, "index_list", lambda f: [
+        {"name": "Beta Ltd", "industry": "Information Technology", "symbol": "BETA"},
+        {"name": "Mahindra & Mahindra", "industry": "Automobile and Auto Components", "symbol": "M&M"},
+    ] if f == "ind_nifty500list.csv" else [])
+    d = IX.members("nifty500")
+    assert d["source"] == "nse" and [c["ticker"] for c in d["companies"]] == ["BETA.NS", "M&M.NS"]
+    assert d["companies"][1]["sector"] == "Automobiles and Auto Components"
+    assert IX.catalog()[[i["key"] for i in IX.catalog()].index("nifty500")]["count"] == 2   # cached
+    # NSE unreachable: NIFTY 50 falls back to the bundled list, a size class to the companies the app knows
+    d = IX.members("nifty50")
+    assert d["source"] == "snapshot" and len(d["companies"]) == 50 and d["note"]
+    assert IX.members("niftyit")["companies"] == []
+    with pytest.raises(KeyError):
+        IX.members("nope")
+
+
+def test_live_forecast_horizons(monkeypatch, isolated):
+    from server import forecast_live as F
+
+    rng = np.random.default_rng(3)
+    daily = 100 * np.exp(np.cumsum(rng.normal(0.0003, 0.015, 800)))
+    t0 = datetime(2026, 10, 26, 9, 15, tzinfo=L.IST).timestamp()
+    px = daily[-1] * np.exp(np.cumsum(rng.normal(0, 0.0008, 750)))
+    bars = [(int(t0 + (i // 375) * 86400 + (i % 375) * 60), float(c)) for i, c in enumerate(px)]
+    monkeypatch.setattr(F, "_stored_bars", lambda t, days=10: bars)
+    monkeypatch.setattr(F, "_daily_closes", lambda t: (daily, "test"))
+    monkeypatch.setattr(L.VALUER, "at_price", lambda t, p: {"value": p * 1.5, "confidence": 80, "upside": 0.5})
+    F._cache.clear()
+    out = F.forecast("ALPHA.NS")
+    h = {x["key"]: x for x in out["horizons"]}
+    assert list(h) == ["15m", "1h", "1d", "1w", "1m", "3m", "6m", "1y", "3y", "5y"]
+    for x in h.values():
+        assert x["low"] < x["price"] < x["high"] and 0 < x["p_up"] < 1
+    # bands widen with the horizon; a stock 50% below its value is pulled up over the years
+    assert h["1d"]["high"] - h["1d"]["low"] < h["1y"]["high"] - h["1y"]["low"]
+    assert h["5y"]["parts"]["value"] > h["1y"]["parts"]["value"] > 0.05 and h["5y"]["change"] > h["1y"]["change"]
+    assert h["15m"]["parts"]["value"] == 0
+    assert out["accuracy"]["1d"]["n"] == 250 and 0 < out["accuracy"]["1d"]["band"] <= 1
+    with pytest.raises(ValueError):
+        F.forecast("not a ticker!")

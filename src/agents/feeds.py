@@ -108,6 +108,20 @@ ANNUAL_ROWS = {
 }
 
 
+def _chain_prices(ticker, days):
+    """Daily closes from price_chain when Yahoo has none. -> [{date, close, volume}] (volume unknown)."""
+    try:
+        import price_chain
+
+        end = dt.date.today()
+        s, _, _ = price_chain.closes(ticker, end - dt.timedelta(days=max(days, 30)), end, skip=("yahoo",))
+    except Exception:  # noqa: BLE001
+        return []
+    if s is None:
+        return []
+    return [{"date": i.date().isoformat(), "close": _f(v), "volume": None} for i, v in s.items() if _f(v)]
+
+
 class Feeds:
     def __init__(self, offline=False, cache_hours=None):
         self.offline = offline
@@ -159,17 +173,20 @@ class Feeds:
         def go():
             try:
                 h = self._yf(ticker).history(period=f"{max(days, 30)}d", auto_adjust=False)
-                if h is None or h.empty:
-                    self._problem(f"prices {ticker}", "no rows")
-                    return []
-                return [
-                    {"date": i.date().isoformat(), "close": _f(r["Close"]), "volume": _f(r["Volume"])}
-                    for i, r in h.iterrows()
-                    if _f(r["Close"])
-                ]
+                if h is not None and not h.empty:
+                    return [
+                        {"date": i.date().isoformat(), "close": _f(r["Close"]), "volume": _f(r["Volume"])}
+                        for i, r in h.iterrows()
+                        if _f(r["Close"])
+                    ]
+                why = "no rows"
             except Exception as e:
-                self._problem(f"prices {ticker}", e)
-                return []
+                why = e
+            # Yahoo had nothing: the other price providers (Yahoo BSE, NSE, BSE, keyed ones), closes only
+            rows = _chain_prices(ticker, days)
+            if not rows:
+                self._problem(f"prices {ticker}", why)
+            return rows
 
         return self._cached(f"prices|{ticker}|{days}|{dt.date.today()}", go)
 

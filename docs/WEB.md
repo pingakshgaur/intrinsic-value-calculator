@@ -20,7 +20,7 @@ The colours are VS Code's **Dark 2026** theme; the layout, type (Inter and JetBr
 ## Layout
 
 An analyst workspace:
-- **Side navigation:** grouped into Analysis, Research workforce, Models & data and Operations, with live status for the server, AI providers, last report and last research. Collapse it with `Ctrl+\`.
+- **Side navigation:** grouped into Analysis, Research workforce and Operations (jobs, Model Performance, Configuration), with live status for the server, AI providers, last report and last research. Collapse it with `Ctrl+\`.
 - **Top bar:** a live market tape (Nifty 50, India VIX, USD/INR, Brent, US 10Y, gold, with 1-month change), the watchlist focus picker, global search (`Ctrl+K`), an alerts inbox (red flags and changes), the glossary (`?`), and a run indicator that opens the runs drawer.
 
 - **Menus and dropdowns** are one component everywhere (`web/src/components/Select.tsx`). Every choice, from sectors and companies to runs, models and sounds, opens the same themed list. Use the arrow keys, Home/End, Enter and Escape, or type to jump. Lists longer than 12 get a filter box. Action buttons such as *Copy to*, *Move to*, *Research*, *Set sector* and *Add to watchlist* open the same menu. Menus open on the page's top layer, so a table or panel never cuts them off, and they flip upward near the bottom of the window. Escape closes only the topmost menu.
@@ -28,19 +28,17 @@ An analyst workspace:
 | Page | |
 |---|---|
 | **Command Center** | Metric band; coverage treemap (tile size = market cap, colour = upside); signals feed; upside vs confidence; label mix and extremes; model leaderboard |
-| **Markets** | Live index cards (Nifty 50, Sensex, Bank, IT, Midcap 50, Financial Services, VIX) with intraday sparklines and a sector heat strip. A scanner over every company the app knows (about 425): top gainers and losers, most active, volume spikes, near 52-week high or low, RSI extremes, and covered companies below their buy-below price. Candlestick or line charts from 1 day to the full history, with the HYBRID MODEL value and buy-below drawn on the chart. Look up any NSE or BSE symbol |
-| **Watchlists** | A library of named lists, each with a description and colour, shown as cards with their companies and today's moves. Pin, duplicate, delete or focus the app on a list. A company can be on several lists; up to 250 companies are tracked across all of them |
-| **Adding companies** | When you create a list, and later with **Add companies**, there are four ways in: **Search** by name or NSE/BSE symbol (a symbol the app has not seen is fine), **Sectors** (tick one or several and take all of their companies, or pick a few; **Get NSE lists** adds NSE's index lists of about 1,000 companies with their industry), **Spreadsheet** (Excel `.xlsx`, CSV or pasted text with a symbol or name column; unrecognised names are listed) and **Another list**. Picks collect at the bottom until you add them |
-| **A watchlist** | The companies on one list, as tiles or a table, each with a checkbox: tick several (Shift+click for a range) to remove them, copy or move them to another list, or research them. The header has three buttons: **Add companies**, **Research this list** and **More** (edit name and colour, focus the app, update prices, pause tracking, tracking settings). The list shows live price, change, intraday sparkline, day range, the HYBRID MODEL re-valued at the live price, and change since you added it. Each company has a live chart (including every minute bar the tracker stored), price alerts and a note. An alerts feed lists level crossings, buy-below crossings and big daily moves |
+| **Markets** | A **research radar**, refreshed with every price update: companies trading under their HYBRID MODEL buy-below price, the biggest gaps to value, the live forecast's lean for today (tracked companies) and today's unusual moves (volume spikes, moves over 4%, alerts that fired); click one to chart it. A scanner over every company the app knows (about 425): top gainers and losers, most active, volume spikes, near 52-week high or low, RSI extremes, and covered companies below their buy-below price. Candlestick or line charts from 1 day to the full history, with the HYBRID MODEL value and buy-below drawn on the chart. Look up any NSE or BSE symbol |
+| **Watchlists** | A library of named lists, each with a description and colour, shown as cards with their companies and today's moves. Pin, duplicate, delete or focus the app on a list. A company can be on several lists; up to 600 companies are tracked across all of them (room for the NIFTY 500) |
+| **Adding companies** | When you create a list, and later with **Add companies**, there are five ways in: **Search** by name or NSE/BSE symbol (a symbol the app has not seen is fine) — or an index name: `NIFTY50`, `nifty 500`, `Bank Nifty`, `Large cap`, `Mid cap` offer to add every company in it, **Indices** (NIFTY 50, Next 50, 100, 200, 500, Total Market, SENSEX; large, mid, small and micro cap by SEBI's split; the NSE sector indices — from NSE's published lists, cached for a week; offline, NIFTY 50 and SENSEX fall back to a bundled list and the size classes to the companies the app knows with that size), **Sectors** (tick one or several and take all of their companies, or pick a few; **Get NSE lists** adds NSE's index lists of about 1,000 companies with their industry), **Spreadsheet** (Excel `.xlsx`, CSV or pasted text with a symbol or name column; unrecognised names are listed) and **Another list**. Picks collect at the bottom until you add them |
+| **A watchlist** | The companies on one list, as tiles or a table, with a **search box** (name, symbol, sector or label) and a checkbox each: tick several (Shift+click for a range) to remove them, or copy or move them to another list. The header has three buttons: **Add companies**, **Research this list** and **More** (edit name and colour, focus the app, update prices, pause tracking, tracking settings). The list shows live price, change, intraday sparkline, day range, the HYBRID MODEL re-valued at the live price, its confidence, the research score, red flags and change since you added it. Clicking a company opens a side panel: live chart, its research in brief, the next hours and days, price alerts and a note. **Full analysis** (or double-click, or `Enter` in the table) opens its page. An alerts feed lists level crossings, buy-below crossings and big daily moves |
 | **Research workforce** | Overview of the 23 agents: run status, every team and agent with live status, this run's verdicts and red flags, recent runs, and each agent's profile and settings. **Research** starts a run on every covered company or on any watchlist; **Auto-start** sets whether the workforce starts by itself |
 | **Agent Network** | The agents as a full-screen live map: info-bits travel the edges as they exchange work; replay any run; layers, views and tools to simplify, focus, annotate and rearrange the map; **Research** on any watchlist from the top bar |
 | **Research Room** | The agents' chat: team channels, direct exchanges, live status. Talk to any agent: it answers, keeps your instructions and acts on requests |
-| **Coverage** | Sortable data grid with a column chooser and density toggle, inline range bars and CSV export. Selecting a row opens an inspector; `↑ ↓` move between rows and `Enter` opens the profile |
-| **Equity profile** | Sticky figures bar and a section index that follows your scrolling. Sections: summary (opening with **In plain words**: a short, jargon-free reading of whether the share looks cheap, how sure the models are, what could go right or wrong and what the models expect in a year), valuation (lens contribution, bridge, build-up), model forecasts (**Show all** / **Remove all** lines at the panel's right edge), drivers and risk, agents and evidence, bull vs bear, history. Tables wider than their panel scroll sideways |
+| **Company analysis** | `/watchlist/<list>/<symbol>` (or `/company/<name>` from anywhere else; the old `/coverage/…` links still work). Sticky figures bar (live price when tracked), previous / next through the list (`Alt+↑ ↓`) and a section index that follows your scrolling. Sections: **live** (chart, the **live forecast**, alerts and note), summary (opening with **In plain words**: a short, jargon-free reading of whether the share looks cheap, how sure the models are, what could go right or wrong and what the models expect in a year), valuation (lens contribution, bridge, build-up), model forecasts (**Show all** / **Remove all** lines at the panel's right edge), drivers and risk, agents and evidence, bull vs bear, history. Tables wider than their panel scroll sideways |
 | **HYBRID MODEL Studio** | Parameter tree on the left. In the centre, a live canvas with figures, range, bridge and lens contribution. On the right, an inspector with sensitivity, changes and inputs. Named scenario sets, a portfolio mode, and **Commit** to save. **Discard** drops uncommitted edits; **Defaults** loads the shipped value (`agent_settings.defaults.yaml`) of every constant you changed, to review and commit. The page scrolls as a whole while the parameter list and inspector stay in view |
-| **Model Performance** | Five tabs. **Leaderboard**: every model's error, hit rate, bias and rank correlation, error by year, win rate. **Sectors**: which model suits each sector (best model, its error, the runner-up, the HYBRID MODEL), sectors won by each model, the sector × model error matrix with the best outlined, the **sector valuation forecast by model** (each model's median value against today's price, or its one-year projection), and **sector segregation and prediction** (companies below, near and above value per sector, the top pick, and a chart of each sector's upside and projection; click a sector for its companies). **Company**: every model by year for one company, HYBRID MODEL detail, Ensemble detail. **Training data**: see below. **Files & charts**: downloads, companies left out, chart gallery |
-| **Universe** | Editable grid of the company list: bulk select, delete, set sector or add to a watchlist, CSV import, export, checks |
-| **Operations** | One form: **what to run** (valuation report, research - quick or full -, refresh training data, data check), **companies** (all covered, a watchlist, or the ones you pick), **years**, and only the options that apply (rare ones under **More options**: auto-train, rule-based research, offline test data). Beside it, the live job detail (stage timeline, auto-train controls, log) and the jobs table |
+| **Model Performance** | Five tabs. **Leaderboard**: every model's error, hit rate, bias and rank correlation, error by year, win rate. **Sectors**: which model suits each sector (best model, its error, the runner-up, the HYBRID MODEL), sectors won by each model, the sector × model error matrix with the best outlined, the **sector valuation forecast by model** (each model's median value against today's price, or its one-year projection), and **sector segregation and prediction** (companies below, near and above value per sector, the top pick, and a chart of each sector's upside and projection; click a sector for its companies). **Company**: every model by year for one company, HYBRID MODEL detail, Ensemble detail. **Training data**: see below. **Files & charts**: downloads, companies left out, chart gallery — a chart opens in a full-window viewer with previous / next (buttons, `← →`), a thumbnail strip, zoom (`+ −`, double-click, the wheel) with drag to pan, open in a new tab and download. A model in the leaderboard opens to its breakdown: error by year, sectors won, where it is most and least accurate |
+| **Operations** | **New job** across the top: what to run (valuation report, research, refresh training data, data check), then one row with the companies (every covered company or a watchlist), the depth or the years, the one option that applies, **Advanced** (auto-train, rule-based research, offline test data) and **Start**. Below it, full width, the live job detail (stage timeline, auto-train controls, log), and under that the recent jobs |
 | **Configuration** | Run settings (everything the old desktop app had), **data sources** (switch each provider on or off, set the order they are trusted in, enter free keys), AI providers (any OpenAI-compatible service or Anthropic, several keys each, live model picker, Test for each key, fail-over order), local models through Ollama (download, choose, switch on or off, open with INTVAL), research agents, macro inputs, the settings file |
 
 Shortcuts:
@@ -59,8 +57,7 @@ Shortcuts:
 Search **onboarding** (or *tour*, *welcome*, *guide*) in the top-bar search,
 or use the link at the top of the glossary, to start a guided tour of the
 whole workbench. It opens on a welcome page with nine chapters: finding your
-way, the Command Center, markets and watchlists, coverage and company
-profiles, the Studio, the research workforce, models and data, operations and
+way, the Command Center, markets and watchlists, company analysis, the Studio, the research workforce, models and data, operations and
 settings, and power tips. Start from the beginning or jump into any chapter;
 each chapter is also its own search result.
 
@@ -124,7 +121,7 @@ The 23 research agents (see [AGENTS.md](AGENTS.md) for who is who) have three pa
 The workforce **starts working as soon as the web app starts** (a quick,
 rule-based sweep that makes no LLM calls). **Auto-start** on the Overview
 controls this. **Research** (on the Overview, the Agent Network, the Command
-Center and Coverage) starts a run on demand: pick every covered company or any
+Center and each watchlist) starts a run on demand: pick every covered company or any
 watchlist, a quick sweep or full research, and start. A watchlist run
 researches every company on the list, valued before or not; the list you last
 used, or the one the app is focused on, is preselected.
@@ -212,9 +209,8 @@ exactly as they look.
 
 ## Watchlist focus
 
-The picker in the top bar focuses the app on one watchlist. Coverage, the
-Command Center, Universe (display only: saving still writes the whole list),
-Model Performance (its tables recomputed for the list's companies), the
+The picker in the top bar focuses the app on one watchlist. The Command
+Center, Model Performance (its tables recomputed for the list's companies), the
 workforce overview and the Research Room then show only that list's
 companies, with a thin bar naming the list and a **Show all** button. The
 choice is remembered in this browser; **All companies** brings everything
@@ -262,12 +258,41 @@ for a tracked company, the tracker asks the NSE and then the BSE website
 - **Live re-valuation.** The HYBRID MODEL value comes from a company's
   accounts, so it does not move with the price. Only the upside, the label
   and the buy-below test are recomputed at the live price.
+- **When no provider answers**, the watchlist, the charts and the forecasts
+  fall back to the last prices the tracker stored, marked as stale, so the
+  workbench keeps working on what it knows.
 - **The tracker only runs while the web app is running.** To track with the
   computer off, the GitHub Actions workflow in [AGENTS.md](AGENTS.md) runs
   quick sweeps at fixed times instead.
 
 Everything live (watchlist, alerts, minute bars, learning history) is stored in
 `data/live/`, which git ignores.
+
+## Live forecasts
+
+Every company page (and, in brief, a watchlist's side panel) shows where the
+price may be in **15 minutes, 1 hour, 1 day, 1 week, 1, 3 and 6 months, 1, 3
+and 5 years**: a median price, a band that holds 8 in 10 outcomes, the chance
+it ends higher, and the main driver. It is computed on request in well under a
+second by `server/forecast_live.py` (`GET /api/live/forecast?ticker=`), and
+recomputed with every tracker poll while the market is open.
+
+| Part | What it is |
+|---|---|
+| Band | Lognormal, from the stock's own volatility: recent (EWMA) for short horizons, blending into long-run for long ones; intraday from its stored minute bars |
+| Drift | The market's long-run return, 11% a year |
+| Recent moves | A small reversal or follow-through of the latest 15-minute and daily moves, fitted (AR(1)) to its own history, shrunk and capped |
+| 3-month trend | A shrunk 3-month momentum, fading beyond three months |
+| Pull to value | From months out, the gap to the HYBRID MODEL value closes at a half-life of about 1.7 years, weighted by the model's confidence |
+
+The same rules are re-run walk-forward on the stock's own last year to show
+how often the 1-day (and, with enough stored minute bars, 15-minute)
+direction was right and how often the 1-day band held the outcome. The first
+forecast for a company uses the prices already stored and downloads five
+years of daily prices in the background for the next one. The Markets radar
+uses a lighter version (`/api/live/forecast/quick`) for every tracked company
+at once. A statistical projection, not advice: it cannot see news, results
+or the order book.
 
 ## Training data (Model Performance → Training data)
 

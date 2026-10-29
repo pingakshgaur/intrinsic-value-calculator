@@ -43,12 +43,29 @@ export function DataSources() {
               <div className="xs muted">{s.about} <a href={s.url} target="_blank" rel="noreferrer noopener">{s.url.replace(/^https?:\/\//, "").split("/")[0]}</a></div>
               {s.env && <KeyField env={s.env} has={s.has_key} />}
             </div>
-            <Toggle checked={s.on} onChange={(v) => toggle(s.key, v)} label={s.on ? "On" : "Off"} />
+            <div className="ds-side">
+              <Toggle checked={s.on} onChange={(v) => toggle(s.key, v)} label={s.on ? "On" : "Off"} />
+              <Probe k={s.key} disabled={!!s.env && !s.has_key} />
+            </div>
           </div>
         ))}
       </div>
       <div className="fc-note xs faint"><Icon name="info" className="xs" />Yahoo Finance has only about four years of accounts for most Indian companies; Screener.in fills the older years. The NSE and BSE websites take over prices and live quotes when Yahoo has none. A source that does not answer is skipped — nothing ever stops a run. Changes apply to the next run.</div>
     </Panel>
+  );
+}
+
+/** "Test": ask the provider for one well-known company, to see whether it answers from this network. */
+function Probe({ k, disabled }: { k: string; disabled: boolean }) {
+  const [r, setR] = useState<{ ok: boolean; seconds: number; detail: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = () => { setBusy(true); setR(null); api.post<{ ok: boolean; seconds: number; detail: string }>(`/api/data-sources/${k}/test`).then(setR).catch((e) => setR({ ok: false, seconds: 0, detail: e instanceof Error ? e.message : String(e) })).finally(() => setBusy(false)); };
+  return (
+    <div className="ds-probe">
+      <button className="btn xs sec" onClick={run} disabled={busy || disabled} title={disabled ? "Add its key first" : "Ask it for one well-known company"}>
+        <Icon name={busy ? "loading" : "debug-disconnect"} className={`xs ${busy ? "spin" : ""}`} />{busy ? "Testing…" : "Test"}</button>
+      {r && <span className={`xs ${r.ok ? "up" : "down"}`} title={r.detail}><Icon name={r.ok ? "pass" : "error"} className="xs" /> {r.ok ? `answers · ${r.seconds}s` : "no answer"}<span className="faint ds-probe-d"> · {r.detail}</span></span>}
+    </div>
   );
 }
 

@@ -1,14 +1,15 @@
-import { useMemo } from "react";
+import { Fragment, ReactNode, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useIntel, useMetrics, useStatus, useValuation } from "../lib/hooks";
 import { CsvRow, Verdict } from "../lib/api";
-import { ago, isNum, isoWhen, pct, pctUnits, shortName, slug } from "../lib/format";
+import { ago, isNum, isoWhen, pct, pctUnits, shortName } from "../lib/format";
 import { HM_COLOR, LABELS, LABEL_HEX } from "../lib/labels";
 import { Icon, Loading, PageHeader, Panel } from "../components/ui";
 import { ResearchLauncher } from "../components/ResearchLauncher";
 import { useScope } from "../lib/scope";
 import { ScopeNote } from "../components/ScopePicker";
 import { CoverageMap, UpsideScatter } from "../components/charts";
+import { companyPath } from "../lib/company";
 
 function median(xs: number[]) {
   if (!xs.length) return null;
@@ -32,7 +33,7 @@ export function CommandCenter() {
   const meta = intel.data?.meta;
   const hasIntel = verdicts.length > 0;
   const hm = (metrics.data?.overall ?? []).find((r) => r.Model === "HYBRID MODEL");
-  const open = (c: string) => nav(`/coverage/${slug(c)}`);
+  const open = (c: string) => nav(companyPath(c));
 
   return (
     <div className="page">
@@ -50,7 +51,7 @@ export function CommandCenter() {
         <Panel title="Get started">
           <div className="grid c3">
             {[
-              ["database", "1  Define the universe", "Companies, sectors and NSE tickers.", "/universe"],
+              ["eye", "1  Build a watchlist", "Companies, whole sectors, NIFTY indices or a spreadsheet.", "/watchlist"],
               ["server-process", "2  Run valuation and research", "All models for every year, then the 23-agent research.", "/operations"],
               ["beaker", "3  Tune the HYBRID MODEL", "Change constants and see every value respond before you save.", "/studio"],
             ].map(([icon, t, d, to]) => (
@@ -164,22 +165,26 @@ function Distribution({ verdicts, onPick }: { verdicts: Verdict[]; onPick: (c: s
   );
 }
 
-export function Leaderboard({ rows, updated }: { rows: CsvRow[]; updated: number | null }) {
+/** The models ranked by error. With `detail`, a row opens to that model's breakdown (Model Performance); without, the panel links there. */
+export function Leaderboard({ rows, updated, detail }: { rows: CsvRow[]; updated: number | null; detail?: (model: string) => ReactNode }) {
+  const [open, setOpen] = useState<string | null>(null);
   const data = rows.filter((r) => isNum(r["MedAPE %"])).sort((a, b) => (a["MedAPE %"] as number) - (b["MedAPE %"] as number));
   if (!data.length) return null;
   const maxE = Math.max(...data.map((r) => r["MedAPE %"] as number));
   return (
-    <Panel title="Model leaderboard" meta={`back-test against the 1-May price · report ${ago(updated)}`} tools={<Link to="/performance" className="btn xs ghost">Details <Icon name="arrow-right" className="xs" /></Link>} flush>
+    <Panel title="Model leaderboard" meta={`back-test against the 1-May price · report ${ago(updated)}`} tools={detail ? <span className="xs faint">click a model for its breakdown</span> : <Link to="/performance" className="btn xs ghost">Details <Icon name="arrow-right" className="xs" /></Link>} flush>
       <table className="dg">
-        <thead><tr><th style={{ width: 40 }}>#</th><th>Model</th><th style={{ width: "28%" }}>Median abs. error</th><th className="r">Within ±20%</th><th className="r">Bias</th><th className="r">Rank corr.</th><th className="r">N</th></tr></thead>
+        <thead><tr><th style={{ width: detail ? 52 : 40 }}>#</th><th>Model</th><th style={{ width: "28%" }}>Median abs. error</th><th className="r">Within ±20%</th><th className="r">Bias</th><th className="r">Rank corr.</th><th className="r">N</th></tr></thead>
         <tbody>
           {data.map((r, i) => {
             const m = String(r.Model);
             const e = r["MedAPE %"] as number;
             const isHM = m === "HYBRID MODEL";
             return (
-              <tr key={m} style={isHM ? { background: "#ad80d70c" } : undefined}>
-                <td className="mono faint">{i + 1}</td>
+              <Fragment key={m}>
+              <tr style={isHM ? { background: "#ad80d70c" } : undefined} className={detail ? "click" : ""} onClick={detail ? () => setOpen(open === m ? null : m) : undefined}
+                aria-expanded={detail ? open === m : undefined}>
+                <td className="mono faint">{detail ? <span className="row" style={{ gap: 4 }}><Icon name={open === m ? "chevron-down" : "chevron-right"} className="xs" />{i + 1}</span> : i + 1}</td>
                 <td className={isHM ? "hm" : "strong"} style={{ fontWeight: isHM ? 700 : 500 }}>{m}</td>
                 <td><div className="row"><div className="lb-bar grow"><span style={{ width: `${(e / maxE) * 100}%`, background: isHM ? HM_COLOR : i === 0 ? "var(--up)" : "#57A3F8" }} /></div><span className="mono" style={{ width: 52, textAlign: "right" }}>{pctUnits(e, 1)}</span></div></td>
                 <td className="r mono">{pctUnits(r["Hit +/-20%"], 1)}</td>
@@ -187,6 +192,8 @@ export function Leaderboard({ rows, updated }: { rows: CsvRow[]; updated: number
                 <td className="r mono">{isNum(r.Spearman) ? (r.Spearman as number).toFixed(2) : "—"}</td>
                 <td className="r mono faint">{isNum(r.N) ? (r.N as number).toFixed(0) : "—"}</td>
               </tr>
+              {detail && open === m && <tr className="analyst-row"><td /><td colSpan={6} style={{ whiteSpace: "normal", padding: "10px 12px 14px" }}>{detail(m)}</td></tr>}
+              </Fragment>
             );
           })}
         </tbody>

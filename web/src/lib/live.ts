@@ -85,6 +85,8 @@ export interface ChartData {
   tracked: boolean;
   market: MarketStatus;
   stored?: number;
+  /** set when no provider answered and these are the tracker's stored prices */
+  note?: string;
 }
 
 export interface Quote {
@@ -107,6 +109,8 @@ export interface Quote {
   stale?: boolean;
   hm?: LiveHM | null;
   error?: string;
+  /** where the quote came from when it is not Yahoo */
+  source?: string;
 }
 
 export interface WatchItem {
@@ -255,6 +259,38 @@ export const useDirectory = (sectors: string[] | "all", enabled = true) =>
     staleTime: 300_000,
     placeholderData: (prev) => prev,
   });
+
+export interface IndexInfo { key: string; label: string; group: string; aliases?: string[]; count?: number | null; fetched?: number | null }
+export interface IndexMembers { key: string; label: string; source: "nse" | "snapshot" | "known" | null; fetched: number | null; note: string | null; companies: { ticker: string; name: string; sector: string; cap: string }[] }
+export const useIndexCatalog = () => useQuery({ queryKey: ["indices"], queryFn: () => api.get<IndexInfo[]>("/api/indices"), staleTime: 600_000 });
+export const useIndexMatch = (q: string) =>
+  useQuery({ queryKey: ["indices-match", q], queryFn: () => api.get<IndexInfo[]>(`/api/indices?q=${encodeURIComponent(q)}`), enabled: q.trim().length >= 3, staleTime: 600_000 });
+export const useIndexMembers = (key: string | null) =>
+  useQuery({ queryKey: ["index", key], queryFn: () => api.get<IndexMembers>(`/api/indices/${encodeURIComponent(key!)}`), enabled: !!key, staleTime: 3_600_000 });
+
+export interface ForecastHorizon {
+  key: string; label: string; days: number; price: number; low: number; high: number; change: number; p_up: number;
+  parts: { drift: number; reversal: number; momentum: number; value: number }; lead: "drift" | "reversal" | "momentum" | "value";
+}
+export interface LiveForecast {
+  ticker: string; name: string; price: number; as_of: number | null; computed: number; market: MarketStatus; live: boolean;
+  value: LiveHM | null; gap: number | null; horizons: ForecastHorizon[];
+  accuracy: { "1d": { n: number; direction: number; band: number } | null; "15m": { n: number; direction: number } | null };
+  inputs: { daily_closes: number; daily_source: string | null; minute_bars: number; sigma_day: number; sigma_long: number; phi_day: number; phi_15m: number; momentum_3m: number };
+  notes: string[];
+}
+/** Forecasts from 15 minutes to 5 years, recomputed with every tracker poll while the market is open. */
+export const useForecast = (ticker: string | null) =>
+  useQuery({
+    queryKey: ["forecast", ticker],
+    queryFn: () => api.get<LiveForecast>(`/api/live/forecast?ticker=${encodeURIComponent(ticker!)}`),
+    enabled: !!ticker,
+    retry: 0,
+    refetchInterval: (q) => (q.state.data ? (isOpen(q.state.data.market) ? 30_000 : 300_000) : q.state.status === "error" ? false : 4_000),
+  });
+export type QuickForecast = Record<string, Record<"1h" | "1d" | "1m", { change: number; p_up: number; low: number; high: number }>>;
+export const useQuickForecasts = (enabled = true) =>
+  useQuery({ queryKey: ["forecast-quick"], queryFn: () => api.get<QuickForecast>("/api/live/forecast/quick"), enabled, refetchInterval: 30_000 });
 
 /** One watchlist with live quotes, or (no id) every company on any list. */
 export const useWatchlist = (listId?: string | null) =>

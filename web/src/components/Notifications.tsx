@@ -8,11 +8,12 @@ import { chime, desktop, dismiss, getPrefs, setPrefs, useDismissed, useNotifyPre
 import { alertEvent } from "../lib/sound";
 import { NotifySettings } from "./NotifySettings";
 import { ExportButton } from "./ExportButton";
-import { ago, shortName, slug } from "../lib/format";
+import { ago, shortName } from "../lib/format";
 import { Icon, Popover, Toggle } from "./ui";
 import { Link } from "react-router-dom";
 import { useApp } from "./workbenchContext";
 import { jobTitle } from "./Shell";
+import { companyPath } from "../lib/company";
 
 type Tab = "all" | "live" | "research";
 interface Item { key: string; kind: "live" | "research"; icon: string; tone: string; title: string; text: string; t: number | null; isNew: boolean; go: string; alert?: LiveAlert }
@@ -36,9 +37,9 @@ export function Notifications() {
     const at = intel.data?.meta?.started ? Date.parse(intel.data.meta.started) / 1000 : null;
     const rows: Item[] = [];
     for (const x of v) {
-      for (const f of x.red_flags ?? []) rows.push({ key: `${run}|${x.company}|${f}`, kind: "research", icon: "warning", tone: "down", title: shortName(x.company), text: f, t: at, isNew: false, go: `/coverage/${slug(x.company)}` });
+      for (const f of x.red_flags ?? []) rows.push({ key: `${run}|${x.company}|${f}`, kind: "research", icon: "warning", tone: "down", title: shortName(x.company), text: f, t: at, isNew: false, go: companyPath(x.company) });
       for (const c of (x.changes ?? []).filter((c) => !c.startsWith("first")))
-        rows.push({ key: `${run}|${x.company}|${c}`, kind: "research", icon: c.startsWith("label") ? "tag" : "history", tone: "info", title: shortName(x.company), text: c, t: at, isNew: false, go: `/coverage/${slug(x.company)}` });
+        rows.push({ key: `${run}|${x.company}|${c}`, kind: "research", icon: c.startsWith("label") ? "tag" : "history", tone: "info", title: shortName(x.company), text: c, t: at, isNew: false, go: companyPath(x.company) });
     }
     return rows.filter((r) => !dismissed.has(r.key));
   }, [intel.data, dismissed]);

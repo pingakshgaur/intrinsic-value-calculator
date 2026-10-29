@@ -176,7 +176,7 @@ export function ActionMenu({ label, icon, items, disabled, small, secondary = tr
 
 /**
  * Type freely or pick a suggestion - the same list as Select, filtered by
- * what is typed (a sector name in the Universe grid, where a new one is fine too).
+ * what is typed, where a new value is fine too.
  */
 export function Combobox({ value, onChange, suggestions, placeholder, className = "", style, ariaLabel }: {
   value: string; onChange: (v: string) => void; suggestions: string[]; placeholder?: string; className?: string; style?: CSSProperties; ariaLabel?: string;

@@ -1,6 +1,6 @@
 // Scope: the watchlist the app is looking at. "All companies" (null) is the
-// app as it always was; choosing a watchlist narrows Coverage, the Command
-// Center, Universe, Model Performance and the research workforce to its
+// app as it always was; choosing a watchlist narrows the Command Center,
+// Model Performance and the research workforce to its
 // companies. Kept in this browser.
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useWatchlists, WatchList } from "./live";

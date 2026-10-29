@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useIntel, useJobs, useMarket, useStatus } from "../lib/hooks";
+import { useJobs, useMarket, useStatus } from "../lib/hooks";
 import { useWatchlist } from "../lib/live";
 import { ScopeProvider } from "../lib/scope";
 import { ScopePicker } from "./ScopePicker";
@@ -19,7 +19,6 @@ const NAV = [
     { to: "/", icon: "pulse", label: "Command Center", end: true },
     { to: "/markets", icon: "graph", label: "Markets", badge: "LIVE" },
     { to: "/watchlist", icon: "eye", label: "Watchlists" },
-    { to: "/coverage", icon: "table", label: "Coverage" },
     { to: "/studio", icon: "beaker", label: "HYBRID MODEL Studio" },
   ] },
   { group: "Research workforce", items: [
@@ -27,12 +26,9 @@ const NAV = [
     { to: "/agents/network", icon: "type-hierarchy", label: "Agent Network" },
     { to: "/agents/chat", icon: "comment-discussion", label: "Research Room" },
   ] },
-  { group: "Models & data", items: [
-    { to: "/performance", icon: "graph-line", label: "Model Performance" },
-    { to: "/universe", icon: "database", label: "Universe" },
-  ] },
   { group: "Operations", items: [
     { to: "/operations", icon: "server-process", label: "Operations" },
+    { to: "/performance", icon: "graph-line", label: "Model Performance" },
     { to: "/configuration", icon: "settings", label: "Configuration" },
   ] },
 ];
@@ -78,7 +74,6 @@ export function Shell() {
   const nav = useNavigate();
   const loc = useLocation();
   const status = useStatus();
-  const intel = useIntel();
   const market = useMarket();
   const active = status.data?.active_job ?? null;
   const jobs = useJobs(!!active);
@@ -120,7 +115,6 @@ export function Shell() {
     return () => window.removeEventListener("keydown", onKey);
   }, [nav]);
 
-  const verdicts = intel.data?.verdicts ?? [];
   const wl = useWatchlist();
   const tracker = wl.data?.tracker;
   const keys = status.data?.keys ?? {};
@@ -146,7 +140,6 @@ export function Shell() {
                   <NavLink key={it.to} to={it.to} end={it.end} className={({ isActive }) => `sb-item ${isActive ? "active" : ""}`} title={it.label}>
                     <Icon name={it.icon} />
                     <span>{it.label}</span>
-                    {it.to === "/coverage" && verdicts.length > 0 && <span className="count">{verdicts.length}</span>}
                     {"badge" in it && it.badge && <span className="tagnew">{it.badge}</span>}
                   </NavLink>
                 ))}

@@ -13,12 +13,10 @@ import "./styles/network.css";
 import { Shell } from "./components/Shell";
 import { Empty, Panel } from "./components/ui";
 import { CommandCenter } from "./views/CommandCenter";
-import { Coverage } from "./views/Coverage";
-import { Profile } from "./views/Profile";
+import { CompanyByName, CompanyInList } from "./views/Profile";
 import { Studio } from "./views/Studio";
 import { Performance } from "./views/Performance";
 import { Operations } from "./views/Operations";
-import { Universe } from "./views/Universe";
 import { Configuration } from "./views/Configuration";
 import { Markets } from "./views/Markets";
 import { WatchlistDetail } from "./views/Watchlist";
@@ -31,7 +29,7 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, sta
 
 function OldCompany() {
   const { company = "" } = useParams();
-  return <Navigate to={`/coverage/${company}`} replace />;
+  return <Navigate to={`/company/${company}`} replace />;
 }
 
 const NotFound = (
@@ -48,25 +46,28 @@ const router = createBrowserRouter([
       { path: "markets", element: <Markets /> },
       { path: "watchlist", element: <Watchlist /> },
       { path: "watchlist/:id", element: <WatchlistDetail /> },
+      { path: "watchlist/:id/:ticker", element: <CompanyInList /> },
+      { path: "company/:company", element: <CompanyByName /> },
       { path: "agents/network", element: <AgentNetwork /> },
       { path: "agents/chat", element: <AgentChat /> },
       { path: "agents", element: <AgentsOverview /> },
-      { path: "coverage", element: <Coverage /> },
-      { path: "coverage/:company", element: <Profile /> },
       { path: "studio", element: <Studio /> },
       { path: "performance", element: <Performance /> },
       { path: "operations", element: <Operations /> },
-      { path: "universe", element: <Universe /> },
       { path: "configuration", element: <Configuration /> },
       // addresses from earlier versions of the app
-      { path: "research", element: <Navigate to="/coverage" replace /> },
+      // Coverage and Universe are folded into the watchlists
+      { path: "coverage", element: <Navigate to="/watchlist" replace /> },
+      { path: "coverage/:company", element: <OldCompany /> },
+      { path: "universe", element: <Navigate to="/watchlist" replace /> },
+      { path: "research", element: <Navigate to="/watchlist" replace /> },
       { path: "research/:company", element: <OldCompany /> },
       { path: "intel/:company", element: <OldCompany /> },
       { path: "lab", element: <Navigate to="/studio" replace /> },
       { path: "models", element: <Navigate to="/performance" replace /> },
       { path: "learning", element: <Navigate to="/performance?tab=training" replace /> },
       { path: "run", element: <Navigate to="/operations" replace /> },
-      { path: "companies", element: <Navigate to="/universe" replace /> },
+      { path: "companies", element: <Navigate to="/watchlist" replace /> },
       { path: "settings", element: <Navigate to="/configuration" replace /> },
       { path: "*", element: NotFound },
     ],

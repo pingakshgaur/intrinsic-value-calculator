@@ -2,20 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import { useCompanies, useStartJob, useStatus } from "../lib/hooks";
+import { useIntel } from "../lib/hooks";
+import { Verdict } from "../lib/api";
+import { findVerdict, listCompanyPath } from "../lib/company";
 import { isOpen, TrackerState, useLiveAlerts, useWatchlist, useWatchlistMutations, useWatchlists, useWatchMutations, WatchItem, WatchList } from "../lib/live";
 import { useScope } from "../lib/scope";
 import { ResearchLauncher } from "../components/ResearchLauncher";
 import { CompanyImporter, Entry } from "../components/CompanyImporter";
-import { ago, isNum, money, num, pct, shortName, when } from "../lib/format";
+import { ago, isNum, money, num, pct, shortName, signed, when } from "../lib/format";
 import { HM_COLOR, LABELS } from "../lib/labels";
-import { Drawer, Empty, ErrorNote, Icon, LabelBadge, PageHeader, Panel, Popover, QueryView, Toggle } from "../components/ui";
+import { Diverge, Drawer, Empty, ErrorNote, Icon, LabelBadge, Meter, PageHeader, Panel, Popover, QueryView, Toggle } from "../components/ui";
 import { Column, DataGrid, GridTools, sortRows, useGridState } from "../components/DataGrid";
 import { ChartPanel } from "../components/ChartPanel";
 import { Position, Spark } from "../components/Spark";
 import { useApp } from "../components/workbenchContext";
 import { chime } from "../lib/notify";
 import { ActionMenu } from "../components/Select";
+import { LiveForecast } from "../components/LiveForecast";
+import { WatchControls } from "../components/WatchControls";
 
 
 /** One watchlist from the library, opened: its companies live, with charts, alerts and notes. */
@@ -50,16 +54,26 @@ function Board({ items, tracker, list, max, tracked, sel, pick }: { items: Watch
   const scope = useScope();
   const [view, setView] = useState<"tiles" | "table">(() => { try { return (localStorage.getItem("wl.view") as "tiles" | "table") || "tiles"; } catch { return "tiles"; } });
   // one sort for both views: set by the table's column headers, or the column buttons above the tiles
-  const sortState = useGridState<WatchItem>("watch", WATCH_COLUMNS, { key: "chg", asc: false });
+  const sortState = useGridState<WatchRow>("watch", WATCH_COLUMNS, { key: "chg", asc: false });
   useEffect(() => { try { localStorage.setItem("wl.view", view); } catch { /* ignore */ } }, [view]);
   const m = useWatchMutations();
   const [adding, setAdding] = useState(false);
   const [tracking, setTracking] = useState(false);
   const alerts = useLiveAlerts();
   const open = isOpen(tracker.market);
-  const current = items.find((w) => w.ticker === sel) ?? null;
+  const current = (items.find((w) => w.ticker === sel) ?? null) as WatchItem | null;
 
-  const sorted = useMemo(() => sortRows(items, WATCH_COLUMNS, sortState.sort), [items, sortState.sort]);
+  const nav = useNavigate();
+  const intel = useIntel();
+  // each company with its research verdict, when the research workforce has covered it
+  const rows = useMemo<WatchRow[]>(() => items.map((w) => ({ ...w, v: findVerdict(intel.data?.verdicts, w) })), [items, intel.data]);
+  const [find, setFind] = useState("");
+  const shown = useMemo(() => {
+    const f = find.trim().toLowerCase();
+    return f ? rows.filter((w) => `${w.name} ${w.ticker} ${w.sector} ${w.v?.label ?? w.quote?.hm?.label ?? ""}`.toLowerCase().includes(f)) : rows;
+  }, [rows, find]);
+  const sorted = useMemo(() => sortRows(shown, WATCH_COLUMNS, sortState.sort), [shown, sortState.sort]);
+  const openFull = (t: string) => nav(listCompanyPath(list.id, t));
 
   const q = items.map((w) => w.quote).filter((x) => x && isNum(x.chg_pct));
   const today = new Date().toISOString().slice(0, 10);
@@ -109,6 +123,12 @@ function Board({ items, tracker, list, max, tracked, sel, pick }: { items: Watch
             <section className="panel" style={{ minHeight: 0 }}>
               <div className="toolbar">
                 <div className="seg"><button className={view === "tiles" ? "on" : ""} onClick={() => setView("tiles")}><Icon name="layout" className="xs" />Tiles</button><button className={view === "table" ? "on" : ""} onClick={() => setView("table")}><Icon name="list-flat" className="xs" />Table</button></div>
+                <div className="search wl-find" title="Find a company on this list by name, symbol, sector or label">
+                  <Icon name="search" /><input value={find} onChange={(e) => setFind(e.target.value)} placeholder={`Search ${items.length} companies`} aria-label="Search this watchlist"
+                    onKeyDown={(e) => { if (e.key === "Escape") setFind(""); else if (e.key === "Enter" && sorted[0]) pick(sorted[0].ticker); }} />
+                  {find && <button className="ibtn sm" onClick={() => setFind("")} title="Clear"><Icon name="close" className="xs" /></button>}
+                </div>
+                {find && <span className="xs faint">{shown.length} of {items.length}</span>}
                 {view === "tiles" && <SortBar state={sortState} />}
                 <span className="spacer" />
                 {view === "tiles" && (
@@ -119,16 +139,17 @@ function Board({ items, tracker, list, max, tracked, sel, pick }: { items: Watch
                     <span className="xs">All</span>
                   </label>
                 )}
-                {!checked.size && <span className="xs faint">Tick companies to remove, move or copy several · click one for its chart</span>}
+                {!checked.size && !find && <span className="xs faint wl-hint">Click a company for its live view · <b>Full analysis</b> for everything</span>}
               </div>
               {checked.size > 0 && <BulkBar list={list} items={items} checked={checked} setChecked={setChecked} onClosed={(t) => { if (sel && t.includes(sel)) pick(null); }} />}
               {view === "tiles" ? (
                 <div className="tiles">{sorted.map((w) => <Tile key={w.ticker} w={w} on={w.ticker === sel} picked={checked.has(w.ticker)} picking={checked.size > 0}
                   onPick={() => setChecked((c) => { const n = new Set(c); if (n.has(w.ticker)) n.delete(w.ticker); else n.add(w.ticker); return n; })}
-                  onClick={() => pick(w.ticker === sel ? null : w.ticker)} />)}</div>
-              ) : <WatchTable items={items} sel={sel} pick={pick} state={sortState} checked={checked} setChecked={setChecked} />}
+                  onClick={() => pick(w.ticker === sel ? null : w.ticker)} onOpen={() => openFull(w.ticker)} />)}
+                  {!sorted.length && <div className="xs faint" style={{ padding: 16 }}>No company on this list matches “{find}”.</div>}</div>
+              ) : <WatchTable items={sorted} sel={sel} pick={pick} open={openFull} state={sortState} checked={checked} setChecked={setChecked} find={find} />}
             </section>
-            {current && <Detail w={current} list={list} onClose={() => pick(null)} />}
+            {current && <Detail w={current} v={rows.find((r) => r.ticker === current.ticker)?.v ?? null} list={list} onClose={() => pick(null)} onOpen={() => openFull(current.ticker)} />}
           </div>
           <AlertsPanel />
         </>
@@ -137,20 +158,23 @@ function Board({ items, tracker, list, max, tracked, sel, pick }: { items: Watch
   );
 }
 
-function Tile({ w, on, picked, picking, onPick, onClick }: { w: WatchItem; on: boolean; picked: boolean; picking: boolean; onPick: () => void; onClick: () => void }) {
+function Tile({ w, on, picked, picking, onPick, onClick, onOpen }: { w: WatchRow; on: boolean; picked: boolean; picking: boolean; onPick: () => void; onClick: () => void; onOpen: () => void }) {
   const q = w.quote;
   const up = (q?.chg_pct ?? 0) >= 0;
   const hm = q?.hm;
   const below = hm?.buy_below && isNum(q?.last) && q!.last! <= hm.buy_below;
   return (
     <div className={`tile ${on ? "on" : ""} ${below ? "value" : ""} ${picked ? "picked" : ""} ${picking ? "picking" : ""}`} role="button" tabIndex={0}
-      onClick={(e) => (e.ctrlKey || e.metaKey || picking ? onPick() : onClick())} onKeyDown={(e) => { if (e.key === "Enter") onClick(); else if (e.key === " ") { e.preventDefault(); onPick(); } }}>
+      onClick={(e) => (e.ctrlKey || e.metaKey || picking ? onPick() : onClick())} onDoubleClick={onOpen} title="Click for the live view · double-click for the full analysis"
+      onKeyDown={(e) => { if (e.key === "Enter") (e.shiftKey ? onOpen() : onClick()); else if (e.key === " ") { e.preventDefault(); onPick(); } }}>
       <div className="tile-h">
         <input type="checkbox" className="cb tile-cb" checked={picked} onClick={(e) => e.stopPropagation()} onChange={onPick} aria-label={`Select ${w.name}`} title="Select" />
         <b className="ellipsis">{shortName(w.name)}</b>
         <span className="mono faint xs">{w.ticker.replace(/\.NS$/, "")}</span>
         {(w.alert_below || w.alert_above) && <Icon name="bell" className="xs" style={{ color: "var(--c-yellow)" }} />}
-        {q?.stale && <Icon name="clock" className="xs warn" title="No new price for 20 minutes (exchange holiday?)" />}
+        {q?.stale && <Icon name="clock" className="xs warn" title={q.source?.startsWith("stored") ? "No data provider answered: showing the last stored price" : "No new price for 20 minutes (exchange holiday?)"} />}
+        {(w.v?.red_flags?.length ?? 0) > 0 && <span className="tag down xs" title={w.v!.red_flags.join("\n")}>{w.v!.red_flags.length} flag{w.v!.red_flags.length > 1 ? "s" : ""}</span>}
+        <button className="ibtn sm tile-open" onClick={(e) => { e.stopPropagation(); onOpen(); }} title="Full analysis"><Icon name="go-to-file" className="xs" /></button>
       </div>
       {q?.error ? <div className="xs down" style={{ padding: "12px 0" }}>{q.error}</div> : !q ? <div className="xs faint" style={{ padding: "12px 0" }}>waiting for the first poll…</div> : (
         <>
@@ -184,7 +208,8 @@ const inRange = (w: WatchItem) => { const last = w.quote?.last, lo = w.quote?.lo
 const intraday = (w: WatchItem) => { const s = w.quote?.spark ?? [], a = s[0], b = s[s.length - 1]; return s.length > 1 && isNum(a) && isNum(b) && a ? b / a - 1 : null; };
 
 // every column sorts: click a header (or, in tiles view, a column name above the tiles)
-const WATCH_COLUMNS: Column<WatchItem>[] = [
+type WatchRow = WatchItem & { v?: Verdict | null };
+const WATCH_COLUMNS: Column<WatchRow>[] = [
   { key: "company", header: "Company", sticky: true, fixed: true, sort: (w) => w.name, render: (w) => <div className="co"><b>{shortName(w.name)}</b><small>{w.ticker}</small></div> },
   { key: "spark", header: "Today", sort: intraday, exportValue: (w) => pct(intraday(w), 2, true), render: (w) => <Spark values={w.quote?.spark ?? []} base={w.quote?.prev_close} width={90} height={24} /> },
   { key: "last", header: "Last", align: "r", sort: (w) => w.quote?.last, render: (w) => <span className="mono">{num(w.quote?.last)}</span> },
@@ -198,9 +223,16 @@ const WATCH_COLUMNS: Column<WatchItem>[] = [
   { key: "alerts", header: "Alerts", sort: (w) => (w.alert_below ? 1 : 0) + (w.alert_above ? 1 : 0) || null,
     exportValue: (w) => `${w.alert_below ? `below ${num(w.alert_below, 0)}` : ""} ${w.alert_above ? `above ${num(w.alert_above, 0)}` : ""}`.trim(),
     render: (w) => <span className="mono xs muted">{w.alert_below ? `↓${num(w.alert_below, 0)}` : ""} {w.alert_above ? `↑${num(w.alert_above, 0)}` : ""}</span> },
+  { key: "conf", header: "Confidence", sort: (w) => w.quote?.hm?.confidence ?? w.v?.confidence, exportValue: (w) => num(w.quote?.hm?.confidence ?? w.v?.confidence, 0),
+    render: (w) => { const c = w.quote?.hm?.confidence ?? w.v?.confidence; return isNum(c) ? <div className="row"><Meter value={c} width={44} /><span className="mono muted xs">{c.toFixed(0)}</span></div> : <span className="faint">—</span>; } },
+  { key: "research", header: "Research", sort: (w) => w.v?.research_score, exportValue: (w) => signed(w.v?.research_score),
+    render: (w) => w.v ? <div className="row"><Diverge value={w.v.research_score} width={50} /><span className="mono muted xs">{signed(w.v.research_score)}</span></div> : <span className="faint xs">not researched</span> },
+  { key: "flags", header: "Flags", align: "r", sort: (w) => w.v?.red_flags?.length ?? null, exportValue: (w) => (w.v?.red_flags ?? []).join(" | "),
+    render: (w) => <span className={`mono ${(w.v?.red_flags?.length ?? 0) ? "down" : "faint"}`} title={(w.v?.red_flags ?? []).join("\n")}>{w.v ? w.v.red_flags?.length ?? 0 : "—"}</span> },
+  { key: "buy", header: "Buy-below", align: "r", visible: false, sort: (w) => w.quote?.hm?.buy_below ?? w.v?.buy_below, render: (w) => <span className="mono muted">{money(w.quote?.hm?.buy_below ?? w.v?.buy_below, 0)}</span> },
   { key: "sector", header: "Sector", visible: false, sort: (w) => w.sector, render: (w) => <span className="muted">{w.sector}</span> },
 ];
-type SortState = ReturnType<typeof useGridState<WatchItem>>;
+type SortState = ReturnType<typeof useGridState<WatchRow>>;
 /** the same rule as a header click: a new column starts high-to-low (names A-Z), a second click flips it */
 const clickSort = (state: SortState, key: string) =>
   state.setSort({ key, asc: state.sort?.key === key ? !state.sort.asc : key === "company" || key === "sector" });
@@ -210,7 +242,7 @@ function SortBar({ state }: { state: SortState }) {
   return (
     <div className="wl-sortbar" role="group" aria-label="Sort by">
       <span className="xs faint">Sort</span>
-      {WATCH_COLUMNS.filter((c) => c.sort && c.key !== "sector" && c.key !== "alerts").map((c) => {
+      {WATCH_COLUMNS.filter((c) => c.sort && !["sector", "alerts", "research", "flags", "buy", "conf"].includes(c.key)).map((c) => {
         const on = state.sort?.key === c.key;
         return (
           <button key={c.key} className={on ? "on" : ""} onClick={() => clickSort(state, c.key)} title={`Sort by ${c.header.toLowerCase()}`}>
@@ -222,22 +254,20 @@ function SortBar({ state }: { state: SortState }) {
   );
 }
 
-function WatchTable({ items, sel, pick, state, checked, setChecked }: { items: WatchItem[]; sel: string | null; pick: (t: string | null) => void; state: SortState; checked: Set<string>; setChecked: (s: Set<string>) => void }) {
+function WatchTable({ items, sel, pick, open, state, checked, setChecked, find }: { items: WatchRow[]; sel: string | null; pick: (t: string | null) => void; open: (t: string) => void; state: SortState; checked: Set<string>; setChecked: (s: Set<string>) => void; find: string }) {
   return (
     <>
-      <div className="toolbar" style={{ borderTop: 0, paddingTop: 0 }}><span className="spacer" /><GridTools columns={WATCH_COLUMNS} state={state} exportRows={items} exportTitle="Watchlist" /></div>
-      <DataGrid rows={items} columns={WATCH_COLUMNS} rowKey={(w) => w.ticker} state={state} selected={sel} onSelect={pick} onOpen={pick} checked={checked} onCheck={setChecked} />
+      <div className="toolbar wl-tabletools"><span className="xs faint">Enter or double-click opens the full analysis</span><span className="spacer" /><GridTools columns={WATCH_COLUMNS} state={state} exportRows={items} exportTitle="Watchlist" /></div>
+      <DataGrid rows={items} columns={WATCH_COLUMNS} rowKey={(w) => w.ticker} state={state} selected={sel} onSelect={pick} onOpen={open} checked={checked} onCheck={setChecked}
+        empty={find ? `No company on this list matches “${find}”.` : "No companies."} />
     </>
   );
 }
 
-/** What to do with the ticked companies: take them off, move or copy them to another list, research them. */
+/** What to do with the ticked companies: take them off, or move or copy them to another list. */
 function BulkBar({ list, items, checked, setChecked, onClosed }: { list: WatchList; items: WatchItem[]; checked: Set<string>; setChecked: (s: Set<string>) => void; onClosed: (tickers: string[]) => void }) {
   const lib = useWatchlists();
   const lm = useWatchlistMutations();
-  const companies = useCompanies();
-  const start = useStartJob();
-  const status = useStatus();
   const app = useApp();
   const [busy, setBusy] = useState(false);
   const picked = items.filter((w) => checked.has(w.ticker));
@@ -261,11 +291,6 @@ function BulkBar({ list, items, checked, setChecked, onClosed }: { list: WatchLi
       app.toast(`${move ? "Moved" : "Copied"} ${picked.length} to “${to.name}”${r.added < picked.length ? ` (${picked.length - r.added} were already there)` : ""}`, "ok");
     } catch (e) { say(e); } finally { setBusy(false); }
   };
-  const covered = new Set((companies.data ?? []).map((c) => (c.ticker || "").toUpperCase().split(".")[0]));
-  const researchable = picked.map((w) => w.ticker.toUpperCase().split(".")[0]).filter((t) => covered.has(t));
-  const research = (quick: boolean) => start.mutate({ kind: "agents", options: { quick, tickers: researchable.join(",") } }, {
-    onSuccess: (j) => { app.toast(`Researching ${researchable.length} compan${researchable.length === 1 ? "y" : "ies"}`, "ok"); app.showJob(j.id); }, onError: say,
-  });
   return (
     <div className="toolbar wl-bulk">
       <span className="tag info">{checked.size} selected</span>
@@ -276,9 +301,6 @@ function BulkBar({ list, items, checked, setChecked, onClosed }: { list: WatchLi
           <ActionMenu small label="Move to" icon="arrow-right" disabled={busy} title="Move them to another list" items={others.map((l) => ({ label: l.name, onClick: () => copyTo(l.id, true) }))} />
         </>
       )}
-      <ActionMenu small label="Research" icon="rocket" disabled={busy || !researchable.length || !!status.data?.active_job || start.isPending}
-        title={!researchable.length ? "None of the selected companies is in Coverage yet" : status.data?.active_job ? "Another run is in progress" : `Research the ${researchable.length} covered companies`}
-        items={[{ label: "Quick sweep", icon: "zap", hint: researchable.length, onClick: () => research(true) }, { label: "Full research", icon: "rocket", hint: researchable.length, onClick: () => research(false) }]} />
       <button className="btn danger sm" onClick={remove} disabled={busy}><Icon name={busy ? "loading" : "trash"} className={`sm ${busy ? "spin" : ""}`} />Remove from list</button>
       <span className="spacer" />
       <button className="btn sm ghost" onClick={() => setChecked(new Set())} title="Clear the selection"><Icon name="close" className="xs" />Clear</button>
@@ -324,41 +346,33 @@ function EditBar({ list, count, onClose }: { list: WatchList; count: number; onC
   );
 }
 
-function Detail({ w, list, onClose }: { w: WatchItem; list: WatchList; onClose: () => void }) {
-  const m = useWatchMutations();
-  const app = useApp();
-  const [below, setBelow] = useState(w.alert_below?.toString() ?? "");
-  const [above, setAbove] = useState(w.alert_above?.toString() ?? "");
-  const [note, setNote] = useState(w.note ?? "");
-  useEffect(() => { setBelow(w.alert_below?.toString() ?? ""); setAbove(w.alert_above?.toString() ?? ""); setNote(w.note ?? ""); }, [w.ticker, w.alert_below, w.alert_above, w.note]);
-  const dirty = below !== (w.alert_below?.toString() ?? "") || above !== (w.alert_above?.toString() ?? "") || note !== (w.note ?? "");
-  const save = () => m.update.mutate({ ticker: w.ticker, alert_below: below || null, alert_above: above || null, note }, {
-    onSuccess: () => app.toast("Alerts saved", "ok"), onError: (e) => app.toast(e instanceof Error ? e.message : String(e), "error"),
-  });
-  const last = w.quote?.last;
+/** The side panel for one company: live chart, its research in brief, the next hours and days, alerts. */
+function Detail({ w, v, list, onClose, onOpen }: { w: WatchItem; v: Verdict | null; list: WatchList; onClose: () => void; onOpen: () => void }) {
+  const hm = w.quote?.hm;
   return (
     <aside className="insp wl-detail">
       <div className="insp-h">
-        <div className="row"><span className="grow strong">Live detail</span><button className="ibtn" onClick={onClose} title="Close"><Icon name="close" /></button></div>
+        <div className="row">
+          <div className="grow" style={{ minWidth: 0 }}><div className="strong ellipsis" style={{ fontSize: 14 }}>{shortName(w.name)}</div><div className="faint xs mono">{w.ticker} · {w.sector}</div></div>
+          <button className="ibtn" onClick={onClose} title="Close"><Icon name="close" /></button>
+        </div>
+        <button className="btn wl-full" onClick={onOpen}><Icon name="go-to-file" className="sm" />Full analysis<span className="xs faint">research, valuation, forecasts</span></button>
       </div>
       <div className="insp-b" style={{ gap: 12 }}>
         <ChartPanel ticker={w.ticker} watch={w} height={190} compactHead simple />
-        <div className="wl-form">
-          <div className="label">Price alerts</div>
-          <div className="row">
-            <label className="fld grow"><span>Alert when at or below</span><input className="inp sm num" inputMode="decimal" value={below} placeholder={isNum(last) ? num(last * 0.95, 0) : "price"} onChange={(e) => setBelow(e.target.value.replace(/[^\d.]/g, ""))} /></label>
-            <label className="fld grow"><span>Alert when at or above</span><input className="inp sm num" inputMode="decimal" value={above} placeholder={isNum(last) ? num(last * 1.05, 0) : "price"} onChange={(e) => setAbove(e.target.value.replace(/[^\d.]/g, ""))} /></label>
+        {v ? (
+          <div className="wl-brief">
+            <div className="row" style={{ gap: 6 }}><span className="label">Research</span><LabelBadge label={hm?.label ?? v.label} /><span className="spacer" />{(v.red_flags?.length ?? 0) > 0 && <span className="tag down">{v.red_flags.length} red flag{v.red_flags.length > 1 ? "s" : ""}</span>}</div>
+            {v.summary?.headline && <p className="small" style={{ lineHeight: 1.55, margin: 0 }}>{v.summary.headline}</p>}
+            <div className="row xs muted" style={{ gap: 12, flexWrap: "wrap" }}>
+              <span>Confidence <b className="mono">{isNum(hm?.confidence ?? v.confidence) ? (hm?.confidence ?? v.confidence)!.toFixed(0) : "—"}</b></span>
+              <span>Research score <b className="mono">{signed(v.research_score)}</b></span>
+              <span>Range <b className="mono">{money(v.low, 0)}–{money(v.high, 0)}</b></span>
+            </div>
           </div>
-          <span className="xs faint">Also alerted automatically when the price falls below the HYBRID MODEL buy-below, or moves more than the daily-move limit.</span>
-          <label className="fld"><span>Note</span><textarea className="inp" rows={3} value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="Why you are watching it" /></label>
-          <div className="row">
-            <button className="btn sm" disabled={!dirty || m.update.isPending} onClick={save}>Save</button>
-            <span className="spacer" />
-            <button className="btn sm ghost" onClick={() => { if (confirm(`Take ${w.name} off “${list.name}”?${(w.lists?.length ?? 1) > 1 ? " It stays on your other lists." : " Its stored minute bars are kept."}`)) m.remove.mutate({ ticker: w.ticker, list: list.id }, { onSuccess: onClose }); }}><Icon name="trash" className="xs" />Remove from list</button>
-          </div>
-          {(w.lists?.length ?? 0) > 1 && <WatchedOn ids={w.lists!} current={list.id} />}
-          <div className="xs faint">Added {when(w.added)}{isNum(w.added_price) ? ` at ${num(w.added_price)}` : ""} · {w.sector} · <Link to={`/markets?t=${encodeURIComponent(w.ticker)}`}>Open in Markets</Link></div>
-        </div>
+        ) : <div className="xs faint">Not researched yet — <button className="linkish" onClick={onOpen}>open the full analysis</button> to start research on it.</div>}
+        <LiveForecast ticker={w.ticker} compact />
+        <WatchControls w={w} list={list} onRemoved={onClose} />
       </div>
     </aside>
   );
@@ -409,20 +423,6 @@ function EmptyWatch({ list, onAdd }: { list: WatchList; onAdd: () => void }) {
         Search for companies, take whole sectors, or import a spreadsheet. While the market is open the tracker checks prices every 30 seconds, re-values covered companies at the live price, and alerts you on the levels you set.
       </Empty>
     </Panel>
-  );
-}
-
-/** The other lists a company is on, as chips that open them. */
-function WatchedOn({ ids, current }: { ids: string[]; current: string }) {
-  const lib = useWatchlists();
-  const nav = useNavigate();
-  const others = (lib.data?.lists ?? []).filter((l) => ids.includes(l.id) && l.id !== current);
-  if (!others.length) return null;
-  return (
-    <div className="row xs" style={{ gap: 4, flexWrap: "wrap" }}>
-      <span className="faint">Also on</span>
-      {others.map((l) => <button key={l.id} className="wl-chip" style={{ ["--wc" as string]: l.color }} onClick={() => nav(`/watchlist/${encodeURIComponent(l.id)}`)}><i />{l.name}</button>)}
-    </div>
   );
 }
 

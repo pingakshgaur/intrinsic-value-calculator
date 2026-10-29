@@ -28,7 +28,7 @@ export function ScopePicker() {
           ))}
           <hr />
           <Link to="/watchlist" className="scope-manage" onClick={close}><Icon name="library" className="sm" />Manage watchlists</Link>
-          <span className="xs faint" style={{ padding: "4px 10px 6px", display: "block", lineHeight: 1.4 }}>Coverage, the Command Center, Universe, Model Performance and the research workforce show only the chosen list's companies.</span>
+          <span className="xs faint" style={{ padding: "4px 10px 6px", display: "block", lineHeight: 1.4 }}>The Command Center, Model Performance and the research workforce show only the chosen list's companies.</span>
         </div>
       )}
     </Popover>

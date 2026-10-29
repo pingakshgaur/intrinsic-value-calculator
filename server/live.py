@@ -41,7 +41,7 @@ SETTINGS = LIVE / "tracker.json"
 DB = LIVE / "market.db"
 IST = timezone(timedelta(hours=5, minutes=30))
 TICKER = re.compile(r"^[A-Za-z0-9&^._\-=]{1,25}$")
-MAX_TRACKED = 250   # companies across every watchlist (the tracker polls them all, in batched downloads)
+MAX_TRACKED = 600   # companies across every watchlist - room for the NIFTY 500 (the tracker polls them in batches)
 MAX_LISTS = 50
 COLORS = ("#3994bc", "#86cf86", "#e0b97f", "#ad80d7", "#ef8773", "#4ec9b0", "#c586c0", "#d7ba7d", "#9cdcfe")
 LISTS = (("coverage", D.COMPANIES_CSV), ("training", D.DATA / "training_universe.csv"),
@@ -84,6 +84,9 @@ def is_open():
 _yf_lock = threading.Lock()
 
 
+BATCH = 100  # symbols per Yahoo request: a NIFTY 500 list is five requests, not one huge one
+
+
 def download(tickers, period, interval):
     """Batched OHLCV download. -> {ticker: DataFrame with Open/High/Low/Close/Volume}
     Symbols Yahoo has no data for are simply absent."""
@@ -93,6 +96,11 @@ def download(tickers, period, interval):
     tickers = list(dict.fromkeys(t for t in tickers if t))
     if not tickers:
         return {}
+    if len(tickers) > BATCH:
+        out = {}
+        for i in range(0, len(tickers), BATCH):
+            out.update(download(tickers[i:i + BATCH], period, interval))
+        return out
     with _yf_lock:
         df = yf.download(tickers, period=period, interval=interval, group_by="ticker",
                          auto_adjust=False, progress=False, threads=True)
@@ -527,7 +535,18 @@ def chart(ticker, rng="1d"):
         return {"ticker": ticker, "range": rng, "interval": interval, "bars": b, "last": last,
                 "prev_close": _f(prev), "chg_pct": (last / prev - 1) if prev and last else None}
 
-    out = dict(_cache.get(("chart", ticker, rng), ttl, go))
+    try:
+        out = dict(_cache.get(("chart", ticker, rng), ttl, go))
+    except LookupError:
+        # no provider answered: the tracker's own stored bars, when it has any
+        stored = tracked_chart(ticker, days=7 if rng == "1d" else 3650, bucket=60 if rng == "1d" else 300)
+        if not stored.get("bars"):
+            raise
+        if rng == "1d":
+            last_day = datetime.fromtimestamp(stored["bars"][-1]["t"], IST).date()
+            stored["bars"] = [b for b in stored["bars"] if datetime.fromtimestamp(b["t"], IST).date() == last_day]
+        stored.update(range=rng, note="Yahoo Finance has no prices for it just now - showing the prices the tracker stored.")
+        return stored
     meta = universe().get(ticker) or {"ticker": ticker, "name": ticker, "sector": "", "cap": "", "lists": []}
     out.update(meta=meta, hm=VALUER.at_price(ticker, out["last"]), tracked=ticker in {w["ticker"] for w in watchlist()},
                market=market_status())
@@ -695,6 +714,30 @@ class Tracker:
         self.last_poll, self.polls = now, self.polls + 1
 
     @staticmethod
+    def _stored_quote(t, now):
+        """No provider answered: the last price the tracker stored, flagged as stale, so the
+        watchlist, the alerts and the forecasts keep working on what is known."""
+        with _db() as con:
+            rows = con.execute("SELECT t, o, h, l, c, v FROM bars WHERE ticker=? AND c IS NOT NULL ORDER BY t DESC LIMIT 2000",
+                               (t,)).fetchall()
+        if not rows:
+            return {"ticker": t, "error": "No data provider returned a price for this symbol", "polled": now}
+        last_t = rows[0][0]
+        day_of = lambda x: datetime.fromtimestamp(x, IST).date()  # noqa: E731
+        session = day_of(last_t)
+        day = [r for r in rows if day_of(r[0]) == session][::-1]
+        before = [r for r in rows if day_of(r[0]) != session]
+        last, prev = day[-1][4], (before[0][4] if before else None)
+        q = {"ticker": t, "last": _f(last), "t": last_t, "session": str(session), "prev_close": _f(prev),
+             "chg": _f(last - prev) if prev else None, "chg_pct": (last / prev - 1) if prev else None,
+             "open": _f(day[0][1]), "high": _f(max(r[2] for r in day)), "low": _f(min(r[3] for r in day)),
+             "volume": int(sum(r[5] or 0 for r in day)), "polled": now,
+             "spark": [_f(r[4]) for r in day][:: max(1, len(day) // 80)], "month": [], "stale": True,
+             "source": "stored prices (no data provider answered)"}
+        q["hm"] = VALUER.at_price(t, last)
+        return D.clean(q)
+
+    @staticmethod
     def _quote(t, intra, daily, now):
         if intra is None and daily is None:
             # the exchange websites still know the last price (Configuration -> Data sources)
@@ -705,7 +748,7 @@ class Tracker:
             except Exception:  # noqa: BLE001
                 last, src = None, None
             if not last:
-                return {"ticker": t, "error": "No data provider returned a price for this symbol", "polled": now}
+                return Tracker._stored_quote(t, now)
             q = {"ticker": t, "last": _f(last), "t": int(now), "session": str(datetime.now(IST).date()), "polled": now,
                  "source": "NSE India" if src == "nse" else "BSE India", "spark": [], "month": []}
             q["hm"] = VALUER.at_price(t, last)

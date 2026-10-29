@@ -113,3 +113,68 @@ def test_linux_updater_finds_the_install_and_backs_up(tmp_path, monkeypatch):
     saved = installer.backup(target, "1.0.0")
     assert (saved / "output" / "intel" / "blackboard.sqlite").read_bytes() == b"memory"
     assert (saved / "data" / "live" / "watchlists.json").exists() and saved.parent == target / "backups"
+
+
+def _payload(folder, version, settings):
+    """A release as the build ships it: the installer next to payload.tar.gz and VERSION. The
+    program is a stub that records how the updater called it."""
+    import shutil
+    import tarfile
+
+    stage = folder / "stage"
+    (stage / "_internal").mkdir(parents=True)
+    (stage / "_internal" / "lib.txt").write_text(version)
+    (stage / "INTVAL").write_text('#!/bin/sh\necho "$@" > called.txt\n')
+    (stage / "VERSION").write_text(version + "\n")
+    (stage / "agent_settings.yaml").write_text(settings)
+    (stage / "data").mkdir()
+    (stage / "data" / "companies.csv").write_text("company name,sector name,market cap,ticker\nShipped Ltd,IT,Large,SHIP.NS\n")
+    (stage / "web" / "dist").mkdir(parents=True)
+    (stage / "web" / "dist" / "index.html").write_text(version)
+    with tarfile.open(folder / "payload.tar.gz", "w:gz") as tar:
+        for p in sorted(stage.rglob("*")):
+            tar.add(p, arcname=p.relative_to(stage).as_posix(), recursive=False)
+    (folder / "VERSION").write_text(version)
+    shutil.copy(ROOT / "packaging" / "linux" / "installer.py", folder / "installer.py")
+    return folder / "installer.py"
+
+
+def test_linux_install_then_update_keeps_every_bit_of_data(tmp_path):
+    """The whole path a user takes: install 1.0, use it, run the 1.1 updater."""
+    import os
+    import subprocess
+
+    env = {**os.environ, "HOME": str(tmp_path / "home"), "XDG_DATA_HOME": str(tmp_path / "home" / "share"),
+           "XDG_CONFIG_HOME": str(tmp_path / "home" / "config"), "DISPLAY": "", "WAYLAND_DISPLAY": ""}
+    target = tmp_path / "intval"
+    old = _payload(tmp_path / "r1", "1.0.0", "run: {quick: false}\n")
+    r = subprocess.run([sys.executable, str(old), "--silent", "--dir", str(target), "--no-desktop", "--no-menu"], env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert (target / "INTVAL").exists() and (target / "uninstall.sh").exists()
+    # the user works with it: their own settings, companies, watchlists, agent memory and keys
+    (target / "agent_settings.yaml").write_text("run: {quick: true}   # mine\n")
+    (target / "data" / "companies.csv").write_text("company name,sector name,market cap,ticker\nMy Pick,Banks,Small,MINE.NS\n")
+    (target / "data" / "live").mkdir(parents=True)
+    (target / "data" / "live" / "watchlists.json").write_text('{"lists": ["mine"]}')
+    (target / "output" / "intel").mkdir(parents=True)
+    (target / "output" / "intel" / "blackboard.sqlite").write_bytes(b"agent memory")
+    (target / ".env").write_text("GROQ_API_KEY=secret\n")
+
+    new = _payload(tmp_path / "r2", "1.1.0", "run: {quick: false, extra: 1}\n")
+    r = subprocess.run([sys.executable, str(new), "--update", "--silent"], env=env, capture_output=True, text=True, cwd=tmp_path)
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert "1.0.0" in r.stdout and "1.1.0" in r.stdout
+    # the program is the new one ...
+    assert (target / "VERSION").read_text().strip() == "1.1.0"
+    assert (target / "_internal" / "lib.txt").read_text() == "1.1.0" and (target / "web" / "dist" / "index.html").read_text() == "1.1.0"
+    # ... every bit of the user's data is untouched, and backed up first
+    assert "# mine" in (target / "agent_settings.yaml").read_text()
+    assert "MINE.NS" in (target / "data" / "companies.csv").read_text()
+    assert (target / "data" / "live" / "watchlists.json").read_text() == '{"lists": ["mine"]}'
+    assert (target / "output" / "intel" / "blackboard.sqlite").read_bytes() == b"agent memory"
+    assert (target / ".env").read_text() == "GROQ_API_KEY=secret\n"
+    backups = list((target / "backups").iterdir())
+    assert len(backups) == 1 and "1.0.0-to-1.1.0" in backups[0].name
+    assert (backups[0] / "output" / "intel" / "blackboard.sqlite").exists()
+    # ... and the new program was asked to bring the data up to date
+    assert (target / "called.txt").read_text().split() == ["--migrate", "--no-backup", "--previous-version", "1.0.0"]

@@ -1,14 +1,14 @@
 import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import { DirectoryCompany, useDirectory, useDirectorySectors, useLiveSearch, useWatchlists } from "../lib/live";
+import { DirectoryCompany, IndexMembers, useDirectory, useDirectorySectors, useIndexCatalog, useIndexMatch, useIndexMembers, useLiveSearch, useWatchlists } from "../lib/live";
 import { normName } from "../lib/scope";
 import { ago, shortName } from "../lib/format";
 import { Icon } from "./ui";
 import { useApp } from "./workbenchContext";
 
 export type Entry = { ticker: string; name?: string; sector?: string; cap?: string };
-type Way = "search" | "sectors" | "file" | "list";
+type Way = "search" | "indices" | "sectors" | "file" | "list";
 
 const TICKER = /^[A-Z0-9&-]{1,20}(\.(NS|BO))?$/;
 /** split one CSV line, keeping commas inside quotes */
@@ -63,25 +63,28 @@ async function sheetText(f: File) {
 }
 
 /**
- * Add companies to a watchlist four ways: search for them, take whole sectors,
- * read a spreadsheet (CSV, Excel or pasted text), or copy another list. The
+ * Add companies to a watchlist five ways: search for them, take a whole index
+ * (NIFTY 50, NIFTY 500, large / mid / small cap…) or whole sectors, read a
+ * spreadsheet (CSV, Excel or pasted text), or copy another list. The
  * picks collect at the bottom; `taken` are already on the list and greyed out.
  */
 export function CompanyImporter({ picks, setPicks, taken, room, exceptList }: {
   picks: Entry[]; setPicks: (p: Entry[]) => void; taken?: Set<string>; room?: number; exceptList?: string;
 }) {
   const [way, setWay] = useState<Way>("search");
+  const [index, setIndex] = useState<string | null>(null);
   const has = useMemo(() => new Set(picks.map((p) => p.ticker)), [picks]);
   const add = (es: Entry[]) => { const seen = new Set(has); const more = es.filter((e) => !seen.has(e.ticker) && !taken?.has(e.ticker) && seen.add(e.ticker)); if (more.length) setPicks([...picks, ...more]); };
   const drop = (tickers: string[]) => { const t = new Set(tickers); setPicks(picks.filter((p) => !t.has(p.ticker))); };
-  const ways: [Way, string, string][] = [["search", "search", "Search"], ["sectors", "symbol-class", "Sectors"], ["file", "table", "Spreadsheet"], ["list", "copy", "Another list"]];
+  const ways: [Way, string, string][] = [["search", "search", "Search"], ["indices", "graph-line", "Indices"], ["sectors", "symbol-class", "Sectors"], ["file", "table", "Spreadsheet"], ["list", "copy", "Another list"]];
   return (
     <div className="imp">
       <div className="seg imp-ways" role="tablist">
         {ways.map(([k, ic, l]) => <button key={k} role="tab" aria-selected={way === k} className={way === k ? "on" : ""} onClick={() => setWay(k)}><Icon name={ic} className="xs" />{l}</button>)}
       </div>
       <div className="imp-body">
-        {way === "search" && <Search has={has} taken={taken} add={add} />}
+        {way === "search" && <Search has={has} taken={taken} add={add} openIndex={(k) => { setIndex(k); setWay("indices"); }} />}
+        {way === "indices" && <Indices has={has} taken={taken} add={add} drop={drop} chosen={index} choose={setIndex} />}
         {way === "sectors" && <Sectors has={has} taken={taken} add={add} drop={drop} />}
         {way === "file" && <Sheet add={add} />}
         {way === "list" && <FromList add={add} exceptList={exceptList} />}
@@ -104,15 +107,42 @@ export function CompanyImporter({ picks, setPicks, taken, room, exceptList }: {
   );
 }
 
-function Search({ has, taken, add }: { has: Set<string>; taken?: Set<string>; add: (e: Entry[]) => void }) {
+function Search({ has, taken, add, openIndex }: { has: Set<string>; taken?: Set<string>; add: (e: Entry[]) => void; openIndex: (key: string) => void }) {
   const [find, setFind] = useState("");
   const hits = useLiveSearch(find);
+  const idx = useIndexMatch(find);
+  const qc = useQueryClient();
+  const app = useApp();
+  const [loading, setLoading] = useState<string | null>(null);
+  const indices = idx.data ?? [];
+  // "NIFTY50" also looks like a ticker symbol: when it names an index, the index wins
+  const rows = (hits.data ?? []).filter((r) => !(r.lookup && indices.length)).slice(0, 10);
+  const takeAll = async (key: string, label: string) => {
+    setLoading(key);
+    try {
+      const d = await qc.fetchQuery({ queryKey: ["index", key], queryFn: () => api.get<IndexMembers>(`/api/indices/${encodeURIComponent(key)}`), staleTime: 3_600_000 });
+      if (!d.companies.length) { app.toast(d.note || `No companies found for ${label}`, "error"); return; }
+      add(d.companies.map(entry));
+      app.toast(`${d.companies.length} companies from ${label} picked${d.source !== "nse" && d.note ? ` · ${d.note}` : ""}`, d.source === "nse" ? "ok" : "info");
+      setFind("");
+    } catch (e) { app.toast(e instanceof Error ? e.message : String(e), "error"); } finally { setLoading(null); }
+  };
   return (
     <div className="col" style={{ gap: 8 }}>
-      <div className="search"><Icon name="search" /><input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Company name or NSE / BSE symbol" autoFocus /></div>
+      <div className="search"><Icon name="search" /><input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Company, NSE / BSE symbol, or an index: NIFTY 50, Nifty 500, Large cap…" autoFocus /></div>
       {find.trim() ? (
         <div className="wl-pick-hits">
-          {(hits.data ?? []).slice(0, 10).map((r) => {
+          {indices.map((i) => (
+            <div key={i.key} className="imp-idx-hit">
+              <button onClick={() => takeAll(i.key, i.label)} disabled={!!loading}>
+                <Icon name={loading === i.key ? "loading" : "graph-line"} className={`sm ${loading === i.key ? "spin" : ""}`} />
+                <span className="grow ellipsis"><b>{i.label}</b> <span className="faint">· add every company in it</span></span>
+                <span className="xs faint">{i.group}</span>
+              </button>
+              <button className="imp-idx-see" onClick={() => openIndex(i.key)} title={`See the companies in ${i.label} first`}>See list</button>
+            </div>
+          ))}
+          {rows.map((r) => {
             const on = has.has(r.ticker) || !!taken?.has(r.ticker);
             return (
               <button key={r.ticker} onClick={() => { add([{ ticker: r.ticker, name: r.lookup ? undefined : r.name, sector: r.lookup ? undefined : r.sector, cap: r.cap }]); setFind(""); }} disabled={on}>
@@ -122,10 +152,79 @@ function Search({ has, taken, add }: { has: Set<string>; taken?: Set<string>; ad
               </button>
             );
           })}
-          {hits.isFetching && !hits.data?.length && <span className="xs faint" style={{ padding: 8 }}>Searching…</span>}
-          {!hits.isFetching && hits.data && !hits.data.length && <span className="xs faint" style={{ padding: 8 }}>Nothing found for “{find}”.</span>}
+          {hits.isFetching && !rows.length && !indices.length && <span className="xs faint" style={{ padding: 8 }}>Searching…</span>}
+          {!hits.isFetching && hits.data && !rows.length && !indices.length && <span className="xs faint" style={{ padding: 8 }}>Nothing found for “{find}”.</span>}
         </div>
-      ) : <span className="xs faint">Type a few letters. A symbol the app has not seen (e.g. ZOMATO) can be added too.</span>}
+      ) : <span className="xs faint">Type a few letters. A symbol the app has not seen (e.g. ZOMATO) can be added too, and an index name (NIFTY 50, Bank Nifty, Mid cap) brings in all its companies.</span>}
+    </div>
+  );
+}
+
+/** A whole index or size class: NIFTY 50, NIFTY 500, Bank Nifty, large / mid / small cap. */
+function Indices({ has, taken, add, drop, chosen, choose }: { has: Set<string>; taken?: Set<string>; add: (e: Entry[]) => void; drop: (t: string[]) => void; chosen: string | null; choose: (k: string | null) => void }) {
+  const cat = useIndexCatalog();
+  const q = useIndexMembers(chosen);
+  const groups = useMemo(() => {
+    const g = new Map<string, NonNullable<typeof cat.data>>();
+    for (const i of cat.data ?? []) g.set(i.group, [...(g.get(i.group) ?? []), i]);
+    return [...g.entries()];
+  }, [cat.data]);
+  const d = q.data;
+  return (
+    <div className="col" style={{ gap: 10 }}>
+      {groups.map(([g, list]) => (
+        <div key={g} className="imp-idx-g">
+          <span className="label">{g}</span>
+          <div className="imp-sectors">
+            {list.map((i) => (
+              <button key={i.key} className={`chip ${chosen === i.key ? "on" : ""}`} onClick={() => choose(chosen === i.key ? null : i.key)} aria-pressed={chosen === i.key}>
+                {chosen === i.key && <Icon name="check" className="xs" />}{i.label}{i.count != null && <span className="faint">{i.count}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      {!cat.data && <span className="xs faint">Loading indices…</span>}
+      {chosen && (q.isFetching && !d ? <span className="xs faint row" style={{ gap: 6 }}><Icon name="loading" className="xs spin" />Getting the list from NSE…</span>
+        : d && <>
+          {d.note && <div className={`note ${d.source === "nse" ? "inf" : "wrn"}`}><Icon name="info" /><div>{d.note}</div></div>}
+          <PickList rows={d.companies.map((c) => ({ ...c, lists: [], source: "app" as const }))} has={has} taken={taken} add={add} drop={drop}
+            meta={d.source === "nse" && d.fetched ? `NSE list · updated ${ago(d.fetched)}` : undefined} />
+        </>)}
+    </div>
+  );
+}
+
+/** A filterable list of companies with "Add all" and a tick per company. */
+function PickList({ rows, has, taken, add, drop, loading, meta }: { rows: DirectoryCompany[]; has: Set<string>; taken?: Set<string>; add: (e: Entry[]) => void; drop: (t: string[]) => void; loading?: boolean; meta?: string }) {
+  const [find, setFind] = useState("");
+  const shown = rows.filter((c) => !find || `${c.name} ${c.ticker} ${c.sector}`.toLowerCase().includes(find.toLowerCase()));
+  const free = rows.filter((c) => !taken?.has(c.ticker));
+  const allIn = free.length > 0 && free.every((c) => has.has(c.ticker));
+  return (
+    <div className="imp-list">
+      <div className="row" style={{ gap: 8, padding: "6px 8px" }}>
+        <div className="search sm grow"><Icon name="search" /><input value={find} onChange={(e) => setFind(e.target.value)} placeholder={`Filter ${rows.length} companies`} /></div>
+        {meta && <span className="xs faint">{meta}</span>}
+        <button className="btn xs" onClick={() => (allIn ? drop(free.map((c) => c.ticker)) : add(free.map(entry)))} disabled={!free.length}>
+          <Icon name={allIn ? "close" : "add"} className="xs" />{allIn ? "Remove all" : `Add all ${free.length}`}</button>
+      </div>
+      <div className="imp-rows">
+        {shown.map((c) => {
+          const on = has.has(c.ticker), off = !!taken?.has(c.ticker);
+          return (
+            <label key={c.ticker} className={`imp-row ${off ? "off" : ""}`}>
+              <input type="checkbox" className="cb" checked={on || off} disabled={off} onChange={() => (on ? drop([c.ticker]) : add([entry(c)]))} />
+              <span className="grow ellipsis">{shortName(c.name)}</span>
+              {c.source === "nse" && <span className="tag xs" title="From NSE's index lists; its accounts are fetched the first time it is valued">new</span>}
+              <span className="xs faint ellipsis imp-sec">{c.sector}</span>
+              <span className="mono xs faint">{off ? "on the list" : c.ticker.replace(/\.NS$/, "")}</span>
+            </label>
+          );
+        })}
+        {loading && !rows.length && <span className="xs faint" style={{ padding: 8 }}>Loading…</span>}
+        {!loading && !shown.length && <span className="xs faint" style={{ padding: 8 }}>{rows.length ? "Nothing matches the filter." : "No companies."}</span>}
+      </div>
     </div>
   );
 }
@@ -135,13 +234,9 @@ function Sectors({ has, taken, add, drop }: { has: Set<string>; taken?: Set<stri
   const qc = useQueryClient();
   const app = useApp();
   const [chosen, setChosen] = useState<string[]>([]);
-  const [find, setFind] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const cos = useDirectory(chosen);
   const rows = (cos.data ?? []).filter((c) => chosen.includes(c.sector || "Unclassified"));
-  const shown = rows.filter((c) => !find || `${c.name} ${c.ticker}`.toLowerCase().includes(find.toLowerCase()));
-  const free = rows.filter((c) => !taken?.has(c.ticker));
-  const allIn = free.length > 0 && free.every((c) => has.has(c.ticker));
   const refresh = async () => {
     setRefreshing(true);
     try {
@@ -166,29 +261,7 @@ function Sectors({ has, taken, add, drop }: { has: Set<string>; taken?: Set<stri
           </button>
         ))}
       </div>
-      {chosen.length > 0 && (
-        <div className="imp-list">
-          <div className="row" style={{ gap: 8, padding: "6px 8px" }}>
-            <div className="search sm grow"><Icon name="search" /><input value={find} onChange={(e) => setFind(e.target.value)} placeholder={`Filter ${rows.length} companies`} /></div>
-            <button className="btn xs" onClick={() => (allIn ? drop(free.map((c) => c.ticker)) : add(free.map(entry)))} disabled={!free.length}>
-              <Icon name={allIn ? "close" : "add"} className="xs" />{allIn ? "Remove all" : `Add all ${free.length}`}</button>
-          </div>
-          <div className="imp-rows">
-            {shown.map((c: DirectoryCompany) => {
-              const on = has.has(c.ticker), off = !!taken?.has(c.ticker);
-              return (
-                <label key={c.ticker} className={`imp-row ${off ? "off" : ""}`}>
-                  <input type="checkbox" className="cb" checked={on || off} disabled={off} onChange={() => (on ? drop([c.ticker]) : add([entry(c)]))} />
-                  <span className="grow ellipsis">{shortName(c.name)}</span>
-                  {c.source === "nse" && <span className="tag xs" title="From NSE's index lists; its accounts are fetched the first time it is valued">new</span>}
-                  <span className="mono xs faint">{off ? "on the list" : c.ticker.replace(/\.NS$/, "")}</span>
-                </label>
-              );
-            })}
-            {cos.isFetching && !rows.length && <span className="xs faint" style={{ padding: 8 }}>Loading…</span>}
-          </div>
-        </div>
-      )}
+      {chosen.length > 0 && <PickList rows={rows} has={has} taken={taken} add={add} drop={drop} loading={cos.isFetching} />}
     </div>
   );
 }

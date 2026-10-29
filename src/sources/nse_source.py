@@ -108,21 +108,30 @@ ARCHIVES = "https://nsearchives.nseindia.com/content/indices/"
 INDEX_LISTS = ("ind_niftytotalmarket_list.csv", "ind_nifty500list.csv", "ind_niftymicrocap250_list.csv")
 
 
+def index_list(file_name):
+    """One of NSE's published index lists (e.g. ind_nifty50list.csv).
+    -> [{"name", "industry", "symbol"}], or [] when NSE did not answer."""
+    out = []
+    try:
+        r = _get_session().get(ARCHIVES + file_name, timeout=20)
+        if r.status_code != 200 or "Symbol" not in r.text[:400]:
+            return []
+        for row in csv.DictReader(io.StringIO(r.text.lstrip("\ufeff"))):
+            sym = (row.get("Symbol") or "").strip().upper()
+            if sym:
+                out.append({"name": (row.get("Company Name") or sym).strip(),
+                            "industry": (row.get("Industry") or "").strip(), "symbol": sym})
+    except Exception:
+        return []
+    return out
+
+
 def index_constituents():
-    """-> [{"name", "industry", "symbol"}] from NSE's published index lists, or [] on failure."""
-    s = _get_session()
+    """-> [{"name", "industry", "symbol"}] from NSE's broad index lists, de-duplicated, or [] on failure."""
     seen, out = set(), []
     for name in INDEX_LISTS:
-        try:
-            r = s.get(ARCHIVES + name, timeout=20)
-            if r.status_code != 200 or "Symbol" not in r.text[:400]:
-                continue
-            for row in csv.DictReader(io.StringIO(r.text.lstrip("\ufeff"))):
-                sym = (row.get("Symbol") or "").strip().upper()
-                if sym and sym not in seen:
-                    seen.add(sym)
-                    out.append({"name": (row.get("Company Name") or sym).strip(),
-                                "industry": (row.get("Industry") or "").strip(), "symbol": sym})
-        except Exception:
-            continue
+        for row in index_list(name):
+            if row["symbol"] not in seen:
+                seen.add(row["symbol"])
+                out.append(row)
     return out

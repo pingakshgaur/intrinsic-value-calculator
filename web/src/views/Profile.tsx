@@ -3,29 +3,38 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useHistory, useIntel } from "../lib/hooks";
 import { AnalystRow, Case, Verdict } from "../lib/api";
+import { useWatchlist, WatchItem, WatchList } from "../lib/live";
 import { isNum, money, pct, shortName, signed, slug, titleCase } from "../lib/format";
 import { AGENT_NAME, HM_COLOR, LEAD_ICON, LEAD_SHORT, scoreColor } from "../lib/labels";
+import { companyPath, findVerdict, listCompanyPath } from "../lib/company";
 import { Diverge, Empty, Icon, LabelBadge, Meter, Panel, QueryView, Tip } from "../components/ui";
 import { Bridge, LensContribution, RangeLegend, RateStack, ValueRange } from "../components/charts";
 import { RunButton } from "../components/RunButton";
 import { ModelForecasts, useOneYearView } from "../components/ModelForecasts";
+import { ChartPanel } from "../components/ChartPanel";
+import { LiveForecast } from "../components/LiveForecast";
+import { AddToList, WatchControls } from "../components/WatchControls";
 import { plainSummary } from "../lib/plainSummary";
 
-const SECTIONS = [
+const LIVE = { id: "live", label: "Live", icon: "pulse" };
+const RESEARCH = [
   { id: "summary", label: "Summary", icon: "note" },
   { id: "valuation", label: "Valuation", icon: "symbol-operator" },
-  { id: "forecast", label: "Forecasts", icon: "graph-line" },
+  { id: "forecast", label: "Model forecasts", icon: "graph-line" },
   { id: "drivers", label: "Drivers & risk", icon: "pulse" },
   { id: "agents", label: "Agents & evidence", icon: "organization" },
   { id: "cases", label: "Bull vs bear", icon: "law" },
   { id: "history", label: "History", icon: "history" },
 ];
-const SECTION_IDS = SECTIONS.map((s) => s.id);
 
-export function Profile() {
+interface Nav { crumbs: { label: string; to?: string }[]; prev?: { to: string; label: string }; next?: { to: string; label: string } }
+
+/** /company/<name>: a researched company's full analysis, with its live view when it is on a watchlist. */
+export function CompanyByName() {
   const { company = "" } = useParams();
   const name = decodeURIComponent(company);
   const q = useIntel();
+  const all = useWatchlist();
   const nav = useNavigate();
   return (
     <div className="page">
@@ -33,8 +42,39 @@ export function Profile() {
         {(d) => {
           const list = d.verdicts ?? [];
           const i = list.findIndex((x) => x.company === name);
-          if (i < 0) return <Panel><Empty icon="search" title={`No research for “${name}”`} action={<button className="btn sec" onClick={() => nav("/coverage")}>Back to coverage</button>}>It is not in the latest research run. You can still open it in the HYBRID MODEL Studio with the valuation report's inputs.</Empty></Panel>;
-          return <Body v={list[i]} prev={list[i - 1]?.company} next={list[i + 1]?.company} />;
+          const v = i >= 0 ? list[i] : null;
+          const w = (all.data?.items ?? []).find((x) => (v ? findVerdict([v], x) : x.name === name)) ?? null;
+          if (!v && !w) return <Panel><Empty icon="search" title={`No research for “${name}”`} action={<button className="btn sec" onClick={() => nav("/watchlist")}>Back to watchlists</button>}>It is not in the latest research run or on a watchlist. Add it to a watchlist and research it from there.</Empty></Panel>;
+          const home = w?.lists?.[0];
+          return <CompanyPage v={v} w={w} ticker={w?.ticker ?? v?.ticker ?? null} nav={{
+            crumbs: [{ label: "Watchlists", to: "/watchlist" }, ...(v ? [{ label: v.sector }] : [])],
+            prev: list[i - 1] ? { to: companyPath(list[i - 1].company), label: list[i - 1].company } : undefined,
+            next: list[i + 1] ? { to: companyPath(list[i + 1].company), label: list[i + 1].company } : undefined,
+          }} homeList={home} />;
+        }}
+      </QueryView>
+    </div>
+  );
+}
+
+/** /watchlist/<list>/<ticker>: a watchlist company's page - live view, forecast and the full research. */
+export function CompanyInList() {
+  const { id = "", ticker = "" } = useParams();
+  const t = decodeURIComponent(ticker);
+  const q = useWatchlist(id);
+  const intel = useIntel();
+  return (
+    <div className="page">
+      <QueryView q={q} rows={14}>
+        {(d) => {
+          const items = d.items;
+          const i = items.findIndex((x) => x.ticker === t);
+          if (!d.list || i < 0) return <Panel><Empty icon="search" title={`${t} is not on this watchlist`} action={<Link className="btn sec" to={d.list ? `/watchlist/${encodeURIComponent(id)}` : "/watchlist"}>Back to the list</Link>}>It may have been taken off.</Empty></Panel>;
+          const w = items[i];
+          const v = findVerdict(intel.data?.verdicts, w);
+          const step = (x?: WatchItem) => (x ? { to: listCompanyPath(id, x.ticker), label: x.name } : undefined);
+          return <CompanyPage v={v} w={w} list={d.list} ticker={w.ticker} researchLoading={intel.isLoading}
+            nav={{ crumbs: [{ label: "Watchlists", to: "/watchlist" }, { label: d.list.name, to: `/watchlist/${encodeURIComponent(id)}` }], prev: step(items[i - 1]), next: step(items[i + 1]) }} />;
         }}
       </QueryView>
     </div>
@@ -77,9 +117,10 @@ function useScrollSpy(ids: readonly string[]) {
   return { on, go };
 }
 
-function Body({ v, prev, next }: { v: Verdict; prev?: string; next?: string }) {
+function CompanyPage({ v, w, list, ticker, nav: n, homeList, researchLoading }: { v: Verdict | null; w: WatchItem | null; list?: WatchList; ticker: string | null; nav: Nav; homeList?: string; researchLoading?: boolean }) {
   const nav = useNavigate();
-  const { on, go } = useScrollSpy(SECTION_IDS);
+  const sections = useMemo(() => [...(ticker ? [LIVE] : []), ...(v ? RESEARCH : [])], [ticker, v]);
+  const { on, go } = useScrollSpy(sections.map((x) => x.id));
   // the sticky bar wraps on narrower screens: the section nav and headings sit below whatever height it has
   const bar = useRef<HTMLDivElement>(null);
   const [barH, setBarH] = useState(76);
@@ -90,35 +131,87 @@ function Body({ v, prev, next }: { v: Verdict; prev?: string; next?: string }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const ticker = (v.ticker || "").split(".")[0];
+  const name = v?.company ?? w?.name ?? ticker ?? "";
+  const sym = (ticker || v?.ticker || "").split(".")[0];
+  // live figures when the tracker has a quote; the research run's otherwise
+  const q = w?.quote;
+  const price = q?.last ?? v?.price;
+  const value = q?.hm?.value ?? v?.expected_value;
+  const upside = q?.hm?.upside ?? v?.upside;
+  const label = q?.hm?.label ?? v?.label;
+  const [prevKey, nextKey] = [n.prev?.to, n.next?.to];
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (!e.altKey || (e.target as HTMLElement)?.closest("input,textarea,select,[contenteditable]")) return;
+      if (e.key === "ArrowUp" && prevKey) { e.preventDefault(); nav(prevKey); }
+      else if (e.key === "ArrowDown" && nextKey) { e.preventDefault(); nav(nextKey); }
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [prevKey, nextKey, nav]);
   return (
     <>
       <div className="profile-bar" ref={bar}>
         <div className="id">
-          <div className="row xs faint" style={{ marginBottom: 2 }}><Link to="/coverage">Coverage</Link><Icon name="chevron-right" className="xs" /><span>{v.sector}</span></div>
-          <h1>{shortName(v.company)}</h1>
-          <div className="m"><span className="mono faint">{v.ticker}</span><LabelBadge label={v.label} />{v.regime && <span className="tag">{titleCase(v.regime)}</span>}{isNum(v.valuation_fy) && <span className="tag">FY{v.valuation_fy} accounts</span>}</div>
+          <div className="row xs faint" style={{ marginBottom: 2 }}>
+            {n.crumbs.map((c, i) => <Fragment key={i}>{i > 0 && <Icon name="chevron-right" className="xs" />}{c.to ? <Link to={c.to}>{c.label}</Link> : <span>{c.label}</span>}</Fragment>)}
+          </div>
+          <h1>{shortName(name)}</h1>
+          <div className="m">
+            <span className="mono faint">{ticker ?? v?.ticker}</span>{label && <LabelBadge label={label} />}
+            {v?.regime && <span className="tag">{titleCase(v.regime)}</span>}{isNum(v?.valuation_fy) && <span className="tag">FY{v!.valuation_fy} accounts</span>}
+            {q?.chg_pct != null && <span className={`tag ${q.chg_pct >= 0 ? "up" : "down"}`}>{pct(q.chg_pct, 2, true)} today</span>}
+          </div>
         </div>
         <div className="pb-figs">
-          <div><div className="k">Price</div><div className="v" style={{ color: "var(--price)" }}>{money(v.price)}</div></div>
-          <div><div className="k">HYBRID MODEL</div><div className="v" style={{ color: HM_COLOR }}>{money(v.expected_value)}</div></div>
-          <div><div className="k">Upside</div><div className={`v ${isNum(v.upside) ? (v.upside >= 0 ? "up" : "down") : ""}`}>{pct(v.upside, 1, true)}</div></div>
-          <div><div className="k">Buy-below</div><div className="v">{money(v.buy_below, 0)}</div></div>
-          <div><div className="k">Confidence</div><div className="v">{isNum(v.confidence) ? v.confidence.toFixed(0) : "—"}</div></div>
+          <div><div className="k">{q?.last ? "Live price" : "Price"}</div><div className="v" style={{ color: "var(--price)" }}>{money(price)}</div></div>
+          <div><div className="k">HYBRID MODEL</div><div className="v" style={{ color: HM_COLOR }}>{money(value)}</div></div>
+          <div><div className="k">Upside</div><div className={`v ${isNum(upside) ? (upside >= 0 ? "up" : "down") : ""}`}>{pct(upside, 1, true)}</div></div>
+          <div><div className="k">Buy-below</div><div className="v">{money(q?.hm?.buy_below ?? v?.buy_below, 0)}</div></div>
+          <div><div className="k">Confidence</div><div className="v">{isNum(q?.hm?.confidence ?? v?.confidence) ? (q?.hm?.confidence ?? v!.confidence)!.toFixed(0) : "—"}</div></div>
         </div>
         <div className="row">
-          <Link to={`/studio?company=${slug(v.company)}`} className="btn sm"><Icon name="beaker" className="sm" />Studio</Link>
-          <RunButton kind="agents" options={{ tickers: ticker, quick: true }} label="Re-check" icon="zap" secondary small />
-          <button className="ibtn" disabled={!prev} title={prev} onClick={() => prev && nav(`/coverage/${slug(prev)}`)}><Icon name="chevron-up" /></button>
-          <button className="ibtn" disabled={!next} title={next} onClick={() => next && nav(`/coverage/${slug(next)}`)}><Icon name="chevron-down" /></button>
+          {v && <Link to={`/studio?company=${slug(v.company)}`} className="btn sm sec"><Icon name="beaker" className="sm" />Studio</Link>}
+          {sym && <RunButton kind="agents" options={{ tickers: sym, quick: !!v }} label={v ? "Re-check" : "Research"} icon={v ? "zap" : "rocket"} secondary={!!v} small />}
+          {!w && ticker && <AddToList company={{ ticker, name, sector: v?.sector }} small />}
+          <button className="ibtn" disabled={!n.prev} title={n.prev ? `${n.prev.label} (Alt+↑)` : undefined} onClick={() => n.prev && nav(n.prev.to)}><Icon name="chevron-up" /></button>
+          <button className="ibtn" disabled={!n.next} title={n.next ? `${n.next.label} (Alt+↓)` : undefined} onClick={() => n.next && nav(n.next.to)}><Icon name="chevron-down" /></button>
         </div>
       </div>
 
       <div className="profile" style={{ marginTop: 16, ["--pb-h" as string]: `${barH}px` }}>
         <nav className="anchors" aria-label="Sections">
-          {SECTIONS.map((s) => <a key={s.id} href={`#${s.id}`} className={on === s.id ? "on" : ""} onClick={(e) => { e.preventDefault(); go(s.id); }}><Icon name={s.icon} className="sm" />{s.label}</a>)}
+          {sections.map((x) => <a key={x.id} href={`#${x.id}`} className={on === x.id ? "on" : ""} onClick={(e) => { e.preventDefault(); go(x.id); }}><Icon name={x.icon} className="sm" />{x.label}</a>)}
         </nav>
         <div className="col" style={{ gap: 28, minWidth: 0 }}>
+          {ticker && (
+            <Section id="live" title="Live">
+              <div className={w ? "grid c-21" : ""}>
+                <Panel noExport><ChartPanel ticker={ticker} watch={w} height={300} compactHead /></Panel>
+                {w && <Panel title="Alerts and note" meta={list ? `on “${list.name}”` : homeList ? "on your watchlists" : undefined}><WatchControls w={w} list={list} onRemoved={() => list && nav(`/watchlist/${encodeURIComponent(list.id)}`)} /></Panel>}
+              </div>
+              <LiveForecast ticker={ticker} />
+            </Section>
+          )}
+          {!v && (
+            <Panel>{researchLoading ? <Empty icon="loading" title="Loading the research…" /> : (
+              <Empty icon="organization" title="Not researched yet" action={sym ? <RunButton kind="agents" options={{ tickers: sym, quick: false }} label="Research this company" icon="rocket" /> : undefined}>
+                The research workforce writes its valuation, plain-words summary, model forecasts, drivers, evidence and the bull and bear cases.
+                Until then the live chart and the forecast above work from its prices alone.
+              </Empty>)}
+            </Panel>
+          )}
+          {v && <Research v={v} />}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** Everything the research run says about the company: the old Coverage profile. */
+function Research({ v }: { v: Verdict }) {
+  return (
+    <>
           <Section id="summary" title="Summary">
             <PlainWords v={v} />
             <div className="grid c-32">
@@ -202,8 +295,6 @@ function Body({ v, prev, next }: { v: Verdict; prev?: string; next?: string }) {
           <Section id="agents" title="Agents & evidence"><Agents v={v} /></Section>
           <Section id="cases" title="Bull vs bear"><Cases v={v} /></Section>
           <Section id="history" title="History"><History company={v.company} /></Section>
-        </div>
-      </div>
     </>
   );
 }
