@@ -186,13 +186,6 @@ function CompanyPage({ v, w, list, ticker, nav: n, homeList, researchLoading }: 
             </Popover>
           )}
         </div>
-        <div className="row">
-          {v && <Link to={`/studio?company=${slug(v.company)}`} className="btn sm sec"><Icon name="beaker" className="sm" />Studio</Link>}
-          {sym && <RunButton kind="agents" options={{ tickers: sym, quick: !!v }} label={v ? "Re-check" : "Research"} icon={v ? "zap" : "rocket"} secondary={!!v} small />}
-          {!w && ticker && <AddToList company={{ ticker, name, sector: v?.sector }} small />}
-          <button className="ibtn" disabled={!n.prev} title={n.prev ? `${n.prev.label} (Alt+↑)` : undefined} onClick={() => n.prev && nav(n.prev.to)}><Icon name="chevron-up" /></button>
-          <button className="ibtn" disabled={!n.next} title={n.next ? `${n.next.label} (Alt+↓)` : undefined} onClick={() => n.next && nav(n.next.to)}><Icon name="chevron-down" /></button>
-        </div>
       </div>
 
       <div className="profile" style={{ marginTop: 16, ["--pb-h" as string]: `${barH}px` }}>
@@ -200,6 +193,19 @@ function CompanyPage({ v, w, list, ticker, nav: n, homeList, researchLoading }: 
           <nav className="anchors" aria-label="Sections">
             {sections.map((x) => <a key={x.id} href={`#${x.id}`} className={on === x.id ? "on" : ""} onClick={(e) => { e.preventDefault(); go(x.id); }}><Icon name={x.icon} className="sm" />{x.label}</a>)}
           </nav>
+          <div className="pa-box">
+            <div className="pa-acts">
+              {v && <Link to={`/studio?company=${slug(v.company)}`} className="btn sm sec"><Icon name="beaker" className="sm" />Studio</Link>}
+              {sym && <RunButton kind="agents" options={{ tickers: sym, quick: !!v }} label={v ? "Re-check" : "Research"} icon={v ? "zap" : "rocket"} secondary={!!v} small />}
+              {!w && ticker && <AddToList company={{ ticker, name, sector: v?.sector }} small />}
+            </div>
+            {(n.prev || n.next) && (
+              <div className="pa-step">
+                <button className="btn sm ghost" disabled={!n.prev} title={n.prev ? `${n.prev.label} (Alt+↑)` : undefined} onClick={() => n.prev && nav(n.prev.to)}><Icon name="chevron-up" className="xs" /><span className="ellipsis">{n.prev ? shortName(n.prev.label) : "Previous"}</span></button>
+                <button className="btn sm ghost" disabled={!n.next} title={n.next ? `${n.next.label} (Alt+↓)` : undefined} onClick={() => n.next && nav(n.next.to)}><Icon name="chevron-down" className="xs" /><span className="ellipsis">{n.next ? shortName(n.next.label) : "Next"}</span></button>
+              </div>
+            )}
+          </div>
         </aside>
         <div className="col" style={{ gap: 28, minWidth: 0 }}>
           {ticker && (
