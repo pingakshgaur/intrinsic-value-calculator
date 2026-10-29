@@ -10,6 +10,7 @@ The stage dir is what the installers copy to the user's chosen folder:
     INTVAL(.exe), _internal/      the frozen program
     web/dist/                     the built browser app
     data/*.csv                    starter company lists and training universes
+    defaults/data/*.csv           the same lists as shipped; updates merge new rows from them
     agent_settings.yaml           settings, from the factory defaults
     agent_settings.defaults.yaml  the factory defaults ("reset" in the web app)
     assets/, docs/, README.md, .env.example, VERSION
@@ -41,8 +42,11 @@ def stage(frozen, out):
     shutil.copytree(frozen, out)
     shutil.copytree(ROOT / "web" / "dist", out / "web" / "dist")
     (out / "data").mkdir()
+    (out / "defaults" / "data").mkdir(parents=True)
     for name in DATA_FILES:
         shutil.copy2(ROOT / "data" / name, out / "data" / name)
+        # the factory copy: an update merges its new companies into the user's own list (src/migrate.py)
+        shutil.copy2(ROOT / "data" / name, out / "defaults" / "data" / name)
     defaults = (ROOT / "agent_settings.defaults.yaml").read_text(encoding="utf-8")
     shutil.copy2(ROOT / "agent_settings.defaults.yaml", out / "agent_settings.defaults.yaml")
     # the working copy starts as the defaults, without the "do not edit" banner

@@ -9,9 +9,11 @@ import { ErrorNote, Icon, Loading, PageHeader, Panel, QueryView, Toggle } from "
 import { useApp } from "../components/workbenchContext";
 import { NotifySettings } from "../components/NotifySettings";
 import { AiProviders } from "../components/AiProviders";
+import { DataSources } from "../components/DataSources";
 
 const SECTIONS = [
   { id: "run", label: "Run settings", icon: "settings" },
+  { id: "sources", label: "Data sources", icon: "database" },
   { id: "ai", label: "AI providers", icon: "sparkle" },
   { id: "agents", label: "Research agents", icon: "organization" },
   { id: "notify", label: "Notifications & sounds", icon: "bell" },
@@ -30,10 +32,10 @@ export function Configuration() {
       <div className="cfg">
         <nav className="cfg-nav">
           {SECTIONS.map((s) => <button key={s.id} className={section === s.id ? "on" : ""} onClick={() => setParams({ section: s.id })}><Icon name={s.icon} />{s.label}</button>)}
-          <Link to="/studio" className="btn ghost sm" style={{ justifyContent: "flex-start", marginTop: 6 }}><Icon name="beaker" className="sm" />HYBRID MODEL Studio</Link>
         </nav>
         <div className="col" style={{ gap: 14, minWidth: 0 }}>
           {section === "run" && <RunSettings />}
+          {section === "sources" && <DataSources />}
           {section === "ai" && <><AiProviders /><YamlFields kind="llm" /></>}
           {section === "agents" && <YamlFields kind="agents" />}
           {section === "macro" && <YamlFields kind="macro" />}

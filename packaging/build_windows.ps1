@@ -1,5 +1,7 @@
 # FILE: packaging/build_windows.ps1
-# Builds installers\INTVAL-Setup-<version>-windows-x64.exe.
+# Builds installers\INTVAL-Setup-<version>-windows-x64.exe (first install) and
+# installers\INTVAL-Update-<version>-windows-x64.exe (updates an existing install
+# in place and keeps every bit of the user's data - see windows\intval-update.iss).
 #
 #   powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 #
@@ -35,10 +37,14 @@ Write-Host "== 3/4 drawing the installer artwork"
 & $Py packaging\wizard_art.py build\art
 if ($LASTEXITCODE) { throw "artwork failed" }
 
-Write-Host "== 4/4 compiling the installer with Inno Setup"
+Write-Host "== 4/4 compiling the installer and the updater with Inno Setup"
 New-Item -ItemType Directory -Force installers | Out-Null
-& $Iscc /Q "/DAppVersion=$Version" "/DStageDir=$Root\build\stage-windows" "/DArtDir=$Root\build\art" "/DOutDir=$Root\installers" packaging\windows\intval.iss
-if ($LASTEXITCODE) { throw "Inno Setup failed" }
+foreach ($Script in "intval.iss", "intval-update.iss") {
+    & $Iscc /Q "/DAppVersion=$Version" "/DStageDir=$Root\build\stage-windows" "/DArtDir=$Root\build\art" "/DOutDir=$Root\installers" "packaging\windows\$Script"
+    if ($LASTEXITCODE) { throw "Inno Setup failed on $Script" }
+}
 
-$Out = Get-Item "installers\INTVAL-Setup-$Version-windows-x64.exe"
-Write-Host ("== done: {0} ({1:N0} MB)" -f $Out.FullName, ($Out.Length / 1MB))
+foreach ($Name in "Setup", "Update") {
+    $Out = Get-Item "installers\INTVAL-$Name-$Version-windows-x64.exe"
+    Write-Host ("== done: {0} ({1:N0} MB)" -f $Out.FullName, ($Out.Length / 1MB))
+}

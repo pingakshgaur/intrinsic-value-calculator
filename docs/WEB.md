@@ -20,26 +20,26 @@ The colours are VS Code's **Dark 2026** theme; the layout, type (Inter and JetBr
 ## Layout
 
 An analyst workspace:
-- **Side navigation:** grouped into Analysis, Models & data and Operations, with live status for the server, AI providers, last report and last research. Collapse it with `Ctrl+\`.
+- **Side navigation:** grouped into Analysis, Research workforce, Models & data and Operations, with live status for the server, AI providers, last report and last research. Collapse it with `Ctrl+\`.
 - **Top bar:** a live market tape (Nifty 50, India VIX, USD/INR, Brent, US 10Y, gold, with 1-month change), the watchlist focus picker, global search (`Ctrl+K`), an alerts inbox (red flags and changes), the glossary (`?`), and a run indicator that opens the runs drawer.
 
 | Page | |
 |---|---|
 | **Command Center** | Metric band; coverage treemap (tile size = market cap, colour = upside); signals feed; upside vs confidence; label mix and extremes; model leaderboard |
 | **Markets** | Live index cards (Nifty 50, Sensex, Bank, IT, Midcap 50, Financial Services, VIX) with intraday sparklines and a sector heat strip. A scanner over every company the app knows (about 425): top gainers and losers, most active, volume spikes, near 52-week high or low, RSI extremes, and covered companies below their buy-below price. Candlestick or line charts from 1 day to the full history, with the HYBRID MODEL value and buy-below drawn on the chart. Look up any NSE or BSE symbol |
-| **Watchlists** | A library of named lists, each with a description and colour, shown as cards with their companies and today's moves. Create one empty, by picking companies, by importing a CSV or text list (or pasting one), from your coverage, from a sector or as a copy; then pin, duplicate, delete, focus the app on a list, or start research on its covered companies. A company can be on several lists; up to 100 companies are tracked across all of them |
-| **A watchlist** | The companies on one list, as tiles or a table, each with a checkbox: tick several (Shift+click for a range) to remove them, copy or move them to another list, or research them. **Edit list** edits the name, description and colour in place. The list shows live price, change, intraday sparkline, day range, the HYBRID MODEL re-valued at the live price, and change since you added it. Each company has a live chart (including every minute bar the tracker stored), price alerts and a note. An alerts feed lists level crossings, buy-below crossings and big daily moves |
-| **Research workforce** | Overview of the 23 agents: run status, every team and agent with live status, this run's verdicts and red flags, recent runs, and each agent's profile and settings |
-| **Agent Network** | The agents as a full-screen live map: info-bits travel the edges as they exchange work; replay any run; layers, views and tools to simplify, focus, annotate and rearrange the map |
+| **Watchlists** | A library of named lists, each with a description and colour, shown as cards with their companies and today's moves. Pin, duplicate, delete or focus the app on a list. A company can be on several lists; up to 250 companies are tracked across all of them |
+| **Adding companies** | When you create a list, and later with **Add companies**, there are four ways in: **Search** by name or NSE/BSE symbol (a symbol the app has not seen is fine), **Sectors** (tick one or several and take all of their companies, or pick a few; **Get NSE lists** adds NSE's index lists of about 1,000 companies with their industry), **Spreadsheet** (Excel `.xlsx`, CSV or pasted text with a symbol or name column; unrecognised names are listed) and **Another list**. Picks collect at the bottom until you add them |
+| **A watchlist** | The companies on one list, as tiles or a table, each with a checkbox: tick several (Shift+click for a range) to remove them, copy or move them to another list, or research them. The header has three buttons: **Add companies**, **Research this list** and **More** (edit name and colour, focus the app, update prices, pause tracking, tracking settings). The list shows live price, change, intraday sparkline, day range, the HYBRID MODEL re-valued at the live price, and change since you added it. Each company has a live chart (including every minute bar the tracker stored), price alerts and a note. An alerts feed lists level crossings, buy-below crossings and big daily moves |
+| **Research workforce** | Overview of the 23 agents: run status, every team and agent with live status, this run's verdicts and red flags, recent runs, and each agent's profile and settings. **Research** starts a run on every covered company or on any watchlist; **Auto-start** sets whether the workforce starts by itself |
+| **Agent Network** | The agents as a full-screen live map: info-bits travel the edges as they exchange work; replay any run; layers, views and tools to simplify, focus, annotate and rearrange the map; **Research** on any watchlist from the top bar |
 | **Research Room** | The agents' chat: team channels, direct exchanges, live status. Talk to any agent: it answers, keeps your instructions and acts on requests |
-| **Learning** | How many extra companies train the ML models, how many are cached, the switches for daily feeding and retraining, and a record of every valuation run (training rows, HYBRID MODEL confidence and error), so you can see whether more data helped |
 | **Coverage** | Sortable data grid with a column chooser and density toggle, inline range bars and CSV export. Selecting a row opens an inspector; `↑ ↓` move between rows and `Enter` opens the profile |
-| **Equity profile** | Sticky figures bar and a section index that follows your scrolling. Sections: summary, valuation (lens contribution, bridge, build-up), model forecasts, drivers and risk, agents and evidence, bull vs bear, history |
+| **Equity profile** | Sticky figures bar and a section index that follows your scrolling. Sections: summary (opening with **In plain words**: a short, jargon-free reading of whether the share looks cheap, how sure the models are, what could go right or wrong and what the models expect in a year), valuation (lens contribution, bridge, build-up), model forecasts (**Show all** / **Remove all** lines at the panel's right edge), drivers and risk, agents and evidence, bull vs bear, history. Tables wider than their panel scroll sideways |
 | **HYBRID MODEL Studio** | Parameter tree on the left. In the centre, a live canvas with figures, range, bridge and lens contribution. On the right, an inspector with sensitivity, changes and inputs. Named scenario sets, a portfolio mode, and **Commit** to save. **Discard** drops uncommitted edits; **Defaults** loads the shipped value (`agent_settings.defaults.yaml`) of every constant you changed, to review and commit. The page scrolls as a whole while the parameter list and inspector stay in view |
-| **Model Performance** | Leaderboard, error by year, win rate, sector × model matrix, company explorer, HYBRID MODEL and Ensemble detail, chart gallery, companies left out, files |
+| **Model Performance** | Five tabs. **Leaderboard**: every model's error, hit rate, bias and rank correlation, error by year, win rate. **Sectors**: which model suits each sector (best model, its error, the runner-up, the HYBRID MODEL), sectors won by each model, the sector × model error matrix with the best outlined, the **sector valuation forecast by model** (each model's median value against today's price, or its one-year projection), and **sector segregation and prediction** (companies below, near and above value per sector, the top pick, and a chart of each sector's upside and projection; click a sector for its companies). **Company**: every model by year for one company, HYBRID MODEL detail, Ensemble detail. **Training data**: see below. **Files & charts**: downloads, companies left out, chart gallery |
 | **Universe** | Editable grid of the company list: bulk select, delete, set sector or add to a watchlist, CSV import, export, checks |
-| **Operations** | New-job form (type, scope, period, options, auto-train) beside a live job detail (stage timeline, auto-train controls, log) and the jobs table |
-| **Configuration** | Run settings (everything the old desktop app had), AI providers (any OpenAI-compatible service or Anthropic, several keys each, live model picker, Test for each key, fail-over order), local models through Ollama (download, choose, switch on or off, open with INTVAL), research agents, macro inputs, the settings file |
+| **Operations** | One form: **what to run** (valuation report, research - quick or full -, refresh training data, data check), **companies** (all covered, a watchlist, or the ones you pick), **years**, and only the options that apply (rare ones under **More options**: auto-train, rule-based research, offline test data). Beside it, the live job detail (stage timeline, auto-train controls, log) and the jobs table |
+| **Configuration** | Run settings (everything the old desktop app had), **data sources** (switch each provider on or off, set the order they are trusted in, enter free keys), AI providers (any OpenAI-compatible service or Anthropic, several keys each, live model picker, Test for each key, fail-over order), local models through Ollama (download, choose, switch on or off, open with INTVAL), research agents, macro inputs, the settings file |
 
 Shortcuts:
 
@@ -120,8 +120,12 @@ prices and Research tabs.
 The 23 research agents (see [AGENTS.md](AGENTS.md) for who is who) have three pages.
 
 The workforce **starts working as soon as the web app starts** (a quick,
-rule-based sweep that makes no LLM calls). The **Workforce** button controls
-this and starts a run on demand.
+rule-based sweep that makes no LLM calls). **Auto-start** on the Overview
+controls this. **Research** (on the Overview, the Agent Network, the Command
+Center and Coverage) starts a run on demand: pick every covered company or any
+watchlist, a quick sweep or full research, and start. A watchlist run
+researches every company on the list, valued before or not; the list you last
+used, or the one the app is focused on, is preselected.
 
 - **Overview** (`/agents`): the run at a glance (companies done, who is working,
   messages, calls saved, LLM calls), a card per team listing every agent with its
@@ -129,7 +133,7 @@ this and starts a run on demand.
   to replay it). Click an agent for its profile; the gear opens its **settings**.
 - **Agent Network:** the agents as a live map that fills the page.
   - **Around the map, never over it:** a top bar (run, search, Views, Layers,
-    Workforce, export, shortcuts, inspector), a tool rail on the left, the
+    Research, export, shortcuts, inspector), a tool rail on the left, the
     inspector docked on the right (`I` hides it) and the replay bar along the bottom.
   - **Simple by default:** compact cards, only the main connections, no captions
     or score pop-ups. **Layers** switches on what you need: full cards, the
@@ -145,8 +149,13 @@ this and starts a run on demand.
     Radial) and your own saved views.
   - **Tools** (left rail): Select & move `V`, Pan `H`, Link `K` (drag between
     two nodes to draw your own connection, with a caption), Note `N` (pin a
-    note), Focus `G` (show one node and its connections only) and Hide / delete
-    `X`. `Shift`+drag pans with any tool; `Esc` clears everything.
+    note; also right-click the map → **Add a note here**), Focus `G` (show one
+    node and its connections only) and Hide / delete `X`. `Shift`+drag pans
+    with any tool; `Esc` clears everything.
+  - **Notes:** a card with a drag handle, five colours, edit and delete
+    buttons and the time it was last changed. While writing, a counter and
+    **Done** sit under the text; `Ctrl+Enter` or `Esc` finishes, and an empty
+    note is thrown away.
   - **Changes that reach the agents:** right-click an analyst to leave it out of
     research runs (or bring it back), or open its **Settings**. Links and notes
     are your own annotations and stay in this browser.
@@ -234,12 +243,14 @@ out in a circle from the button. The choice is remembered by the browser.
 ## Live market data
 
 Prices come from Yahoo Finance. NSE quotes there can lag the exchange by up
-to 15 minutes, and the app says so on every chart.
+to 15 minutes, and the app says so on every chart. When Yahoo has no quote
+for a tracked company, the tracker asks the NSE and then the BSE website
+(Configuration → Data sources).
 
 - **The tracker** runs inside `python run.py --web`. While the market is open
   (09:15–15:30 IST, Monday to Friday) it polls the watchlist every 30 seconds;
-  otherwise every 15 minutes. Both are adjustable under **Watchlist →
-  Tracking**. It stores every minute bar in `data/live/market.db`, so a tracked
+  otherwise every 15 minutes. Both are adjustable under a watchlist's **More →
+  Tracking settings**. It stores every minute bar in `data/live/market.db`, so a tracked
   company builds up an intraday history longer than Yahoo's 7-day window.
   Exchange holidays are not known; a price that stops moving for 20 minutes
   is marked.
@@ -256,7 +267,7 @@ to 15 minutes, and the app says so on every chart.
 Everything live (watchlist, alerts, minute bars, learning history) is stored in
 `data/live/`, which git ignores.
 
-## Learning data
+## Training data (Model Performance → Training data)
 
 The ML models (XGBoost, Random Forest, LightGBM, MLP) learn from one row per
 company per financial year: that year's accounts, and how the price moved
@@ -268,18 +279,26 @@ company the app knows beyond the ones you value: `data/training_universe.csv`,
 the auto-trainer's picks and the watchlist (383 companies at the time of
 writing).
 
-- `python run.py --learn` (or **Learning → Fetch now**) downloads and caches
-  their accounts for your report's year window. A cached company is reused
-  for 7 days.
-- While **Train on all learning companies** is on, every valuation run started
-  from the web app adds `--train-universe data/live/learning_universe.csv`.
-- With the daily feed on, the app fetches new and stale companies after
-  16:15 IST each day when no other job is running, and can retrain afterwards.
-- After every valuation run, the Learning page records the training rows, the
-  HYBRID MODEL's mean confidence and its median error. More data raises
-  confidence only if it makes the lenses agree and calibrate better; this
-  record shows whether it did. Yahoo serves about four years of accounts per
-  company, so most add 2–3 labelled rows.
+The tab says three things in plain words: how many companies the models learn
+from, how many are ready to use, and whether learning from more of them has
+made the HYBRID MODEL more accurate.
+
+- `python run.py --learn` (or **Refresh now**, or Operations → Refresh training
+  data) downloads and caches their accounts for your report's year window. A
+  cached company is reused for 7 days.
+- While **Learn from all of these companies in every valuation run** is on,
+  every valuation run started from the web app adds
+  `--train-universe data/live/learning_universe.csv`.
+- With **Refresh their data every evening** on, the app fetches new and stale
+  companies after 16:15 IST each day when no other job is running, and with
+  **Retrain the models after each refresh** it retrains afterwards.
+- After every valuation run the app records the training rows and the HYBRID
+  MODEL's typical (median) error; **Accuracy over time** charts it against the
+  number of companies learned from. More data helps only if it makes the
+  lenses agree and calibrate better; this chart shows whether it did. With
+  Screener.in on, older years now come with the accounts, so each company adds
+  more labelled rows than the 2-3 Yahoo alone allowed.
+- `/learning` from earlier versions opens this tab.
 
 ## AI models
 

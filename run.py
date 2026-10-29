@@ -320,6 +320,17 @@ def build_parser():
         help=argparse.SUPPRESS,  # the web app's channel for auto-train controls
     )
     ap.add_argument(
+        "--migrate",
+        action="store_true",
+        help=(
+            "after an update: back up your data, then add the new version's "
+            "training companies and settings sections without changing yours "
+            "(src/migrate.py; the updaters run it)"
+        ),
+    )
+    ap.add_argument("--no-backup", action="store_true", help="with --migrate: the updater already made the backup")
+    ap.add_argument("--previous-version", metavar="V", help=argparse.SUPPRESS)  # the updater says what it replaced
+    ap.add_argument(
         "--learn",
         action="store_true",
         help=(
@@ -516,6 +527,12 @@ def main():
 
     ssl_trust.install()
     args = build_parser().parse_args()
+
+    if args.migrate:
+        import migrate
+
+        migrate.run(backup_first=not args.no_backup, previous=args.previous_version)
+        return
 
     if args.web:
         if _already_serving(args.port):

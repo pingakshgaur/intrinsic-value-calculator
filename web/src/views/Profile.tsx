@@ -8,7 +8,8 @@ import { AGENT_NAME, HM_COLOR, LEAD_ICON, LEAD_SHORT, scoreColor } from "../lib/
 import { Diverge, Empty, Icon, LabelBadge, Meter, Panel, QueryView, Tip } from "../components/ui";
 import { Bridge, LensContribution, RangeLegend, RateStack, ValueRange } from "../components/charts";
 import { RunButton } from "../components/RunButton";
-import { ModelForecasts } from "../components/ModelForecasts";
+import { ModelForecasts, useOneYearView } from "../components/ModelForecasts";
+import { plainSummary } from "../lib/plainSummary";
 
 const SECTIONS = [
   { id: "summary", label: "Summary", icon: "note" },
@@ -119,6 +120,7 @@ function Body({ v, prev, next }: { v: Verdict; prev?: string; next?: string }) {
         </nav>
         <div className="col" style={{ gap: 28, minWidth: 0 }}>
           <Section id="summary" title="Summary">
+            <PlainWords v={v} />
             <div className="grid c-32">
               <Panel title="Research note" meta={v.summary?.by === "llm" ? "Chief agent · every point cited" : "assembled from lead findings"}>
                 {v.summary?.headline && <div className="prose-h">{v.summary.headline}</div>}
@@ -155,7 +157,7 @@ function Body({ v, prev, next }: { v: Verdict; prev?: string; next?: string }) {
             <Panel title="Build-up" meta="every step of the formula" flush>
               <table className="dg dense">
                 <thead><tr><th>Step</th><th className="r">Value</th><th>How</th></tr></thead>
-                <tbody>{(v.waterfall ?? []).map((w, i) => <tr key={i} style={w.step.startsWith("HYBRID MODEL") ? { background: "#ad80d70e" } : undefined}><td className={w.step.startsWith("HYBRID MODEL") ? "hm" : ""}>{w.step}</td><td className="r mono strong">{money(w.value, 0)}</td><td className="muted">{w.note}</td></tr>)}</tbody>
+                <tbody>{(v.waterfall ?? []).map((w, i) => <tr key={i} style={w.step.startsWith("HYBRID MODEL") ? { background: "#ad80d70e" } : undefined}><td className={w.step.startsWith("HYBRID MODEL") ? "hm" : ""}>{w.step}</td><td className="r mono strong">{money(w.value, 0)}</td><td className="muted wrap">{w.note}</td></tr>)}</tbody>
               </table>
             </Panel>
           </Section>
@@ -206,6 +208,25 @@ function Body({ v, prev, next }: { v: Verdict; prev?: string; next?: string }) {
   );
 }
 
+/** What the research and the forecasts say, in everyday words. */
+function PlainWords({ v }: { v: Verdict }) {
+  const year = useOneYearView(v);
+  const p = plainSummary(v, year);
+  return (
+    <Panel title="In plain words" meta="what the analysis and the forecasts say, without the jargon" className="plain" exportTitle={`${v.company} — summary`}>
+      <div className={`plain-h ${p.tone}`}><Icon name={p.tone === "up" ? "arrow-up" : p.tone === "down" ? "warning" : p.tone === "warn" ? "arrow-down" : "dash"} />{p.headline}</div>
+      <p className="plain-p">{p.paragraph}</p>
+      {(p.good.length > 0 || p.watch.length > 0) && (
+        <div className="plain-lists">
+          {p.good.length > 0 && <div><div className="label">In its favour</div><ul>{p.good.map((x, i) => <li key={i} className="g"><Icon name="pass" className="xs" />{x}</li>)}</ul></div>}
+          {p.watch.length > 0 && <div><div className="label">Keep an eye on</div><ul>{p.watch.map((x, i) => <li key={i} className="w"><Icon name="eye" className="xs" />{x}</li>)}</ul></div>}
+        </div>
+      )}
+      <div className="xs faint" style={{ marginTop: 10 }}>A reading of the models and the research agents, not investment advice.</div>
+    </Panel>
+  );
+}
+
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return <section id={id} className="section"><h2>{title}</h2>{children}</section>;
 }
@@ -230,7 +251,7 @@ function Agents({ v }: { v: Verdict }) {
                 <td><Icon name={open === a.agent ? "chevron-down" : "chevron-right"} className="sm faint" /></td>
                 <td className="strong">{AGENT_NAME[a.agent] ?? titleCase(a.agent)}</td>
                 <td className="muted">{LEAD_SHORT[a.lead] ?? a.lead}</td>
-                <td className="muted ellipsis" style={{ maxWidth: 420 }}>{a.summary}</td>
+                <td className="muted ellipsis" style={{ maxWidth: "min(420px, 30vw)" }}>{a.summary}</td>
                 <td><span className="row" style={{ gap: 4 }}>
                   {a.used_llm && <span className="tag hm">AI</span>}
                   {a.status !== "ok" ? <span className="tag" style={{ color: a.status === "error" ? "var(--down)" : "var(--c-yellow)" }}>{a.status === "error" ? "error" : "no data"}</span> : a.validated === false ? <span className="tag warn">unvalidated</span> : <span className="tag up">ok</span>}

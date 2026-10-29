@@ -680,3 +680,10 @@ table.dg.has-cb th.sticky:not(.cbcol), table.dg.has-cb td.sticky:not(.cbcol) { l
 table.dg tbody tr.checked td { background: color-mix(in srgb, var(--accent) 9%, transparent); }
 table.dg tbody tr.checked td.sticky { background: color-mix(in srgb, var(--accent) 9%, var(--panel)); }
 table.dg tbody tr.checked td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+
+/* ------------------------------------------------------------- wide content scrolls sideways instead of being cut off */
+.panel-b.flush, .panel-b:has(> table), .panel-b:has(> .dg-wrap) { overflow-x: auto; }
+.band { overflow-x: auto; grid-auto-columns: minmax(150px, 1fr); scrollbar-width: thin; }
+table.dg td.wrap { white-space: normal; min-width: 220px; line-height: 1.45; padding-top: 6px; padding-bottom: 6px; }
+.seg button:disabled { opacity: .4; cursor: default; }
+.seg button:disabled:hover { color: var(--fg-2); }

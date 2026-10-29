@@ -49,7 +49,13 @@ The valuation engine turns a company's accounts into an estimate of its worth pe
 
 - **Company list.** The user keeps a list of companies (name, sector, size, stock symbol) on the Universe page.
 - **Finding the symbol.** If a symbol is missing, INTVAL looks it up: first a hand-checked list, then a saved cache, then a search.
-- **Downloading.** For each company it downloads the income statement, balance sheet, cash-flow statement, daily prices and a risk measure (beta) from Yahoo Finance. If Yahoo has no prices, it tries the NSE website for closing prices only.
+- **Downloading.** For each company it downloads the income statement, balance sheet, cash-flow statement, daily prices and a risk measure (beta). It uses several providers, in an order the user sets in Configuration → Data sources:
+  - **Yahoo Finance** goes first.
+  - **Screener.in** fills the years and lines Yahoo lacks. It has ten or more years of accounts, against Yahoo's ~4.
+  - **Yahoo's BSE listing** and the **NSE and BSE websites** fill gaps in accounts and prices.
+  - **Financial Modeling Prep, EODHD and Alpha Vantage** join with a free key.
+
+  The first provider with a figure supplies it, and later ones only fill what is still missing, including figures Yahoo only assumed (such as zero debt). Each year's notes say which provider filled what. If Yahoo fails entirely, the company is built from the others instead of being dropped.
 - **Manual fixes.** A spreadsheet of hand-entered figures (the *override sheet*) always wins over downloaded numbers, so the user can patch a wrong or missing value.
 
 ### Step 2 — Check there is enough real data
@@ -208,8 +214,14 @@ The web app is where all of INTVAL is used. It opens in the browser at `http://1
 - A **scanner** over about 425 companies: top gainers and losers, most active, volume spikes, near 52-week highs or lows, overbought or oversold, and covered companies below their buy-below price.
 - A full trading chart for any company or symbol: candles, bars, line and area styles; indicators (moving averages, Bollinger bands, VWAP, RSI, MACD); drawing tools (trend lines, rectangles, Fibonacci, measure, notes); right-click to add a price alert; the HYBRID MODEL value and buy-below drawn as lines.
 
-**Watchlist** — the companies you follow closely (up to 60).
+**Watchlists** — named lists of the companies you follow closely (up to 250 across all lists).
 
+- **Adding companies**, when a list is created or later, four ways:
+  - **search** by name or symbol;
+  - **whole sectors**: tick one or several sectors and take all of their companies or a few. The app's own lists plus NSE's index lists give about 1,000 companies, each with its industry;
+  - **a spreadsheet**: Excel, CSV or pasted text;
+  - **another list**.
+- A list's page has three buttons: **Add companies**, **Research this list** and **More** (edit, focus the app, update prices, pause tracking, tracking settings).
 - A headline band: how many are tracked, advancing vs declining, average change, how many sit below their buy-below price, and today's alerts.
 - **Tiles or Table** view. In the table, click any column header to sort (click again to reverse); in tiles, the same column names appear as sort buttons.
 - Clicking a company opens a **detail panel** beside the list, with its own scroll: a simple price chart (1 day to 1 year), the HYBRID MODEL re-valued at today's price, price-alert levels, a note, and a link to the full chart.
@@ -219,7 +231,8 @@ The web app is where all of INTVAL is used. It opens in the browser at `http://1
 
 **Company profile** — one company in depth. A sticky bar shows price, HYBRID MODEL value, upside, buy-below and confidence. A section menu on the left follows your scrolling and highlights where you are:
 
-- **Summary:** the research note and key points.
+- **Summary:** first **In plain words**, a short reading in everyday language. It says whether the share looks cheap, fairly priced or expensive and by how much, how sure the models are, the price a cautious buyer would wait for, what the models expect in a year, and the good and bad cases. It ends with short lists of what is in the company's favour and what to keep an eye on. Then the research note and key points.
+- **Forecasts:** every model's predicted price over days, months or years, with **Show all** and **Remove all** at the right edge of the chart, and a forecast table.
 - **Valuation:** lens contribution, the bridge from lens blend to final value, the build-up.
 - **Drivers & risk:** risk premiums, growth nudges and quality.
 - **Agents & evidence:** every analyst's finding with its evidence links.
@@ -237,16 +250,17 @@ The web app is where all of INTVAL is used. It opens in the browser at `http://1
 
 ### Research workforce
 
-**Overview** — the team at a glance: the current or last run (companies done, who is working, messages, calls saved, AI calls), a card per team listing every agent with live status (and markers for agents that are switched off or tuned), this run's verdicts and red flags, and recent runs (click one to replay it). Clicking an agent opens its profile; the gear opens its **settings**. The **Workforce** button controls automatic and on-demand runs.
+**Overview** — the team at a glance: the current or last run (companies done, who is working, messages, calls saved, AI calls), a card per team listing every agent with live status (and markers for agents that are switched off or tuned), this run's verdicts and red flags, and recent runs (click one to replay it). Clicking an agent opens its profile; the gear opens its **settings**. **Research** starts a run on every covered company or on any chosen watchlist (quick sweep or full research); **Auto-start** sets whether the team starts by itself when the app opens.
 
 **Agent Network** — the team as a live, full-screen map.
 
-- **Layout:** a top bar (run picker, agent search, Views, Layers, Workforce, export, shortcuts, inspector toggle), a tool rail on the left, the inspector docked on the right and a replay bar along the bottom, so nothing covers the map.
+- **Layout:** a top bar (run picker, agent search, Views, Layers, Research, export, shortcuts, inspector toggle), a tool rail on the left, the inspector docked on the right and a replay bar along the bottom, so nothing covers the map.
 - **Motion:** small coloured dots (*info-bits*) travel along the lines as agents exchange work, coloured by what they carry; busy agents glow, and counters tick up. Live during a run; afterwards any run can be replayed with a timeline and speed control.
 - **Cards:** each agent is a card; a small arrow inside opens a brief info panel (role, status, work done, duty, settings, quick actions).
 - **Layers:** show or hide analysts, data sources, outputs, the orchestrator, team bands, each kind of connection, captions, animation, score pop-ups and a mini-map; hide whole teams or single nodes.
 - **Arrangements and views:** *Hierarchy* or *Radial* layout, compact or full cards, built-in views (Simple, Leads only, Data flow, Everything, Radial) and your own saved views.
 - **Tools:** Select & move, Pan, Link (draw your own connection), Note (pin a note), Focus (show one agent and its connections) and Hide/delete, each with a keyboard shortcut.
+- **Notes:** a tidy card in the map's own style, with a drag handle, five colours, edit and delete buttons, and when it was last changed. While writing there is a counter and a **Done** button (`Ctrl+Enter`); an empty note is discarded.
 - **Real changes:** right-clicking an analyst can leave it out of research runs; links and notes are personal annotations only.
 - **Light theme:** team colours are drawn darker so everything stays readable.
 
@@ -254,17 +268,33 @@ The web app is where all of INTVAL is used. It opens in the browser at `http://1
 
 ### Models & data
 
-**Model Performance** — how accurate each method has been: a leaderboard, error by year, how often each wins, a sector-by-method grid, a company explorer, HYBRID MODEL and Ensemble detail, a chart gallery, companies left out and downloadable files.
+**Model Performance** — how accurate each method has been, in five tabs:
 
-**Learning** — how the machine-learning models grow (see *Learning data* below).
+- **Leaderboard:** each method's error, hit rate, bias and rank correlation; error by year; how often each wins.
+- **Sectors:**
+  - *which model suits each sector*: the most accurate method, its error, the runner-up, and the HYBRID MODEL's error;
+  - how many sectors each method wins;
+  - a sector-by-method error grid with the best method in each sector outlined;
+  - a *sector valuation forecast by each model*: each method's median value against today's price, or its one-year projection;
+  - *sector segregation and prediction*: per sector, how many companies sit below, near or above value, the top pick, and a chart of each sector's upside and one-year projection. Click a sector to list its companies.
+- **Company:** every method by year for one company, plus HYBRID MODEL and Ensemble detail.
+- **Training data:** how the machine-learning models grow, in plain words (see *Learning data* below).
+- **Files & charts:** downloads, companies left out, the chart gallery.
 
 **Universe** — the editable company list: add, delete, set sectors in bulk, import and export CSV, and checks for problems.
 
 ### Operations
 
-**Operations** — start and watch jobs. A form picks the job type (valuation report, data check, research, AI key check, learning feed), scope, years and options. Beside it, the live job shows its stages and log, and a table lists past jobs. Only one job runs at a time.
+**Operations** — start and watch jobs from one form:
 
-**Configuration** — every setting: run and data-quality settings, AI providers (key, model picker, test, fail-over order), local models through Ollama, research agents, economic inputs, notifications and sounds, and the raw settings file.
+- **What to run:** a valuation report, research (quick or full), a training-data refresh, or a data check.
+- **Which companies:** all covered ones, a watchlist, or the ones you pick.
+- **Which years.**
+- **Options:** only the ones that apply. The rare ones (auto-train, rule-based research, offline test data) sit under *More options*.
+
+Beside it, the live job shows its stages and log, and a table lists past jobs. Only one job runs at a time.
+
+**Configuration** — every setting: run and data-quality settings, **data sources** (each provider on or off, the order they are trusted in, free keys), AI providers (key, model picker, test, fail-over order), local models through Ollama, research agents, economic inputs, notifications and sounds, and the raw settings file.
 
 ## Talking to and tuning the agents
 
@@ -313,7 +343,7 @@ A **Defaults** button puts an agent back. Changes apply from the next run and ar
 
 While the web app is open, a background **tracker** follows the watchlist and raises alerts; the valuation itself stays fixed until the next report or research run.
 
-- **Polling:** every 30 seconds while the Indian market is open (09:15–15:30, Monday to Friday) and every 15 minutes otherwise. Both are adjustable under Watchlist → Tracking. Prices from the free source can be a little delayed.
+- **Polling:** every 30 seconds while the Indian market is open (09:15–15:30, Monday to Friday) and every 15 minutes otherwise. Both are adjustable under a watchlist's More → Tracking settings. Prices from the free source can be a little delayed; when it has no quote, the NSE and then the BSE website are asked.
 - **Minute history:** every minute price is stored on this computer, so a tracked company builds an intraday history longer than the source's own 7-day limit. How long it is kept is adjustable.
 - **Re-valuing at today's price:** the HYBRID MODEL value comes from the accounts, so it does not move with the price. Only the upside, the label and the buy-below test are recalculated at the live price.
 - **Alerts** fire once per session when a price reaches a level you set, falls below the buy-below price, or moves more than 5% in a day (adjustable).
@@ -327,12 +357,12 @@ While the web app is open, a background **tracker** follows the watchlist and ra
 The machine-learning models get better mainly by seeing more companies, so INTVAL keeps a separate **learning set** of companies it learns from but does not value.
 
 - **What a lesson is:** one company in one financial year — that year's accounts, and how its price moved over the next year. A live price on its own teaches nothing, so tracker prices are not used for training.
-- **The learning set:** every company INTVAL knows beyond the valued list: a training list, the auto-trainer's picks and the watchlist (about 380 companies). The free data source serves roughly four years of accounts per company, so each adds 2–3 lessons.
-- **Fetching:** *Learning → Fetch now* downloads and caches their accounts; a cached company is reused for 7 days.
+- **The learning set:** every company INTVAL knows beyond the valued list: a training list, the auto-trainer's picks and the watchlists (about 380 companies). With Screener.in filling the older years, each company adds more lessons than the 2–3 that Yahoo's four years of accounts allowed.
+- **Fetching:** *Model Performance → Training data → Refresh now* (or Operations → Refresh training data) downloads and caches their accounts; a cached company is reused for 7 days.
 - **Train on all learning companies:** when on, every valuation run includes the learning set in training.
 - **Daily feed:** when on, the app fetches new and stale companies after 16:15 each weekday when nothing else is running, and can retrain afterwards.
 - **Auto-train:** a run mode that keeps adding training companies, batch by batch, until the model's confidence stops improving or a limit is reached, with live controls to pause, skip a sector, retrain, change the target or finish.
-- **Did it help?** After every valuation run, the Learning page records the number of training rows, the HYBRID MODEL's average confidence and its typical error, so you can see whether more data actually improved things.
+- **Did it help?** After every valuation run, the Training data tab records the number of companies learned from and the HYBRID MODEL's typical error, and says in plain words whether accuracy is improving, holding steady or slipping.
 
 ## Settings, files and storage
 
@@ -350,7 +380,8 @@ Everything INTVAL knows lives in plain files inside the project folder; nothing 
 | Research history | `output/intel/blackboard.sqlite` | Every run, message, finding and verdict |
 | Latest research | `output/intel/latest/` | Dashboard, report and verdicts |
 | Agent settings | `agent_profiles.json` (beside the blackboard) | Per-agent tuning and instructions |
-| Live data | `data/live/` | Watchlist, alerts, minute prices, learning history, auto-start settings |
+| Live data | `data/live/` | Watchlists, alerts, minute prices, learning history, auto-start settings, data-source choices, the cached NSE sector lists, the update history |
+| Backups | `backups/` | A copy of your data made before every update; the last five are kept |
 | Browser-only preferences | The browser's storage | Map layouts, saved views, notes, panel choices, Studio scenarios |
 
 A mistyped or deleted setting never crashes a run: the built-in default is used and the run log notes it.
@@ -364,7 +395,16 @@ INTVAL runs on any computer with Python, or without Python through its installer
 - **Windows 10/11:** a setup wizard. The user picks the folder (Program Files or any other) and whether to install for everyone or just themselves. They can add a desktop shortcut and a Start-menu entry, and launch INTVAL when setup finishes. It appears in Settings → Apps with an uninstaller, which asks before deleting the user's data.
 - **Linux:** a graphical setup wizard with the same choices (folder, desktop shortcut, applications menu, launch when finished), an uninstall script, and a text mode for computers without a screen.
 
-The installed app opens the web app from its shortcut. Reinstalling or upgrading keeps the user's settings, company lists and reports. There is no macOS installer yet.
+The installed app opens the web app from its shortcut. There is no macOS installer yet.
+
+**Updating it.** Each release also comes as an **updater** (`INTVAL-Update-<version>-windows-x64.exe`, `INTVAL-Update-<version>-linux-x86_64`). It upgrades an existing installation in place and never loses data:
+
+1. It finds INTVAL wherever it was installed, for one user or for everyone. Where INTVAL is not installed, it refuses and points to the Setup.
+2. It backs up everything the user owns to `backups/`: company lists, watchlists, the research agents' memory and history, training data, settings and keys.
+3. It replaces only the program.
+4. It adds the new version's training companies and settings sections without changing anything the user set.
+
+The full Setup run over an existing copy installs into the same folder and does the same.
 
 **On your computer, from the source code.** Install the requirements once, then:
 
@@ -412,8 +452,8 @@ The main limits come from free data: few years of accounts, delayed prices and a
 
 **Known limits**
 
-- **Short history.** The free source serves about four years of accounts, so most companies have only three complete years and early years are often estimated.
-- **Exchange website blocks.** NSE often blocks cloud and home connections alike; insider and shareholding data then come only from other sources and are thinner.
+- **Short history.** Yahoo serves about four years of accounts. Screener.in now fills the earlier years, but it has no cash or current-liabilities figures, so those can still be estimated for older years.
+- **Exchange website blocks.** NSE and BSE often block cloud and VPN connections (and sometimes home ones); their website endpoints are unofficial and can change. When they do not answer, prices, quotes, insider and shareholding data come only from the other sources and are thinner.
 - **Delayed prices.** Live prices can be delayed and exchange holidays are not known.
 - **Banks and lenders** fit most methods poorly; residual income and the lender weighting help, but coverage is weaker.
 - **What "accurate" means.** All methods are scored against the price one month after the year closes, so the calibration inherits that definition.

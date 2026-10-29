@@ -29,7 +29,6 @@ const NAV = [
   ] },
   { group: "Models & data", items: [
     { to: "/performance", icon: "graph-line", label: "Model Performance" },
-    { to: "/learning", icon: "mortar-board", label: "Learning" },
     { to: "/universe", icon: "database", label: "Universe" },
   ] },
   { group: "Operations", items: [
@@ -47,13 +46,14 @@ const TAPE: Record<string, { k: string; fmt: (v: number) => string }> = {
   gold: { k: "GOLD", fmt: (v) => "$" + num(v, 0) },
 };
 
-export const JOB_TITLE: Record<string, string> = { agents: "Research", valuation: "Valuation report", screen: "Data check", llm_check: "AI key check", learn: "Learning feed" };
+export const JOB_TITLE: Record<string, string> = { agents: "Research", valuation: "Valuation report", screen: "Data check", llm_check: "AI key check", learn: "Training data refresh" };
 export function jobTitle(kind: string, opts: Record<string, unknown> | null | undefined) {
   if (kind === "agents" && opts?.auto) return opts.quick ? "Workforce sweep (auto)" : "Workforce research (auto)";
-  if (kind === "agents") return opts?.quick ? "Quick sweep" : "Full research";
+  const on = opts?.watchlist_name ? ` · ${String(opts.watchlist_name)}` : "";
+  if (kind === "agents") return (opts?.quick ? "Quick sweep" : "Full research") + on;
   if (kind === "valuation" && opts?.auto_train) return "Valuation + auto-train";
-  if (kind === "valuation" && opts?.learning) return "Retrain on learning data";
-  if (kind === "learn") return opts?.retrain ? "Learning feed + retrain" : opts?.auto ? "Daily learning feed" : "Learning feed";
+  if (kind === "valuation") return "Valuation report" + on;
+  if (kind === "learn") return opts?.retrain ? "Training data refresh + retrain" : opts?.auto ? "Evening training data refresh" : "Training data refresh";
   return JOB_TITLE[kind] ?? kind;
 }
 

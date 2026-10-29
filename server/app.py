@@ -8,7 +8,7 @@ import platform
 import re
 import time
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel
@@ -26,12 +26,14 @@ from server import (
     yaml_patch,
 )
 from server import data as D
+from server import directory
 from server.jobs import JobManager
+import source_settings  # noqa: E402  (src/sources is on sys.path via `server`)
 
 SETTINGS = D.ROOT / "agent_settings.yaml"
 ENV_FILE = D.ROOT / ".env"
 DIST = D.ROOT / "web" / "dist"
-KEY_NAMES = ["GROQ_API_KEY", "GEMINI_API_KEY", "NVIDIA_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"]
+KEY_NAMES = ["GROQ_API_KEY", "GEMINI_API_KEY", "NVIDIA_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", *source_settings.KEY_NAMES]
 
 app = FastAPI(title="Intrinsic Value Calculator", docs_url="/api/docs", openapi_url="/api/openapi.json")
 app.add_middleware(
@@ -763,7 +765,7 @@ def copy_watchlist(list_id: str, body: dict | None = None):
 def add_many(list_id: str, body: dict):
     """{tickers: [ticker | {ticker, name, sector, cap}]} - several companies at once; skips ones already on it."""
     added, failed = 0, []
-    for t in (body.get("tickers") or [])[:200]:
+    for t in (body.get("tickers") or [])[:live.MAX_TRACKED]:
         d = t if isinstance(t, dict) else {"ticker": t}
         try:
             _live(live.add, d.get("ticker"), d.get("name"), d.get("sector"), d.get("cap"), list_id)
@@ -921,6 +923,46 @@ def learning_status():
 @app.put("/api/learning/settings")
 def learning_settings(body: dict):
     return _live(learning_api.save_settings, body)
+
+
+# ================================================================ data providers and the sector directory
+@app.get("/api/data-sources")
+def data_sources():
+    return {"providers": source_settings.status()}
+
+
+class SourceOrder(BaseModel):
+    order: list[str] | None = None
+    off: list[str] | None = None
+
+
+@app.put("/api/data-sources")
+def data_sources_save(body: SourceOrder):
+    try:
+        source_settings.save(body.order, body.off)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"providers": source_settings.status()}
+
+
+@app.get("/api/directory/sectors")
+def directory_sectors():
+    return _live(directory.sectors)
+
+
+@app.get("/api/directory")
+def directory_companies(sector: list[str] | None = Query(None), all: bool = False):
+    """Companies in one or more sectors (?sector=A&sector=B), or every one (?all=1): known ones and NSE's index lists."""
+    return _live(directory.everyone) if all else _live(directory.in_sectors, sector or [])
+
+
+@app.post("/api/directory/refresh")
+def directory_refresh():
+    try:
+        n = directory.refresh()
+    except RuntimeError as e:
+        raise HTTPException(502, str(e))
+    return {"companies": n, **directory.sectors()}
 
 
 @app.get("/api/health")

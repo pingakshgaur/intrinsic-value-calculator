@@ -1,6 +1,6 @@
 # --- Data acquisition ---
 yfinance>=0.2.40          # primary source: statements + price history
-requests>=2.31            # NSE portal fallback, Yahoo ticker search, LLM APIs
+requests>=2.31            # NSE, BSE, Screener.in and keyed data providers, Yahoo ticker search, LLM APIs
 
 # --- Core computation ---
 pandas>=2.0               # statement DataFrames, feature matrix, export

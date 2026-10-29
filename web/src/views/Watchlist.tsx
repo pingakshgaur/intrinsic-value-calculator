@@ -3,12 +3,13 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useCompanies, useStartJob, useStatus } from "../lib/hooks";
-import { isOpen, TrackerState, useLiveAlerts, useLiveSearch, useSectors, useWatchlist, useWatchlistMutations, useWatchlists, useWatchMutations, WatchItem, WatchList } from "../lib/live";
+import { isOpen, TrackerState, useLiveAlerts, useWatchlist, useWatchlistMutations, useWatchlists, useWatchMutations, WatchItem, WatchList } from "../lib/live";
 import { useScope } from "../lib/scope";
-import { ResearchList } from "./WatchlistLibrary";
+import { ResearchLauncher } from "../components/ResearchLauncher";
+import { CompanyImporter, Entry } from "../components/CompanyImporter";
 import { ago, isNum, money, num, pct, shortName, when } from "../lib/format";
 import { HM_COLOR, LABELS } from "../lib/labels";
-import { Empty, ErrorNote, Icon, LabelBadge, PageHeader, Panel, Popover, QueryView, Toggle } from "../components/ui";
+import { Drawer, Empty, ErrorNote, Icon, LabelBadge, PageHeader, Panel, Popover, QueryView, Toggle } from "../components/ui";
 import { Column, DataGrid, GridTools, sortRows, useGridState } from "../components/DataGrid";
 import { ChartPanel } from "../components/ChartPanel";
 import { Position, Spark } from "../components/Spark";
@@ -51,6 +52,8 @@ function Board({ items, tracker, list, max, tracked, sel, pick }: { items: Watch
   const sortState = useGridState<WatchItem>("watch", WATCH_COLUMNS, { key: "chg", asc: false });
   useEffect(() => { try { localStorage.setItem("wl.view", view); } catch { /* ignore */ } }, [view]);
   const m = useWatchMutations();
+  const [adding, setAdding] = useState(false);
+  const [tracking, setTracking] = useState(false);
   const alerts = useLiveAlerts();
   const open = isOpen(tracker.market);
   const current = items.find((w) => w.ticker === sel) ?? null;
@@ -78,18 +81,27 @@ function Board({ items, tracker, list, max, tracked, sel, pick }: { items: Watch
           <span className="faint">· last update {ago(tracker.last_poll)}{tracker.error ? "" : ""}</span>
         </span>}
         actions={<>
-          <TrackerSettings tracker={tracker} />
-          <button className="btn sec" onClick={() => m.tracker.mutate({ paused: !tracker.paused })}><Icon name={tracker.paused ? "debug-start" : "debug-pause"} className="sm" />{tracker.paused ? "Resume" : "Pause"}</button>
-          <button className="btn sec" onClick={() => m.poll.mutate()} disabled={tracker.paused || !items.length}><Icon name={m.poll.isPending ? "loading" : "refresh"} className={`sm ${m.poll.isPending ? "spin" : ""}`} />Update now</button>
-          <button className={`btn sec ${scope.id === list.id ? "on" : ""}`} onClick={() => scope.set(scope.id === list.id ? null : list.id)} title="Show only this list's companies across the app">
-            <Icon name="target" className="sm" />{scope.id === list.id ? "App focused here" : "Focus the app"}</button>
-          <ResearchList list={list} />
-          <button className={`btn sec ${editing ? "on" : ""}`} onClick={() => setEditing(!editing)}><Icon name="edit" className="sm" />{editing ? "Editing" : "Edit list"}</button>
-          <AddCompany count={tracked} max={max} listId={list.id} listName={list.name} />
+          <Popover className="menu" trigger={(o, toggle) => <button className={`btn sec ${o ? "on" : ""}`} onClick={toggle} title="Edit, focus, refresh and tracking"><Icon name="ellipsis" className="sm" />More</button>}>
+            {(close) => (
+              <>
+                <button onClick={() => { close(); setEditing(!editing); }}><Icon name="edit" className="sm" />{editing ? "Close the editor" : "Edit name, notes and colour"}</button>
+                <button onClick={() => { close(); scope.set(scope.id === list.id ? null : list.id); }}><Icon name="target" className="sm" />{scope.id === list.id ? "Stop focusing the app on this list" : "Focus the app on this list"}</button>
+                <hr />
+                <button onClick={() => { close(); m.poll.mutate(); }} disabled={tracker.paused || !items.length}><Icon name="refresh" className="sm" />Update prices now</button>
+                <button onClick={() => { close(); m.tracker.mutate({ paused: !tracker.paused }); }}><Icon name={tracker.paused ? "debug-start" : "debug-pause"} className="sm" />{tracker.paused ? "Resume live tracking" : "Pause live tracking"}</button>
+                <button onClick={() => { close(); setTracking(true); }}><Icon name="settings-gear" className="sm" />Tracking settings…</button>
+              </>
+            )}
+          </Popover>
+          {scope.id === list.id && <span className="tag info" title="The app shows only this list's companies">App focused here</span>}
+          {items.length > 0 && <ResearchLauncher list={list} secondary />}
+          <button className="btn" onClick={() => setAdding(true)} title={tracked >= max ? `The watchlists already track ${max} companies` : `Add companies to “${list.name}”`}><Icon name="add" className="sm" />Add companies</button>
         </>} />
+      {adding && <AddCompanies list={list} items={items} room={max - tracked} onClose={() => setAdding(false)} />}
+      {tracking && <TrackingDrawer tracker={tracker} onClose={() => setTracking(false)} />}
       {editing && <EditBar list={list} count={items.length} onClose={() => setEditing(false)} />}
       {tracker.error && <div className="note err"><Icon name="error" /><div>Last poll failed: {tracker.error}. The tracker keeps trying.</div></div>}
-      {!items.length ? <EmptyWatch list={list} /> : (
+      {!items.length ? <EmptyWatch list={list} onAdd={() => setAdding(true)} /> : (
         <>
           <div className="band">{band.map((b) => <div key={b.k}><div className="k">{b.k}</div><div className="v">{b.v}</div><div className="s">{b.s}</div></div>)}</div>
           <div className={`split wl ${current ? "" : "closed"}`}>
@@ -357,79 +369,49 @@ function Detail({ w, list, onClose }: { w: WatchItem; list: WatchList; onClose: 
   );
 }
 
-function AddCompany({ count, max, listId, listName }: { count: number; max: number; listId: string; listName: string }) {
-  const [text, setText] = useState("");
-  const [sector, setSector] = useState("");
-  const s = useLiveSearch(text);
-  const sectors = useSectors();
-  const m = useWatchMutations();
+/** Add companies to this list: search, whole sectors, a spreadsheet or another list. */
+function AddCompanies({ list, items, room, onClose }: { list: WatchList; items: WatchItem[]; room: number; onClose: () => void }) {
+  const lm = useWatchlistMutations();
   const app = useApp();
-  const add = (ticker: string, name?: string, sec?: string, cap?: string, close?: () => void) =>
-    m.add.mutate({ ticker, name, sector: sec || sector || undefined, cap, list: listId }, {
-      onSuccess: () => { app.toast(`${name ?? ticker} added to “${listName}”`, "ok"); setText(""); close?.(); },
-      onError: (e) => app.toast(e instanceof Error ? e.message : String(e), "error"),
-    });
+  const [picks, setPicks] = useState<Entry[]>([]);
+  const taken = useMemo(() => new Set(items.map((w) => w.ticker)), [items]);
+  const save = () => lm.addMany.mutate({ id: list.id, tickers: picks }, {
+    onSuccess: (r) => { app.toast(`${r.added} compan${r.added === 1 ? "y" : "ies"} added to “${list.name}”${r.failed.length ? ` · ${r.failed.length} not added (${r.failed[0]})` : ""}`, r.failed.length ? "info" : "ok"); onClose(); },
+    onError: (e) => app.toast(e instanceof Error ? e.message : String(e), "error"),
+  });
   return (
-    <Popover className="pop" trigger={(open, toggle) => <button className={`btn ${open ? "on" : ""}`} onClick={toggle} title={count >= max ? `The watchlists already track ${max} companies` : `Add a company to “${listName}”`}><Icon name="add" className="sm" />Add company</button>}>
-      {(close) => (
-        <div style={{ width: 380 }}>
-          <div className="search" style={{ margin: 10 }}><Icon name="search" /><input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Company name or NSE symbol" /></div>
-          <div className="feed" style={{ maxHeight: 300 }}>
-            {(s.data ?? []).map((r) => (
-              <div key={r.ticker} className="ev" onClick={() => add(r.ticker, r.lookup ? undefined : r.name, r.sector, r.cap, close)}>
-                <span className="ic"><Icon name={r.lookup ? "globe" : "add"} className="sm" /></span>
-                <div><div className="t">{r.lookup ? `Track ${r.ticker}` : shortName(r.name)}</div><div className="d mono">{r.lookup ? "not in your lists — choose its sector below" : `${r.ticker} · ${r.sector}`}</div></div>
-              </div>
-            ))}
-          </div>
-          {(s.data ?? []).some((r) => r.lookup) && (
-            <div style={{ padding: 10, borderTop: "1px solid var(--line)" }}>
-              <label className="fld"><span>Sector for a new symbol (used when it trains the models)</span>
-                <select className="sel sm" value={sector} onChange={(e) => setSector(e.target.value)}><option value="">Unclassified</option>{(sectors.data ?? []).map((x) => <option key={x}>{x}</option>)}</select></label>
-            </div>
-          )}
-          <div className="xs faint" style={{ padding: "8px 12px" }}>Every tracked company also joins the learning data for the AI/ML models.</div>
-        </div>
-      )}
-    </Popover>
+    <Drawer title={`Add companies to “${list.name}”`} icon="add" wide onClose={onClose}
+      footer={<><span className="xs faint">Every company added also joins the learning data for the AI/ML models.</span><span className="spacer" /><button className="btn sec" onClick={onClose}>Cancel</button>
+        <button className="btn" disabled={!picks.length || lm.addMany.isPending} onClick={save}><Icon name={lm.addMany.isPending ? "loading" : "add"} className={`sm ${lm.addMany.isPending ? "spin" : ""}`} />Add {picks.length || ""}</button></>}>
+      <CompanyImporter picks={picks} setPicks={setPicks} taken={taken} room={room} exceptList={list.id} />
+    </Drawer>
   );
 }
 
-function TrackerSettings({ tracker }: { tracker: TrackerState }) {
+function TrackingDrawer({ tracker, onClose }: { tracker: TrackerState; onClose: () => void }) {
   const s = tracker.settings;
   const m = useWatchMutations();
   const app = useApp();
   const set = (patch: Record<string, unknown>) => m.tracker.mutate(patch, { onError: (e) => app.toast(e instanceof Error ? e.message : String(e), "error") });
   return (
-    <Popover className="pop" trigger={(open, toggle) => <button className={`btn sec ${open ? "on" : ""}`} onClick={toggle}><Icon name="settings-gear" className="sm" />Tracking</button>}>
-      {() => (
-        <div className="col" style={{ width: 300, padding: 14, gap: 10 }}>
-          <div className="label">Tracking</div>
-          <Toggle checked={!s.paused} onChange={(v) => set({ paused: !v })} label="Track the watchlist" />
-          <label className="fld"><span>Poll every (seconds) while the market is open</span><input className="inp sm num" type="number" min={15} max={600} defaultValue={s.poll_open} onBlur={(e) => set({ poll_open: Number(e.target.value) })} /></label>
-          <label className="fld"><span>Poll every (seconds) while it is closed</span><input className="inp sm num" type="number" min={60} max={7200} defaultValue={s.poll_closed} onBlur={(e) => set({ poll_closed: Number(e.target.value) })} /></label>
-          <label className="fld"><span>Alert on a daily move of at least (%)</span><input className="inp sm num" type="number" min={0} max={50} step={0.5} defaultValue={(s.move_alert * 100).toFixed(1)} onBlur={(e) => set({ move_alert: Number(e.target.value) / 100 })} /></label>
-          <label className="fld"><span>Keep minute bars for (days)</span><input className="inp sm num" type="number" min={7} max={3650} defaultValue={s.retention_days} onBlur={(e) => set({ retention_days: Number(e.target.value) })} /></label>
-          <span className="xs faint">Yahoo serves only 7 days of minute bars; the tracker keeps its own copy for as long as you set here.</span>
-        </div>
-      )}
-    </Popover>
+    <Drawer title="Live tracking" icon="settings-gear" onClose={onClose} footer={<><span className="spacer" /><button className="btn" onClick={onClose}>Done</button></>}>
+      <div className="col" style={{ gap: 12 }}>
+        <Toggle checked={!s.paused} onChange={(v) => set({ paused: !v })} label="Track every watchlist's prices live" />
+        <label className="fld"><span>Check prices every (seconds) while the market is open</span><input className="inp sm num" type="number" min={15} max={600} defaultValue={s.poll_open} onBlur={(e) => set({ poll_open: Number(e.target.value) })} /></label>
+        <label className="fld"><span>Check prices every (seconds) while it is closed</span><input className="inp sm num" type="number" min={60} max={7200} defaultValue={s.poll_closed} onBlur={(e) => set({ poll_closed: Number(e.target.value) })} /></label>
+        <label className="fld"><span>Alert on a daily move of at least (%)</span><input className="inp sm num" type="number" min={0} max={50} step={0.5} defaultValue={(s.move_alert * 100).toFixed(1)} onBlur={(e) => set({ move_alert: Number(e.target.value) / 100 })} /></label>
+        <label className="fld"><span>Keep minute-by-minute prices for (days)</span><input className="inp sm num" type="number" min={7} max={3650} defaultValue={s.retention_days} onBlur={(e) => set({ retention_days: Number(e.target.value) })} /></label>
+        <span className="xs faint">Yahoo keeps only 7 days of minute prices; the tracker stores its own copy for as long as you set here. When Yahoo has no price for a company, the NSE and BSE websites are asked instead.</span>
+      </div>
+    </Drawer>
   );
 }
 
-function EmptyWatch({ list }: { list: WatchList }) {
-  const companies = useCompanies();
-  const lm = useWatchlistMutations();
-  const app = useApp();
-  const list_ = (companies.data ?? []).filter((c) => c.ticker);
-  const addAll = () => lm.addMany.mutate({ id: list.id, tickers: list_.map((c) => ({ ticker: c.ticker, name: c.name, sector: c.sector, cap: c.cap })) }, {
-    onSuccess: (r) => app.toast(`${r.added} companies added${r.failed.length ? ` · ${r.failed.length} not added (${r.failed[0]})` : ""}`, r.failed.length ? "info" : "ok"),
-    onError: (e) => app.toast(e instanceof Error ? e.message : String(e), "error"),
-  });
+function EmptyWatch({ list, onAdd }: { list: WatchList; onAdd: () => void }) {
   return (
     <Panel>
-      <Empty icon="eye" title={`“${list.name}” is empty`} action={<div className="row">{list_.length > 0 && <button className="btn" onClick={addAll} disabled={lm.addMany.isPending}><Icon name={lm.addMany.isPending ? "loading" : "add"} className={`sm ${lm.addMany.isPending ? "spin" : ""}`} />Add my {list_.length} covered companies</button>}<Link className="btn sec" to="/markets">Find companies in Markets</Link></div>}>
-        Add companies with <b>Add company</b> above. While the market is open the tracker polls every 30 seconds, stores every minute bar on this computer, re-values covered companies at the live price, and alerts you on the levels you set.
+      <Empty icon="eye" title={`“${list.name}” is empty`} action={<div className="row"><button className="btn" onClick={onAdd}><Icon name="add" className="sm" />Add companies</button><Link className="btn sec" to="/markets">Browse Markets</Link></div>}>
+        Search for companies, take whole sectors, or import a spreadsheet. While the market is open the tracker checks prices every 30 seconds, re-values covered companies at the live price, and alerts you on the levels you set.
       </Empty>
     </Panel>
   );

@@ -14,6 +14,15 @@ It ships with a command-line interface, a browser app (`python run.py --web`), a
 
 > **New: installers.** Share INTVAL with people who don't have Python: `packaging/` builds a Windows setup `.exe` and a Linux setup wizard (folder choice, desktop shortcut, launch when finished, uninstaller). See [Installers](#installers-share-it-without-python).
 
+> **New in 1.1.**
+> - **More data sources, with fallback.** Yahoo Finance is no longer the only source. Screener.in fills the years Yahoo lacks (ten or more years of accounts against Yahoo's ~4), and the NSE and BSE websites take over prices and live quotes when Yahoo has none. Financial Modeling Prep, EODHD and Alpha Vantage join with a free key. You set the order in Configuration → Data sources. See [§9](#9-data-layer).
+> - **Sector analysis.** Model Performance → Sectors shows which model is most accurate in each sector, what every model says each sector is worth today with a one-year projection, and how each sector splits into companies below, near and above value.
+> - **Watchlists by sector or spreadsheet.** Fill a list as you create it, or later: search, take whole sectors at once (including NSE's index lists of ~1,000 companies), import Excel/CSV/pasted text, or copy another list.
+> - **Research any watchlist** in one click from the Research workforce, the Agent Network, the Command Center or Coverage. Every company on the list is researched, valued before or not.
+> - **A plain-English summary** at the top of every company's profile.
+> - **A simpler workbench.** One place to start each kind of run, and no repeated buttons. Learning is now Model Performance → Training data.
+> - **An updater** (`INTVAL-Update-<version>-…`) that upgrades an existing install in place. It backs up your data first and keeps it all: companies, watchlists, research history, the agents' memory, training data, settings and keys.
+
 ---
 
 ## Table of contents
@@ -139,7 +148,16 @@ This runs against the built-in synthetic dataset, with no network access needed.
 | Windows 10/11 x64 | `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1` | `INTVAL-Setup-<version>-windows-x64.exe`: a setup wizard (Inno Setup) with install folder choice, just-me or all-users, Start-menu and desktop shortcuts, launch when finished, and an uninstaller in Settings → Apps that asks before deleting your data |
 | Linux x86_64 | `powershell -File packaging\build_linux.ps1` (Docker), or `bash packaging/linux/build_linux.sh` on Linux | `INTVAL-Setup-<version>-linux-x86_64`: a graphical setup wizard with the same choices (folder, desktop shortcut, applications menu, launch when finished) and an `uninstall.sh`; `--silent` installs without a display |
 
-The installed app is one program (`INTVAL.exe` / `INTVAL`) that opens the workbench in your browser. Its data, settings and reports live in the install folder, which the Windows installer makes writable even under Program Files; an upgrade keeps your settings and company lists. macOS installers have to be built on a Mac and are not set up.
+Each build also makes the **updater**: `INTVAL-Update-<version>-windows-x64.exe` and `INTVAL-Update-<version>-linux-x86_64`. Run it on a computer that already has INTVAL to upgrade in place:
+
+1. It finds the existing installation wherever it is, per-user or all-users (on Windows from the uninstall entry; on Linux from `~/.config/intval/install.json` or the default folders). It refuses to run where INTVAL is not installed.
+2. It backs up everything you own to `backups/<date>-<old>-to-<new>/` inside the install folder: `data/` (company lists, watchlists, training-data state), `output/intel/` (the research agents' memory and history), `agent_settings.yaml`, `.env` and `llm_providers.json`. The last five backups are kept.
+3. It replaces only the program (`INTVAL.exe`, `_internal/`, `web/dist/`, docs and factory defaults).
+4. It runs `INTVAL --migrate` ([`src/migrate.py`](src/migrate.py)). This adds the training companies the new version ships that your lists do not have, and any new settings sections, without changing a value you set. It is safe to run twice.
+
+Shortcuts and the uninstaller stay as they are. An all-users install on Windows asks for administrator rights. The full Setup also works over an existing install: it now defaults to the folder INTVAL is already in, points you to the updater, and runs the same migration.
+
+The installed app is one program (`INTVAL.exe` / `INTVAL`) that opens the workbench in your browser. Its data, settings and reports live in the install folder, which the Windows installer makes writable even under Program Files. macOS installers have to be built on a Mac and are not set up.
 
 How the installed app differs from a source checkout: it sets `INTVAL_HOME` to its own folder (read by `config.PROJECT_ROOT` and `server/data.py`), opens the web app when started with no arguments, and runs background jobs by calling itself (`INTVAL.exe <run.py flags>`) instead of `python run.py`. It ships `agent_settings.defaults.yaml` as its starting settings, never your `.env`, `llm_providers.json`, `output/` or `data/live/`. The Linux build uses the CPU-only `xgboost-cpu` package, which leaves out NVIDIA's ~300 MB GPU library.
 
@@ -189,10 +207,18 @@ intrinsic-value-calculator/
 │   ├── learning.py               Learning data: every company the app knows beyond the input list.
 │   ├── ssl_trust.py              Makes Python trust the certificates Windows trusts.
 │   │
-│   ├── sources/                  Where the data comes from.
+│   ├── migrate.py                After an update: back up, then add new training companies and settings sections.
+│   │
+│   ├── sources/                  Where the data comes from (Configuration → Data sources sets the order).
+│   │   ├── data_hub.py           One company from every provider, merged: Yahoo first, the others fill gaps.
+│   │   ├── source_settings.py    Which providers are on, their order, their keys (data/live/sources.json, .env).
 │   │   ├── yf_source.py          Yahoo Finance: statements, prices, benchmark, per-field diagnosis.
+│   │   ├── screener_source.py    Screener.in: ten-plus years of annual accounts for NSE/BSE companies.
+│   │   ├── price_chain.py        Daily closes from the first provider that has them (Yahoo NSE/BSE, NSE, BSE, keyed).
+│   │   ├── nse_source.py         NSE website: closes, last price, index constituents with their industry.
+│   │   ├── bse_source.py         BSE website: closes and last price by scrip code.
+│   │   ├── keyed_sources.py      Financial Modeling Prep, EODHD, Alpha Vantage (free keys).
 │   │   ├── ticker_resolver.py    Company name → Yahoo ticker (explicit → manual map → cache → search).
-│   │   ├── nse_source.py         NSE portal fallback for closing prices only.
 │   │   └── mock_source.py        Deterministic offline dataset that triggers every reason code.
 │   │
 │   ├── models/                   One file per valuation model.
@@ -241,9 +267,10 @@ intrinsic-value-calculator/
 │   ├── data.py                   Readers for everything the calculator and agents write to disk.
 │   ├── jobs.py                   Background runs (each a child `python run.py ...`).
 │   ├── prefs.py                  Run preferences.
-│   ├── live.py                   Live market data, scanner and watchlist.
+│   ├── live.py                   Live market data, scanner and watchlists (quotes fall back to NSE / BSE).
+│   ├── directory.py              The sector directory: known companies + NSE's index lists, by sector.
 │   ├── learning_api.py           The web side of src/learning.py.
-│   ├── hybrid_api.py             Hybrid Model Lab: live what-if evaluations.
+│   ├── hybrid_api.py             HYBRID MODEL Studio: live what-if evaluations.
 │   ├── agents_api.py             The research workforce: roster, messages, live state.
 │   ├── agent_chat.py             The Research Room chat with the agents.
 │   ├── autostart.py              Starts the research workforce with the web app.
@@ -261,7 +288,9 @@ intrinsic-value-calculator/
 │
 ├── tests/
 │   ├── test_agents.py            HYBRID MODEL and research agents (offline).
-│   ├── test_live.py              Live market layer, watchlist and learning data (offline).
+│   ├── test_live.py              Live market layer, watchlists, sector directory, learning data (offline).
+│   ├── test_sources.py           Data providers: Screener.in parsing, price fallback, the merge (offline).
+│   ├── test_update.py            Updating without losing data: migration, backups, the Linux updater.
 │   └── test_ollama.py            The Ollama section and local-model calls (offline).
 │
 ├── packaging/                    Builds the installers into installers/ (see §2).
@@ -450,13 +479,16 @@ Tkinter desktop GUI, and every one of that GUI's features is in it:
 
 | Page | What it does |
 |---|---|
-| **Overview** | Headline numbers, an opportunity map of every researched company, upside vs confidence, what needs attention, model accuracy |
-| **Research** | Every company's research verdict; each company has its own page with the six lenses, the valuation build-up, the agents' evidence and bull vs bear cases |
-| **Hybrid Lab** | Change any HYBRID MODEL constant and see the value, range, lenses and build-up respond live, for one company or all of them, then save |
-| **Models** | Every model by year for any company, the HYBRID MODEL's band and lens weights, the Ensemble, accuracy, the chart gallery, companies left out, downloads |
-| **Run Center** | Tick companies in or out for one run, choose the years ("Last 5 / 10 years"), calculate, check data, research, or auto-train with live controls (pause, skip, skip sector, retrain, target ±5, finish) |
-| **Companies** | Edit `data/companies.csv` |
-| **Settings** | The old GUI's data-quality, price, model, report and file settings; AI providers with a live model picker and a Test button; local models through Ollama (download, choose, switch on or off); agent weights; macro inputs; the raw settings file |
+| **Command Center** | Headline numbers, a coverage map of every researched company, signals, upside vs confidence, the model leaderboard, and one **Research** button |
+| **Markets** | Live indices, a market scanner and charts |
+| **Watchlists** | Named lists tracked live, with alerts and notes. Add companies by search, whole sectors, a spreadsheet or another list; research a list in one click |
+| **Coverage** | Every researched company. Each has a profile: a plain-English summary, the valuation, every model's forecast (with Show all / Remove all), drivers and risk, the agents' evidence, bull vs bear, history |
+| **HYBRID MODEL Studio** | Change any constant and see values, ranges, lenses and the bridge respond live, then commit |
+| **Research workforce** | The 23 agents: Overview (teams, run output, past runs, **Research** on any watchlist, auto-start), the live Agent Network (with your own links and notes) and the Research Room chat |
+| **Model Performance** | Leaderboard · **Sectors** (best model per sector, sector forecast by model, sector segregation and prediction) · Company (every model, HYBRID MODEL and Ensemble detail) · **Training data** (what the AI models learn from, in plain words) · Files & charts |
+| **Universe** | Edit `data/companies.csv` |
+| **Operations** | One form for every job: a valuation report, research (quick or full), a training-data refresh or a data check, on every company, a watchlist or the ones you pick. Jobs are followed live |
+| **Configuration** | Run settings, **data sources**, AI providers (including local Ollama models), research agents, notifications, macro inputs, the raw settings file |
 
 [docs/WEB.md](docs/WEB.md) has the details.
 
@@ -510,9 +542,28 @@ Successful search results are cached. A failure becomes `TICKER NOT RESOLVED` fo
 - **Every missing field** records a `(code, detail)` pair in `d["_diag"]`. Every provenance note goes to `d["_notes"]`.
 - Overrides are applied per FY at the end, through `overrides.apply()`.
 
-### NSE fallback: [`src/sources/nse_source.py`](src/sources/nse_source.py)
+### Every provider, merged: [`src/sources/data_hub.py`](src/sources/data_hub.py)
 
-This is used only when yfinance returns no price rows, and only for closing prices. It primes NSE cookies, fetches in windows of ≤350 days, and returns `None` on any failure. **NSE blocks datacentre and VPN IP ranges**, so expect it to work only from a home connection.
+The pipeline, the learning feed and the auto-trainer fetch through `data_hub.fetch_company`. It asks the providers in the order set in **Configuration → Data sources** (saved in `data/live/sources.json`). The first provider with a figure supplies it, and later ones fill only what is still missing.
+
+| Order | Provider | Supplies | Key |
+|---|---|---|---|
+| 1 | Yahoo Finance (NSE listing), [`yf_source.py`](src/sources/yf_source.py) | statements (~4 years), prices, quotes | none |
+| 2 | Screener.in, [`screener_source.py`](src/sources/screener_source.py) | ten-plus years of P&L, balance sheet, cash flow | none |
+| 3 | Yahoo Finance (BSE listing, `.BO`) | statements, prices | none |
+| 4 | NSE website, [`nse_source.py`](src/sources/nse_source.py) | daily closes, last price, index lists with each company's industry | none |
+| 5 | BSE website, [`bse_source.py`](src/sources/bse_source.py) | daily closes, last price | none |
+| 6–8 | Financial Modeling Prep, EODHD, Alpha Vantage, [`keyed_sources.py`](src/sources/keyed_sources.py) | statements and/or prices | free key in `.env` (`FMP_API_KEY`, `EODHD_API_KEY`, `ALPHAVANTAGE_API_KEY`) |
+
+- **What counts as missing:** a field with no value, and any field Yahoo only *assumed* (zero debt, zero cash, no working-capital change, statutory tax, today's share count). A reported figure from a later provider replaces the assumption and removes its note.
+- **Screener.in mapping** (rupees crore → rupees): EBIT = profit before tax + interest; EBITDA = EBIT + depreciation; equity = equity capital + reserves; shares = net profit ÷ EPS. Capex is estimated as the change in fixed assets and CWIP plus depreciation, and is flagged as an estimate. Lenders (banks, NBFCs) get no EBIT from it, because their "interest" is what they pay depositors.
+- **Prices** come from [`price_chain.py`](src/sources/price_chain.py). Yahoo NSE comes first, then Yahoo BSE, then NSE, then BSE, then the keyed providers. A series counts only if it covers a quarter of the window.
+- **If Yahoo fails outright**, the company is built from the other providers instead of being dropped.
+- **Manual overrides still beat every provider.**
+- **Notes say where each number came from**, e.g. "filled from Screener.in: ebit, eps, shares". The console run log adds `via Screener.in` per company.
+- **Live quotes:** when Yahoo has no quote for a tracked company, the tracker asks NSE, then BSE.
+- **Sector lists:** NSE's index lists (Total Market, Nifty 500, Microcap 250) feed the watchlists' sector import (`server/directory.py`), cached for a week.
+- **Unofficial endpoints:** the NSE and BSE endpoints are the ones their own websites use. They need cookies and a browser-like header, change without notice, and **block many datacentre and VPN addresses**, so they work best from a home connection. A provider that does not answer is skipped; nothing stops a run.
 
 ---
 
@@ -659,7 +710,7 @@ Every row's regime, component values, calibrations, weights, range and confidenc
 
 ### 12.4d HYBRID MODEL: [`hybrid_formula.py`](src/hybrid_formula.py)
 
-The headline value. Six lenses (cash flow, earnings power, asset, market, conservative, learning) are each calibrated against their own earlier misses. They are blended by company type, with a growth-credibility gate that only pays for growth the moat earns. The result is then adjusted for quality and governance, and run through bull / base / bear scenarios. It runs in the valuation report for every company-year (from the accounts alone, point-in-time) and in the research runs (with the agents' signals). Every constant is in `agent_settings.yaml -> hybrid_model` and can be tuned live in the web app's Hybrid Lab. Full method: [docs/HYBRID_MODEL.md](docs/HYBRID_MODEL.md). Per-row detail: `output/Hybrid_Model_Detail.csv`.
+The headline value. Six lenses (cash flow, earnings power, asset, market, conservative, learning) are each calibrated against their own earlier misses. They are blended by company type, with a growth-credibility gate that only pays for growth the moat earns. The result is then adjusted for quality and governance, and run through bull / base / bear scenarios. It runs in the valuation report for every company-year (from the accounts alone, point-in-time) and in the research runs (with the agents' signals). Every constant is in `agent_settings.yaml -> hybrid_model` and can be tuned live in the web app's HYBRID MODEL Studio. Full method: [docs/HYBRID_MODEL.md](docs/HYBRID_MODEL.md). Per-row detail: `output/Hybrid_Model_Detail.csv`.
 
 ### 12.5 Machine-learning models: [`ml_common.py`](src/models/ml_common.py)
 
@@ -838,7 +889,7 @@ python run.py --train-universe auto
 python run.py --train-universe auto --auto-max 150 --auto-target 50 --auto-batch 5
 ```
 
-This grows the ML training set **one company at a time** until the Hybrid is confident enough, then values your list as normal. In the web app, switch on **Auto-train** in the Run Center.
+This grows the ML training set **one company at a time** until the Hybrid is confident enough, then values your list as normal. In the web app: Operations → Valuation report → More options → **Auto-train**.
 
 1. **Candidates:** the NIFTY Total Market (~750 companies), filtered as follows:
    - **Listing age:** only companies whose official NSE listing date (`EQUITY_L.csv`) is at least `--auto-min-listed-years` ago (default 10).
@@ -854,7 +905,7 @@ This grows the ML training set **one company at a time** until the Hybrid is con
    - the candidates run out
    - you stop it
 
-**Controls.** In a Windows terminal, use these keys: **P** pause/resume, **S** skip the current company, **X** skip the current sector, **R** retrain now, **+ / −** change the target by 5, **Q** stop and finish with what has been learned (Ctrl+C does the same). The web app's Run Center has the same controls as buttons.
+**Controls.** In a Windows terminal, use these keys: **P** pause/resume, **S** skip the current company, **X** skip the current sector, **R** retrain now, **+ / −** change the target by 5, **Q** stop and finish with what has been learned (Ctrl+C does the same). The web app's Operations page has the same controls as buttons.
 
 **Outputs:**
 - `data/auto_training_universe.csv`: the companies learned, in `companies.csv` format. Reuse it with `--train-universe data/auto_training_universe.csv`.
@@ -1015,7 +1066,7 @@ The mock benchmark date is 2 May, which exercises the "nearest session" path. A 
 
 ## 19. Known limitations
 
-1. **Source depth is the binding constraint.** yfinance serves only about 4 annual periods, so the earliest FY in a 5-year window is usually empty. The fix is `fundamentals_override.csv`.
+1. **Source depth was the binding constraint.** yfinance serves only about 4 annual periods. Screener.in now fills the earlier years automatically (see §9). It has no cash or current-liabilities line, so those still come from Yahoo or the key-based providers, and `fundamentals_override.csv` remains the last resort.
 2. **Recent IPOs** have no price before listing and only a partial first year. This thins the peer medians.
 3. **Screener selection bias.** See §16.
 4. **WACC is partly circular.** The equity weight uses the market price. This is standard practice, but worth stating.
@@ -1077,7 +1128,11 @@ The exporter, analyzer and web app read the registry, so they pick up the new mo
 
 ### Add a data source
 
-Implement `fetch_close_series(ticker, start, end)` and/or field getters, and slot the source into the fallback chain in `yf_source.fetch_company`. Record its provenance in `_notes`.
+1. Write a module in `src/sources/`. A statements provider returns `{fy: {field: value in rupees}}`, and a price provider returns a pandas Series of daily closes.
+2. Add an entry to `PROVIDERS` in [`source_settings.py`](src/sources/source_settings.py): its key, label, what it supplies, and the `.env` key it needs (if any).
+3. Register it in `data_hub.STATEMENTS` and/or `price_chain.FETCH`.
+
+It then appears in Configuration → Data sources, where it can be reordered and switched on or off. The hub records which provider filled what in each year's `_notes`.
 
 ---
 

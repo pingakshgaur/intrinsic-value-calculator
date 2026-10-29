@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # FILE: packaging/linux/build_linux.sh
 # Builds installers/INTVAL-Setup-<version>-linux-x86_64 (a graphical installer
-# with the app inside). Run from the repository root on Linux with Python 3.10+:
+# with the app inside) and installers/INTVAL-Update-<version>-linux-x86_64 (the
+# same program under the name that makes it update an existing install in place,
+# keeping all data). Run from the repository root on Linux with Python 3.10+:
 #
 #   bash packaging/linux/build_linux.sh
 #
@@ -60,5 +62,7 @@ NAME="INTVAL-Setup-$VERSION-linux-x86_64"
 echo "== 5/5 done"
 mkdir -p installers
 cp "build/linux/dist/$NAME" "installers/$NAME"
-chmod +x "installers/$NAME"
-ls -lh "installers/$NAME"
+# the updater is the same program: its name puts it in update mode (installer.py)
+cp "build/linux/dist/$NAME" "installers/INTVAL-Update-$VERSION-linux-x86_64"
+chmod +x "installers/$NAME" "installers/INTVAL-Update-$VERSION-linux-x86_64"
+ls -lh "installers/$NAME" "installers/INTVAL-Update-$VERSION-linux-x86_64"

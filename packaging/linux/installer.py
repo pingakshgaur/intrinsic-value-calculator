@@ -10,6 +10,13 @@ Pages: welcome -> destination folder -> options (desktop shortcut,
 applications-menu entry, launch when finished) -> installing -> finished.
 It writes an uninstall script into the install folder and a menu entry for it.
 Without a display it falls back to the --silent path.
+
+The same program is also the UPDATER: named INTVAL-Update-<version>-... (the
+build ships both names) or run with --update, it finds the existing install,
+backs up the user's data into backups/<date>-<old>-to-<new>/, replaces only
+the program and runs "INTVAL --migrate" (src/migrate.py), which adds the new
+version's training companies and settings sections without changing the
+user's own. Shortcuts and the uninstaller are left as they are.
 """
 
 import argparse
@@ -30,6 +37,10 @@ VERSION = (HERE / "VERSION").read_text().strip() if (HERE / "VERSION").exists() 
 KEEP = ("agent_settings.yaml", "data/companies.csv", "data/training_universe.csv",
         "data/auto_training_universe.csv", "data/fundamentals_override.csv")  # the user's own copies survive an upgrade
 XDG_DATA = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+RECORD = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "intval" / "install.json"
+UPDATE = "update" in Path(sys.argv[0]).name.lower() or "--update" in sys.argv
+BG, PANEL, FG, MUTED, ACCENT = "#191a1b", "#202122", "#e6e6e6", "#9aa0a6", "#3994bc"
+USER_DATA = ("data", "output/intel", "agent_settings.yaml", ".env", "llm_providers.json", "VERSION")  # backed up before an update
 
 
 def default_dir():
@@ -56,7 +67,60 @@ def entry(target, name, comment, exe, icon, terminal):
             "Categories=Office;Finance;\n")
 
 
-def install(target, desktop=True, menu=True, progress=lambda f, msg: None):
+def find_install():
+    """The folder an earlier INTVAL was installed in, or None."""
+    import json
+
+    tries = []
+    try:
+        tries.append(Path(json.loads(RECORD.read_text())["dir"]))
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    tries += [default_dir(), Path("/opt/intval"), XDG_DATA / "intval"]
+    for d in tries:
+        if (d / APP).exists() and (d / "_internal").is_dir():
+            return d
+    return None
+
+
+def installed_version(target):
+    try:
+        return (Path(target) / "VERSION").read_text().strip() or "earlier version"
+    except OSError:
+        return "earlier version"
+
+
+def backup(target, old):
+    """Copy the user's own files to target/backups/<stamp>-<old>-to-<new>/. -> that folder."""
+    import time
+
+    dest = Path(target) / "backups" / f"{time.strftime('%Y%m%d-%H%M%S')}-{old}-to-{VERSION}".replace(" ", "-")
+    dest.mkdir(parents=True, exist_ok=True)
+    for item in USER_DATA:
+        src = Path(target) / item
+        if src.is_dir():
+            shutil.copytree(src, dest / item, dirs_exist_ok=True)
+        elif src.is_file():
+            (dest / item).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest / item)
+    return dest
+
+
+def update(target, progress=lambda f, msg: None):
+    """Update an existing install in place. -> (program path, backup folder)."""
+    target = Path(target)
+    old = installed_version(target)
+    progress(0.0, "backing up your data")
+    saved = backup(target, old)
+    exe = install(target, desktop=False, menu=False, progress=lambda f, m: progress(0.05 + 0.85 * f, m), keep_uninstaller=True)
+    progress(0.92, "bringing your data up to date")
+    subprocess.run([str(exe), "--migrate", "--no-backup", "--previous-version", old], cwd=str(target), check=False,
+                   stdin=subprocess.DEVNULL, capture_output=True, timeout=600)
+    progress(1.0, "done")
+    return exe, saved
+
+
+def install(target, desktop=True, menu=True, progress=lambda f, msg: None, keep_uninstaller=False):
     """Copy the app into target and add shortcuts. -> path of the program."""
     target = Path(target).expanduser().resolve()
     target.mkdir(parents=True, exist_ok=True)
@@ -95,6 +159,11 @@ def install(target, desktop=True, menu=True, progress=lambda f, msg: None):
             subprocess.run(["gio", "set", str(f), "metadata::trusted", "true"], capture_output=True, check=False)
         made.append(f)
 
+    _record(target)
+    if keep_uninstaller and (target / "uninstall.sh").exists():
+        progress(1.0, "done")
+        return exe
+
     lines = ["#!/bin/sh", f"# Removes {FULL}.", "set -e"]
     lines += [f'rm -f "{p}"' for p in made]
     lines += [
@@ -112,6 +181,16 @@ def install(target, desktop=True, menu=True, progress=lambda f, msg: None):
     return exe
 
 
+def _record(target):
+    import json
+
+    try:
+        RECORD.parent.mkdir(parents=True, exist_ok=True)
+        RECORD.write_text(json.dumps({"dir": str(target), "version": VERSION}))
+    except OSError:
+        pass
+
+
 def launch(exe):
     term = next((t for t in ("x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal", "xterm") if shutil.which(t)), None)
     cmd = [term, "-e", str(exe)] if term and term != "gnome-terminal" else ([term, "--", str(exe)] if term else [str(exe)])
@@ -120,13 +199,13 @@ def launch(exe):
 
 
 # ------------------------------------------------------------------ the wizard
-def wizard():
+def _window(heading):
+    """The wizard's window: dark theme, banner, a body and a button row. -> (tk, ttk, messagebox, root, body, nav, title, clear)"""
     import tkinter as tk
-    from tkinter import filedialog, messagebox, ttk
+    from tkinter import messagebox, ttk
 
-    BG, PANEL, FG, MUTED, ACCENT = "#191a1b", "#202122", "#e6e6e6", "#9aa0a6", "#3994bc"
     root = tk.Tk()
-    root.title(f"{FULL} {VERSION} - Setup")
+    root.title(heading)
     root.geometry("640x470")
     root.resizable(False, False)
     root.configure(bg=BG)
@@ -148,20 +227,15 @@ def wizard():
     style.map("Accent.TButton", background=[("active", "#4aa6cf"), ("disabled", "#2b4a58")])
     style.configure("TEntry", foreground=FG, insertcolor=FG)
     style.configure("Horizontal.TProgressbar", background=ACCENT, troughcolor=PANEL, bordercolor=BG)
-
     try:
-        banner = tk.PhotoImage(file=str(HERE / "banner.png"))
-        tk.Label(root, image=banner, bd=0, bg=BG).pack(fill="x")
+        root.banner = tk.PhotoImage(file=str(HERE / "banner.png"))
+        tk.Label(root, image=root.banner, bd=0, bg=BG).pack(fill="x")
     except tk.TclError:
         ttk.Label(root, text=f"{APP} Setup", style="Title.TLabel").pack(anchor="w", padx=20, pady=16)
     body = tk.Frame(root, bg=BG)
     body.pack(fill="both", expand=True, padx=28, pady=(18, 8))
     nav = tk.Frame(root, bg=BG)
     nav.pack(fill="x", padx=20, pady=(0, 16))
-
-    dest = tk.StringVar(value=str(default_dir()))
-    want_desktop, want_menu, want_launch = tk.BooleanVar(value=True), tk.BooleanVar(value=True), tk.BooleanVar(value=True)
-    state = {"page": 0, "exe": None}
 
     def clear():
         for w in body.winfo_children():
@@ -171,6 +245,73 @@ def wizard():
         ttk.Label(body, text=text, style="Title.TLabel").pack(anchor="w")
         if sub:
             ttk.Label(body, text=sub, style="Muted.TLabel", wraplength=580, justify="left").pack(anchor="w", pady=(6, 14))
+    return tk, ttk, messagebox, root, body, nav, title, clear
+
+
+def update_wizard(target):
+    """Welcome (what is found, what is kept) -> updating -> finished."""
+    import threading as th
+
+    tk, ttk, messagebox, root, body, nav, title, clear = _window(f"Update {FULL} to {VERSION}")
+    want_launch = tk.BooleanVar(value=True)
+    state = {"exe": None, "saved": None}
+    old = installed_version(target)
+
+    def welcome():
+        clear()
+        title(f"Update INTVAL to {VERSION}",
+              f"INTVAL {old} was found in:\n{target}\n\nOnly the program is replaced. Your companies, watchlists, research "
+              "history, the agents' memory, training data, settings and API keys stay exactly as they are, and are "
+              "backed up first.\n\nClose INTVAL, then click Update.")
+        go_btn.config(text="Update", state="normal", command=run)
+
+    def run():
+        clear()
+        title("Updating…", "Backing up your data, then replacing the program.")
+        bar = ttk.Progressbar(body, mode="determinate", maximum=1.0, length=580)
+        bar.pack(anchor="w", pady=(6, 6))
+        msg = ttk.Label(body, style="Muted.TLabel")
+        msg.pack(anchor="w")
+        go_btn.config(state="disabled")
+        cancel.config(state="disabled")
+
+        def report(f, m):
+            root.after(0, lambda: (bar.config(value=f), msg.config(text=m[-80:])))
+
+        def work():
+            try:
+                state["exe"], state["saved"] = update(target, report)
+                root.after(0, done)
+            except Exception as e:  # shown to the user; the backup is already on disk
+                root.after(0, lambda err=e: (messagebox.showerror("INTVAL Update", f"The update failed:\n\n{err}\n\nYour data is untouched."), root.destroy()))
+        th.Thread(target=work, daemon=True).start()
+
+    def done():
+        clear()
+        title("INTVAL is up to date", f"Updated to {VERSION}. All of your data was kept; a backup of it is in\n{state['saved']}.")
+        ttk.Checkbutton(body, text="Open INTVAL now", variable=want_launch).pack(anchor="w", pady=4)
+        go_btn.config(text="Finish", state="normal", command=finish)
+
+    def finish():
+        if want_launch.get() and state["exe"]:
+            launch(state["exe"])
+        root.destroy()
+
+    cancel = ttk.Button(nav, text="Cancel", command=root.destroy)
+    go_btn = ttk.Button(nav, text="Update", style="Accent.TButton")
+    cancel.pack(side="right")
+    go_btn.pack(side="right", padx=8)
+    welcome()
+    root.mainloop()
+
+
+def wizard():
+    from tkinter import filedialog
+
+    tk, ttk, messagebox, root, body, nav, title, clear = _window(f"{FULL} {VERSION} - Setup")
+    dest = tk.StringVar(value=str(default_dir()))
+    want_desktop, want_menu, want_launch = tk.BooleanVar(value=True), tk.BooleanVar(value=True), tk.BooleanVar(value=True)
+    state = {"page": 0, "exe": None}
 
     def free_space(path):
         p = Path(path).expanduser()
@@ -232,7 +373,7 @@ def wizard():
                 state["exe"] = install(dest.get(), want_desktop.get(), want_menu.get(), report)
                 root.after(0, lambda: go(4))
             except Exception as e:  # shown to the user; nothing half-done is left running
-                root.after(0, lambda: (messagebox.showerror("INTVAL Setup", f"Installation failed:\n\n{e}"), go(2)))
+                root.after(0, lambda err=e: (messagebox.showerror("INTVAL Setup", f"Installation failed:\n\n{err}"), go(2)))
         threading.Thread(target=work, daemon=True).start()
 
     def page_done():
@@ -279,7 +420,24 @@ def main():
     ap.add_argument("--no-desktop", action="store_true", help="no desktop shortcut")
     ap.add_argument("--no-menu", action="store_true", help="no applications-menu entry")
     ap.add_argument("--launch", action="store_true", help="start INTVAL afterwards")
+    ap.add_argument("--update", action="store_true", help="update an existing install in place, keeping every bit of data")
     args = ap.parse_args()
+    if UPDATE or args.update:
+        target = Path(args.dir).expanduser().resolve() if args.dir else find_install()
+        if not target or not (target / APP).exists():
+            sys.exit("INTVAL is not installed here, so there is nothing to update - run the Setup (INTVAL-Setup-...) instead"
+                     + ("" if args.dir else ", or point the updater at the install folder with --dir PATH") + ".")
+        if not args.silent and (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+            try:
+                return update_wizard(target)
+            except Exception as e:  # no Tk display after all: fall through to the text update
+                print(f"(graphical updater unavailable: {e}; updating in text mode)")
+        print(f"Updating INTVAL {installed_version(target)} in {target} to {VERSION} (your data is kept) ...")
+        exe, saved = update(target, lambda f, m: print(f"\r  {f:5.0%}  {m[:50]:50}", end="", flush=True))
+        print(f"\nDone. A backup of your data is in {saved}\nStart INTVAL with: {exe}")
+        if args.launch:
+            launch(exe)
+        return
     if not args.silent and (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
         try:
             return wizard()

@@ -78,7 +78,7 @@ import time
 from dataclasses import dataclass, field
 
 import config
-import yf_source
+import data_hub
 
 log = logging.getLogger("auto_train")
 
@@ -465,7 +465,7 @@ class AutoTrainer:
 
         def work():
             try:
-                box["data"] = yf_source.fetch_company(cand["ticker"], config.FY_LIST)
+                box["data"] = data_hub.fetch_company(cand["ticker"], config.FY_LIST)
             except Exception as e:  # noqa: BLE001
                 box["err"] = e
 

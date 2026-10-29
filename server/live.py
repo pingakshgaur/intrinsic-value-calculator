@@ -41,7 +41,7 @@ SETTINGS = LIVE / "tracker.json"
 DB = LIVE / "market.db"
 IST = timezone(timedelta(hours=5, minutes=30))
 TICKER = re.compile(r"^[A-Za-z0-9&^._\-=]{1,25}$")
-MAX_TRACKED = 100   # companies across every watchlist (the tracker polls them all)
+MAX_TRACKED = 250   # companies across every watchlist (the tracker polls them all, in batched downloads)
 MAX_LISTS = 50
 COLORS = ("#3994bc", "#86cf86", "#e0b97f", "#ad80d7", "#ef8773", "#4ec9b0", "#c586c0", "#d7ba7d", "#9cdcfe")
 LISTS = (("coverage", D.COMPANIES_CSV), ("training", D.DATA / "training_universe.csv"),
@@ -255,6 +255,17 @@ def _list_view(b, x):
         "tickers": list(x["tickers"]), "count": len(x["tickers"]),
         "companies": [{"ticker": t, "name": b["items"].get(t, {}).get("name", t), "sector": b["items"].get(t, {}).get("sector", "")} for t in x["tickers"]],
     }
+
+
+def list_companies(list_id):
+    """One watchlist's companies with their sector and size, for a research run. Raises KeyError."""
+    b = _book()
+    x = _find_list(b, list_id)
+    out = []
+    for t in x["tickers"]:
+        it = b["items"].get(t, {})
+        out.append({"ticker": t, "name": it.get("name") or t, "sector": it.get("sector") or "", "cap": it.get("cap") or ""})
+    return x["name"], out
 
 
 def watchlists():
@@ -686,7 +697,19 @@ class Tracker:
     @staticmethod
     def _quote(t, intra, daily, now):
         if intra is None and daily is None:
-            return {"ticker": t, "error": "Yahoo Finance returned no prices for this symbol", "polled": now}
+            # the exchange websites still know the last price (Configuration -> Data sources)
+            try:
+                import price_chain
+
+                last, src = price_chain.last_price(t)
+            except Exception:  # noqa: BLE001
+                last, src = None, None
+            if not last:
+                return {"ticker": t, "error": "No data provider returned a price for this symbol", "polled": now}
+            q = {"ticker": t, "last": _f(last), "t": int(now), "session": str(datetime.now(IST).date()), "polled": now,
+                 "source": "NSE India" if src == "nse" else "BSE India", "spark": [], "month": []}
+            q["hm"] = VALUER.at_price(t, last)
+            return D.clean(q)
         src = intra if intra is not None else daily
         session = _session(src.index[-1])
         today = src[[_session(ts) == session for ts in src.index]]

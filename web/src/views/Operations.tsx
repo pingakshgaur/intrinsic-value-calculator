@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useCompanies, useJobs, usePrefs, useStartJob, useStatus } from "../lib/hooks";
-import { useLearning } from "../lib/live";
+import { useLearning, useWatchlists } from "../lib/live";
 import { JobSummary } from "../lib/api";
 import { duration, when } from "../lib/format";
 import { Drawer, ErrorNote, Icon, PageHeader, Panel, Toggle } from "../components/ui";
@@ -10,64 +10,75 @@ import { RunMonitor } from "../components/JobLog";
 import { jobTitle } from "../components/Shell";
 import { useApp } from "../components/workbenchContext";
 
-type Kind = "valuation" | "screen" | "research" | "quick" | "learn";
+type Kind = "valuation" | "research" | "learn" | "screen";
 const KINDS: { id: Kind; icon: string; t: string; d: string }[] = [
-  { id: "valuation", icon: "graph", t: "Valuation report", d: "All models, every year, HYBRID MODEL, workbook, metrics" },
-  { id: "research", icon: "rocket", t: "Full research", d: "HYBRID MODEL + all 23 agents" },
-  { id: "quick", icon: "zap", t: "Quick sweep", d: "News & market agents only" },
-  { id: "learn", icon: "mortar-board", t: "Learning feed", d: "Fetch accounts of every training & watchlist company" },
-  { id: "screen", icon: "filter", t: "Data check", d: "Sufficiency screen; values nothing" },
+  { id: "valuation", icon: "graph", t: "Valuation report", d: "Every model, every year, scored against the market" },
+  { id: "research", icon: "rocket", t: "Research", d: "The agents read news, filings and the market" },
+  { id: "learn", icon: "cloud-download", t: "Refresh training data", d: "Fetch accounts for every company the models learn from" },
+  { id: "screen", icon: "filter", t: "Data check", d: "Who has enough data - values nothing" },
 ];
+type Scope = "all" | "list" | "pick";
 const EXCL = "ops.excluded.v1";
 const STATUS_DOT: Record<string, string> = { running: "busy", queued: "busy", succeeded: "ok", failed: "bad" };
 
+/** Start any job from one form, and follow every job live. Each job is its own process: closing the browser does not stop it. */
 export function Operations() {
   const [params, setParams] = useSearchParams();
   const companies = useCompanies();
+  const lib = useWatchlists();
   const prefs = usePrefs();
   const status = useStatus();
   const jobs = useJobs(!!status.data?.active_job);
+  const learning = useLearning();
   const start = useStartJob();
   const app = useApp();
   const [kind, setKind] = useState<Kind>("valuation");
+  const [scope, setScope] = useState<Scope>("all");
+  const [listId, setListId] = useState("");
   const [excluded, setExcluded] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem(EXCL) || "[]")); } catch { return new Set(); } });
   const [picker, setPicker] = useState(false);
   const [from, setFrom] = useState<number | null>(null);
   const [to, setTo] = useState<number | null>(null);
+  const [quick, setQuick] = useState(true);
+  const [learnToo, setLearnToo] = useState<boolean | null>(null);
+  const [retrain, setRetrain] = useState(false);
+  const [more, setMore] = useState(false);
   const [offline, setOffline] = useState(false);
   const [noLlm, setNoLlm] = useState(false);
   const [auto, setAuto] = useState(false);
   const [ao, setAo] = useState({ target: 60, max: 100, sectors: 10, min_listed_years: 10 });
-  const learning = useLearning();
-  const [learn, setLearn] = useState<boolean | null>(null);
-  const [retrain, setRetrain] = useState(false);
-  const useLearn = learn ?? learning.data?.settings.use_in_runs ?? true;
   const [err, setErr] = useState<unknown>(null);
   useEffect(() => { try { localStorage.setItem(EXCL, JSON.stringify([...excluded])); } catch { /* ignore */ } }, [excluded]);
   useEffect(() => { if (prefs.data && from == null) { setFrom(prefs.data.values.start_year); setTo(prefs.data.values.end_year); } }, [prefs.data, from]);
 
   const list = companies.data ?? [];
+  const lists = (lib.data?.lists ?? []).filter((l) => l.count > 0);
+  const chosenList = lists.find((l) => l.id === listId) ?? lists[0];
   const included = list.filter((c) => !excluded.has(c.name));
   const ceiling = prefs.data?.latest_fy ?? new Date().getFullYear();
-  const research = kind === "research" || kind === "quick";
   const active = status.data?.active_job;
   const selected = params.get("job") ?? active?.id ?? jobs.data?.[0]?.id ?? null;
   const p = prefs.data?.values;
   const span = from && to ? Math.abs(to - from) + 1 : 0;
+  const learnCompanies = learning.data?.companies;
+  const useLearn = learnToo ?? learning.data?.settings.use_in_runs ?? true;
   const warn: string[] = [];
   if (from && to && Math.max(from, to) > ceiling) warn.push(`FY${Math.max(from, to)} has not ended — it will be trimmed to FY${ceiling}.`);
   if (span && span < 3) warn.push("Fewer than 3 years leaves the AI models little to learn from.");
-  if (from && to && Math.min(from, to) < ceiling - 8) warn.push("The data source has about four years of accounts for most companies; early years will be thin.");
+
+  const count = kind === "learn" ? learnCompanies ?? 0 : scope === "list" ? chosenList?.count ?? 0 : scope === "pick" ? included.length : list.length;
+  const what = kind === "research" ? (quick ? "Quick sweep" : "Full research") : KINDS.find((k) => k.id === kind)!.t;
 
   const launch = () => {
     setErr(null);
-    if (!included.length && !offline) return setErr(new Error("Every company is excluded — include at least one."));
-    const options: Record<string, unknown> = research
-      ? { offline, quick: kind === "quick", no_llm: noLlm, tickers: excluded.size ? included.map((c) => (c.ticker || "").split(".")[0]).filter(Boolean).join(",") : "" }
+    if (kind !== "learn" && scope === "pick" && !included.length && !offline) return setErr(new Error("Every company is unticked — include at least one."));
+    if (kind !== "learn" && scope === "list" && !chosenList) return setErr(new Error("There is no watchlist with companies yet."));
+    const target: Record<string, unknown> = kind === "learn" || offline ? {} : scope === "list" ? { watchlist: chosenList!.id }
+      : scope === "pick" && excluded.size ? (kind === "research" ? { tickers: included.map((c) => (c.ticker || "").split(".")[0]).filter(Boolean).join(",") } : { exclude: [...excluded] }) : {};
+    const options: Record<string, unknown> = kind === "research" ? { quick, offline, no_llm: noLlm, ...target }
       : kind === "learn" ? { start_year: from, end_year: to, retrain }
-      : { offline, exclude: [...excluded], start_year: from, end_year: to, ...(kind === "valuation" && auto ? { auto_train: ao } : {}),
-          ...(kind === "valuation" && !auto ? { learning: useLearn } : {}) };
-    start.mutate({ kind: research ? "agents" : kind, options }, {
+      : { offline, start_year: from, end_year: to, ...target, ...(kind === "valuation" ? (auto ? { auto_train: ao } : { learning: useLearn }) : {}) };
+    start.mutate({ kind: kind === "research" ? "agents" : kind, options }, {
       onSuccess: (j) => { setParams({ job: j.id }); app.toast(`${jobTitle(j.kind, j.opts)} started`); },
       onError: (e) => setErr(e),
     });
@@ -82,68 +93,89 @@ export function Operations() {
     { key: "id", header: "ID", visible: false, render: (j) => <span className="mono faint">{j.id}</span> },
   ];
   const gstate = useGridState<JobSummary>("ops-jobs", cols, { key: "started", asc: false });
+  const years = kind !== "research";
 
   return (
     <div className="page">
-      <PageHeader crumbs={[{ label: "Operations" }]} title="Operations" sub="Launch valuation and research jobs and follow them live. Each job is its own process — closing the browser does not stop it."
+      <PageHeader crumbs={[{ label: "Operations" }]} title="Operations" sub="Start a job and follow it live. Each job runs on its own — closing the browser does not stop it."
         actions={<Link to="/configuration?section=run" className="btn sec"><Icon name="settings" className="sm" />Run settings</Link>} />
       <div className="ops">
         <Panel title="New job" flush>
           <div className="form-sec">
-            <div className="fh"><span className="num">1</span><b>Job type</b></div>
+            <div className="fh"><span className="num">1</span><b>What to run</b></div>
             <div className="jobtype">
-              {KINDS.map((k) => <button key={k.id} className={`jt ${kind === k.id ? "on" : ""}`} onClick={() => setKind(k.id)}><b><Icon name={k.icon} className="sm" />{k.t}</b><span>{k.d}</span></button>)}
+              {KINDS.map((k) => <button key={k.id} className={`jt ${kind === k.id ? "on" : ""}`} onClick={() => setKind(k.id)} aria-pressed={kind === k.id}><b><Icon name={k.icon} className="sm" />{k.t}</b><span>{k.d}</span></button>)}
             </div>
+            {kind === "research" && (
+              <div className="seg" style={{ alignSelf: "flex-start" }}>
+                <button className={quick ? "on" : ""} onClick={() => setQuick(true)}><Icon name="zap" className="xs" />Quick sweep · news and market</button>
+                <button className={!quick ? "on" : ""} onClick={() => setQuick(false)}><Icon name="rocket" className="xs" />Full research · all 23 agents</button>
+              </div>
+            )}
           </div>
+
           <div className="form-sec">
-            <div className="fh"><span className="num">2</span><b>Scope</b><span className="spacer" /><button className="btn xs sec" onClick={() => setPicker(true)}><Icon name="checklist" className="xs" />Select companies</button></div>
-            <div className="row small"><span className="strong">{included.length}</span><span className="muted">of {list.length} companies included</span>{excluded.size > 0 && <button className="btn xs ghost" onClick={() => setExcluded(new Set())}>Include all</button>}</div>
+            <div className="fh"><span className="num">2</span><b>Companies</b></div>
+            {kind === "learn" ? <span className="small muted">Every company the models learn from: {learnCompanies ?? "…"} (the training lists and every watchlist).</span> : (
+              <>
+                <div className="seg" style={{ alignSelf: "flex-start" }}>
+                  <button className={scope === "all" ? "on" : ""} onClick={() => setScope("all")}>All covered ({list.length})</button>
+                  <button className={scope === "list" ? "on" : ""} onClick={() => setScope("list")} disabled={!lists.length} title={!lists.length ? "No watchlist has companies yet" : undefined}>A watchlist</button>
+                  <button className={scope === "pick" ? "on" : ""} onClick={() => { setScope("pick"); setPicker(true); }}>Pick…</button>
+                </div>
+                {scope === "list" && chosenList && (
+                  <select className="sel" value={chosenList.id} onChange={(e) => setListId(e.target.value)} style={{ maxWidth: 360 }}>
+                    {lists.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.count})</option>)}
+                  </select>
+                )}
+                {scope === "pick" && <div className="row small"><span className="strong">{included.length}</span><span className="muted">of {list.length} covered companies</span><button className="btn xs sec" onClick={() => setPicker(true)}><Icon name="checklist" className="xs" />Change</button></div>}
+                {scope === "list" && <span className="xs faint">Every company on the list is included, valued before or not — its accounts are fetched when needed.</span>}
+              </>
+            )}
           </div>
+
           <div className="form-sec">
-            <div className="fh"><span className="num">3</span><b>Period</b></div>
-            {research ? <span className="muted small">Research values the latest complete year (FY{ceiling}) with {p ? p.end_year - p.start_year + 1 : 5} years of history.</span> : (
+            <div className="fh"><span className="num">3</span><b>Years</b></div>
+            {!years ? <span className="muted small">Research values the latest complete year (FY{ceiling}).</span> : (
               <>
                 <div className="row">
                   <label className="fld" style={{ width: 90 }}><span>From FY</span><input className="inp num" inputMode="numeric" value={from ?? ""} onChange={(e) => setFrom(Number(e.target.value.replace(/\D/g, "").slice(0, 4)) || null)} /></label>
                   <label className="fld" style={{ width: 90 }}><span>To FY</span><input className="inp num" inputMode="numeric" value={to ?? ""} onChange={(e) => setTo(Number(e.target.value.replace(/\D/g, "").slice(0, 4)) || null)} /></label>
-                  <div className="col" style={{ gap: 4, marginTop: 18 }}>
-                    <div className="seg"><button onClick={() => { setTo(ceiling); setFrom(ceiling - 4); }}>Last 5</button><button onClick={() => { setTo(ceiling); setFrom(ceiling - 9); }}>Last 10</button></div>
-                  </div>
+                  <div className="seg" style={{ marginTop: 18 }}><button onClick={() => { setTo(ceiling); setFrom(ceiling - 4); }}>Last 5</button><button onClick={() => { setTo(ceiling); setFrom(ceiling - 9); }}>Last 10</button></div>
                 </div>
-                {from && to && <span className="xs info">{span} financial year{span === 1 ? "" : "s"}: {Math.min(from, to) - 1}-{String(Math.min(from, to)).slice(-2)} to {Math.max(from, to) - 1}-{String(Math.max(from, to)).slice(-2)} (April–March, named by the year they end)</span>}
+                {from && to && <span className="xs info">{span} financial year{span === 1 ? "" : "s"}: April {Math.min(from, to) - 1} to March {Math.max(from, to)}</span>}
                 {warn.map((w, i) => <span key={i} className="xs warn row"><Icon name="warning" className="xs" />{w}</span>)}
               </>
             )}
           </div>
+
           <div className="form-sec">
-            <div className="fh"><span className="num">4</span><b>Options</b></div>
-            {kind === "learn" && (
-              <>
-                <span className="small muted">Fetches and caches the accounts of the {learning.data?.companies ?? "…"} learning companies (training lists + watchlist) for the period above, so valuation runs can train on them without downloading.</span>
-                <Toggle checked={retrain} onChange={setRetrain} label="Then retrain: run the valuation report on the learning data" />
-              </>
-            )}
-            {kind === "valuation" && (
-              <>
-                <Toggle checked={useLearn && !auto} disabled={auto} onChange={setLearn} label={`Train the ML models on the learning data too (${learning.data?.companies ?? "…"} more companies)`} />
-                <Toggle checked={auto} onChange={setAuto} label="Auto-train on the live market until the Ensemble is confident" />
-                {auto && (
-                  <div className="fieldset">
+            <div className="fh"><span className="num">4</span><b>Options</b><span className="spacer" />
+              {kind !== "learn" && <button className="btn xs ghost" onClick={() => setMore(!more)} aria-expanded={more}><Icon name={more ? "chevron-up" : "chevron-down"} className="xs" />More options</button>}</div>
+            {kind === "valuation" && <Toggle checked={useLearn && !auto} disabled={auto} onChange={setLearnToo} label={`Also learn from the ${learnCompanies ?? "…"} training companies (better models, longer run)`} />}
+            {kind === "learn" && <Toggle checked={retrain} onChange={setRetrain} label="Then retrain the models on the fresh data" />}
+            {kind === "research" && <span className="small muted">Uses the AI providers set up in Configuration when they have a key; rule-based otherwise.</span>}
+            {kind === "screen" && <span className="small muted">Settings in use: {p ? (p.screening === "off" ? "no data gate" : `${p.min_complete_fy}+ complete years required`) : "…"}.</span>}
+            {more && kind !== "learn" && (
+              <div className="fieldset col" style={{ gap: 10 }}>
+                {kind === "valuation" && <Toggle checked={auto} onChange={setAuto} label="Auto-train: keep adding market companies until the Ensemble is confident" />}
+                {kind === "valuation" && auto && (
+                  <div className="row wrap" style={{ gap: 10 }}>
                     {([["target", "Target confidence", 5, 95], ["max", "Most companies", 5, 1000], ["sectors", "Top sectors", 1, 25], ["min_listed_years", "Listed ≥ years", 1, 30]] as const).map(([k, l, lo, hi]) => (
                       <label key={k} className="fld"><span>{l}</span><input className="inp sm num" type="number" min={lo} max={hi} value={ao[k]} onChange={(e) => setAo({ ...ao, [k]: Math.max(lo, Math.min(hi, Number(e.target.value) || lo)) })} /></label>
                     ))}
                   </div>
                 )}
-              </>
+                {kind === "research" && <Toggle checked={noLlm} onChange={setNoLlm} label="Rule-based only (no AI calls)" />}
+                <Toggle checked={offline} onChange={setOffline} label="Offline test data (no internet; ignores the companies above)" />
+              </div>
             )}
-            {research && <Toggle checked={noLlm} onChange={setNoLlm} label="Rule-based only (no AI calls)" />}
-            <Toggle checked={offline} onChange={setOffline} label="Offline test data (no internet)" />
-            {!research && p && <span className="xs faint">Settings in use: {p.screening === "off" ? "no data gate" : `${p.min_complete_fy}+ complete years`} · benchmark {p.benchmark_basis} · gaps {p.estimation} · ML {p.ml_enabled ? p.ml_split : "off"} · charts {p.analyze ? "on" : "off"}</span>}
           </div>
+
           <div className="form-sec">
             {err != null && <ErrorNote error={err} />}
             <button className="btn" style={{ height: 36 }} onClick={launch} disabled={!!active || start.isPending}>
-              <Icon name={start.isPending ? "loading" : "play"} className={start.isPending ? "spin" : ""} />Launch {KINDS.find((k) => k.id === kind)!.t.toLowerCase()}
+              <Icon name={start.isPending ? "loading" : "play"} className={start.isPending ? "spin" : ""} />Start {what.toLowerCase()}{count ? ` · ${count} compan${count === 1 ? "y" : "ies"}` : ""}
             </button>
             {active && <span className="xs muted">Waiting for “{jobTitle(active.kind, active.opts)}” to finish.</span>}
           </div>
@@ -174,9 +206,7 @@ function CompanyPicker({ list, excluded, setExcluded, onClose }: { list: { name:
       footer={<><span className="muted small" style={{ marginRight: "auto" }}>{list.length - excluded.size} of {list.length} included</span><button className="btn" onClick={onClose}>Done</button></>}>
       <div className="row wrap">
         <div className="search grow"><Icon name="search" /><input value={f} onChange={(e) => setF(e.target.value)} placeholder="Filter" autoFocus /></div>
-        <button className="btn sm sec" onClick={() => setExcluded(new Set())}>All</button>
-        <button className="btn sm sec" onClick={() => setExcluded(new Set(list.map((c) => c.name)))}>None</button>
-        <button className="btn sm sec" onClick={() => setExcluded(new Set(list.filter((c) => !excluded.has(c.name)).map((c) => c.name)))}>Invert</button>
+        <div className="seg"><button onClick={() => setExcluded(new Set())}>All</button><button onClick={() => setExcluded(new Set(list.map((c) => c.name)))}>None</button></div>
       </div>
       <div className="row wrap" style={{ gap: 6 }}>
         {sectors.map((s) => {
@@ -185,7 +215,7 @@ function CompanyPicker({ list, excluded, setExcluded, onClose }: { list: { name:
           return <button key={s} className={`chip ${allOn ? "on" : ""}`} onClick={() => { const x = new Set(excluded); names.forEach((n) => (allOn ? x.add(n) : x.delete(n))); setExcluded(x); }}>{s}<span className="faint">{names.length}</span></button>;
         })}
       </div>
-      <div className="panel" style={{ overflow: "hidden" }}>
+      <div className="panel" style={{ overflow: "auto" }}>
         <table className="dg dense">
           <thead><tr><th style={{ width: 34 }} /><th>Company</th><th>Sector</th><th>Size</th><th>Ticker</th></tr></thead>
           <tbody>{shown.map((c) => (
@@ -199,4 +229,3 @@ function CompanyPicker({ list, excluded, setExcluded, onClose }: { list: { name:
     </Drawer>
   );
 }
-

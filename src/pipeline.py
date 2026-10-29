@@ -7,7 +7,7 @@ import time
 import traceback
 
 import config
-import yf_source
+import data_hub
 import ticker_resolver
 import overrides
 import sufficiency
@@ -84,12 +84,12 @@ def build_universe(companies, cached=False):
 
                 data = auto_train.load_cached(ticker)
                 if data is None:
-                    data = yf_source.fetch_company(ticker, config.FY_LIST)
+                    data = data_hub.fetch_company(ticker, config.FY_LIST)
                     auto_train.save_cached(ticker, data)
                 else:
                     print("(cached)", end=" ")
             else:
-                data = yf_source.fetch_company(ticker, config.FY_LIST)
+                data = data_hub.fetch_company(ticker, config.FY_LIST)
         except Exception as e:
             log.exception("fetch crashed for %s (%s)", name, ticker)
             failures[name] = Result.bad(
@@ -118,6 +118,9 @@ def build_universe(companies, cached=False):
             if any("manually supplied" in s for s in d.get("_notes", []))
         )
         tag = f"  overrides {ovr}" if ovr else ""
+        extra = [s for s in data.get("sources", []) if s != "Yahoo Finance"]
+        if extra:
+            tag += f"  via {', '.join(extra)}"
         print(
             f"OK  [{ticker}]  prices {px}/{n}  benchmarks {bench}/{n}  "
             f"fundamentals {fund}/{n}{tag}"

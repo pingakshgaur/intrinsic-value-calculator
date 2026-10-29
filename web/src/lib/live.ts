@@ -242,6 +242,20 @@ export const useLiveSearch = (q: string) =>
 
 export const useSectors = () => useQuery({ queryKey: ["live-sectors"], queryFn: () => api.get<string[]>("/api/live/sectors"), staleTime: 600_000 });
 
+/** Every company the watchlists can take, by sector: the app's own lists plus NSE's index lists (server/directory.py). */
+export interface DirectoryCompany { ticker: string; name: string; sector: string; cap: string; lists: string[]; source: "app" | "nse" }
+export interface DirectorySectors { sectors: { sector: string; count: number; known: number }[]; nse_fetched: number | null; nse_companies: number; stale: boolean }
+export const useDirectorySectors = () =>
+  useQuery({ queryKey: ["directory-sectors"], queryFn: () => api.get<DirectorySectors>("/api/directory/sectors"), staleTime: 300_000 });
+export const useDirectory = (sectors: string[] | "all", enabled = true) =>
+  useQuery({
+    queryKey: ["directory", sectors === "all" ? "all" : [...sectors].sort().join("|")],
+    queryFn: () => api.get<DirectoryCompany[]>(`/api/directory${sectors === "all" ? "?all=1" : `?${sectors.map((s) => `sector=${encodeURIComponent(s)}`).join("&")}`}`),
+    enabled: enabled && (sectors === "all" || sectors.length > 0),
+    staleTime: 300_000,
+    placeholderData: (prev) => prev,
+  });
+
 /** One watchlist with live quotes, or (no id) every company on any list. */
 export const useWatchlist = (listId?: string | null) =>
   useQuery({

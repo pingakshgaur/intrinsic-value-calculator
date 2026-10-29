@@ -21,8 +21,10 @@ export interface TableData { head: Cell[]; rows: Cell[][]; subtitle?: string }
  * editor (name, title, columns, page, colours...) with a preview before the file
  * is saved. Give it `table` (rows), `target` (an element: a chart, a panel, or a
  * whole page with kind="page"), or `canvas` (a picture drawn on demand).
+ * `data` adds the page's data as a first section of the same menu, so a page
+ * has one download button, not one for its rows and another for the page.
  */
-export function ExportButton({ title, table, target, canvas, kind, label, className = "ibtn", tip }: {
+export function ExportButton({ title, table, target, canvas, kind, label, className = "ibtn", tip, data }: {
   title: string;
   table?: () => TableData;
   target?: RefObject<HTMLElement | null> | (() => HTMLElement | null);
@@ -31,34 +33,45 @@ export function ExportButton({ title, table, target, canvas, kind, label, classN
   label?: string;
   className?: string;
   tip?: string;
+  data?: () => TableData;
 }) {
   const what: ExportKind = kind ?? (table ? "table" : "chart");
-  const [open, setOpen] = useState<Fmt | null>(null);
-  const formats = FORMATS[what];
+  const [open, setOpen] = useState<{ fmt: Fmt; kind: ExportKind } | null>(null);
+  const groups: { kind: ExportKind; head: string }[] = [
+    ...(data ? [{ kind: "table" as ExportKind, head: "Download the data as" }] : []),
+    { kind: what, head: `Download ${what === "table" ? "the data" : what === "page" ? "the whole page" : "this view"} as` },
+  ];
+  const formats = groups.flatMap((g) => FORMATS[g.kind]);
   return (
     <>
       <Popover className="menu export-menu" trigger={(on, toggle) => (
         // one look everywhere: a download icon; the formats are in the menu
         <button className={`${className} dl ${on ? "on" : ""}`} data-noexport onClick={toggle} aria-haspopup="menu" aria-expanded={on}
           aria-label={label ? `${label}: ${title}` : `Download ${title}`}
-          title={tip ?? `Download “${title}” (${formats.map((f) => f.toUpperCase()).join(", ")})`}>
+          title={tip ?? `Download “${title}” (${[...new Set(formats)].map((f) => f.toUpperCase()).join(", ")})`}>
           <DownloadGlyph />
         </button>
       )}>
         {(close) => (
           <div data-noexport>
-            <div className="label export-h">Download {what === "table" ? "the data" : what === "page" ? "the whole page" : "this view"} as</div>
-            {formats.map((f) => (
-              <button key={f} className="export-item" onClick={() => { close(); setOpen(f); }}>
-                <span className="ic"><Icon name={FMT_META[f].icon} className="sm" /></span>
-                <span className="tx"><b>{FMT_META[f].label}</b><small>{FMT_META[f].hint}</small></span>
-                <span className="ext">{f.toUpperCase()}</span>
-              </button>
+            {groups.map((g, gi) => (
+              <div key={gi}>
+                {gi > 0 && <hr />}
+                <div className="label export-h">{g.head}</div>
+                {FORMATS[g.kind].map((f) => (
+                  <button key={f} className="export-item" onClick={() => { close(); setOpen({ fmt: f, kind: g.kind }); }}>
+                    <span className="ic"><Icon name={FMT_META[f].icon} className="sm" /></span>
+                    <span className="tx"><b>{FMT_META[f].label}</b><small>{FMT_META[f].hint}</small></span>
+                    <span className="ext">{f.toUpperCase()}</span>
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         )}
       </Popover>
-      {open && createPortal(<ExportDialog fmt={open} kind={what} title={title} table={table} target={target} canvas={canvas} onClose={() => setOpen(null)} onFormat={setOpen} />, document.body)}
+      {open && createPortal(<ExportDialog fmt={open.fmt} kind={open.kind} title={title} table={open.kind === "table" && data ? data : table} target={target} canvas={canvas}
+        onClose={() => setOpen(null)} onFormat={(f) => setOpen({ fmt: f, kind: open.kind })} />, document.body)}
     </>
   );
 }

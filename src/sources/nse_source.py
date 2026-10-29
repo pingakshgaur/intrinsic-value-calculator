@@ -1,12 +1,16 @@
 # FILE: src/sources/nse_source.py
 """
-Direct NSE portal access (fallback price source when yfinance is thin/blocked).
+Direct NSE portal access: daily closes and the last price (fallbacks when
+Yahoo Finance is thin or blocked - see price_chain), and the index
+constituent lists with each company's industry (the sector directory the
+watchlists import whole sectors from - see server/directory.py).
 NSE requires cookie priming; it also rate-limits aggressively. Everything here
 is wrapped in try/except and returns None on failure so the pipeline never dies.
-Only CLOSE prices are extracted - nothing else.
 """
 
+import csv
 import datetime as dt
+import io
 import time
 import requests
 import pandas as pd
@@ -62,11 +66,16 @@ def fetch_close_series(ticker: str, start: dt.date, end: dt.date):
             "from": cursor.strftime("%d-%m-%Y"),
             "to": stop.strftime("%d-%m-%Y"),
         }
-        try:
-            r = s.get(BASE + "/api/historical/cm/equity", params=params, timeout=20)
-            rows = r.json().get("data", [])
-        except Exception:
-            rows = []
+        rows = []
+        # the newer endpoint first; the older one still answers for some symbols
+        for path in ("/api/historicalOR/cm/equity", "/api/historical/cm/equity"):
+            try:
+                r = s.get(BASE + path, params=params, timeout=20)
+                rows = r.json().get("data", [])
+            except Exception:
+                rows = []
+            if rows:
+                break
         for row in rows:
             d = row.get("CH_TIMESTAMP") or row.get("mTIMESTAMP")
             c = num(row.get("CH_CLOSING_PRICE"))
@@ -92,3 +101,28 @@ def fetch_last_price(ticker: str):
         return num(r.json().get("priceInfo", {}).get("lastPrice"))
     except Exception:
         return None
+
+
+ARCHIVES = "https://nsearchives.nseindia.com/content/indices/"
+# broadest first: the Total Market index holds ~750 companies, the Nifty 500 its core
+INDEX_LISTS = ("ind_niftytotalmarket_list.csv", "ind_nifty500list.csv", "ind_niftymicrocap250_list.csv")
+
+
+def index_constituents():
+    """-> [{"name", "industry", "symbol"}] from NSE's published index lists, or [] on failure."""
+    s = _get_session()
+    seen, out = set(), []
+    for name in INDEX_LISTS:
+        try:
+            r = s.get(ARCHIVES + name, timeout=20)
+            if r.status_code != 200 or "Symbol" not in r.text[:400]:
+                continue
+            for row in csv.DictReader(io.StringIO(r.text.lstrip("\ufeff"))):
+                sym = (row.get("Symbol") or "").strip().upper()
+                if sym and sym not in seen:
+                    seen.add(sym)
+                    out.append({"name": (row.get("Company Name") or sym).strip(),
+                                "industry": (row.get("Industry") or "").strip(), "symbol": sym})
+        except Exception:
+            continue
+    return out

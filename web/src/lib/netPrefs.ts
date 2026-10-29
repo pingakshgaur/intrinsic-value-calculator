@@ -41,7 +41,12 @@ export const PRESETS: View[] = [
 ];
 
 export interface Link { id: string; from: string; to: string; label: string }
-export interface Note { id: string; x: number; y: number; text: string; arrange: Arrange }
+export interface Note { id: string; x: number; y: number; text: string; arrange: Arrange; color?: NoteTone; at?: number }
+export type NoteTone = "amber" | "blue" | "green" | "violet" | "red";
+export const NOTE_TONES: { id: NoteTone; label: string; c: string }[] = [
+  { id: "amber", label: "Amber", c: "#e0b97f" }, { id: "blue", label: "Blue", c: "#57a3f8" }, { id: "green", label: "Green", c: "#86cf86" },
+  { id: "violet", label: "Violet", c: "#ad80d7" }, { id: "red", label: "Red", c: "#ef8773" },
+];
 export interface Mesh { links: Link[]; notes: Note[] }
 
 function read<T>(k: string, d: T): T {

@@ -52,6 +52,30 @@ def _selection_csv(job_id, exclude):
     return str(path)
 
 
+def _watchlist_csv(job_id, list_id):
+    """Write a watchlist's companies as a run input; -> (path, list name). Every
+    company on the list is researched, covered by the valuation report or not."""
+    from server import live
+
+    try:
+        name, rows = live.list_companies(list_id)
+    except KeyError:
+        raise ValueError(f"no watchlist {list_id}")
+    if not rows:
+        raise ValueError(f"the watchlist '{name}' has no companies yet")
+    known = {c["ticker"]: c for c in companies() if c.get("ticker")}
+    WORK.mkdir(parents=True, exist_ok=True)
+    path = WORK / f"watchlist_{job_id}.csv"
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["company name", "sector name", "market cap", "ticker"])
+        for r in rows:
+            k = known.get(r["ticker"], {})
+            w.writerow([k.get("name") or r["name"], k.get("sector") or r["sector"] or "Unclassified",
+                        k.get("cap") or r["cap"], r["ticker"]])
+    return str(path), name
+
+
 def build_args(kind, opts, job_id="x"):
     """Validated command line for a job kind. Raises ValueError on bad input."""
     opts = opts or {}
@@ -68,7 +92,10 @@ def build_args(kind, opts, job_id="x"):
                   "--min-complete-fy", str(p["min_complete_fy"]), "--min-benchmark-fy", str(p["min_benchmark_fy"])]
         else:
             a += prefs.to_args(p)
-        sel = _selection_csv(job_id, opts.get("exclude"))
+        if opts.get("watchlist") and not opts.get("offline"):
+            sel, opts["watchlist_name"] = _watchlist_csv(job_id, str(opts["watchlist"]))
+        else:
+            sel = _selection_csv(job_id, opts.get("exclude"))
         if sel:
             a += ["--input", sel]
         if opts.get("offline"):
@@ -106,6 +133,10 @@ def build_args(kind, opts, job_id="x"):
             a.append("--no-llm")
         if opts.get("offline"):
             a.append("--offline")
+        if opts.get("watchlist") and not opts.get("offline"):
+            path, name = _watchlist_csv(job_id, str(opts["watchlist"]))
+            a += ["--input", path]
+            opts["watchlist_name"] = name
         t = (opts.get("tickers") or "").replace(" ", "")
         if t:
             if not TICKERS.match(t):

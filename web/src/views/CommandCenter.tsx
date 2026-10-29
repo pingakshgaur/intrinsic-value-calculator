@@ -5,7 +5,7 @@ import { CsvRow, Verdict } from "../lib/api";
 import { ago, isNum, isoWhen, pct, pctUnits, shortName, slug } from "../lib/format";
 import { HM_COLOR, LABELS, LABEL_HEX } from "../lib/labels";
 import { Icon, Loading, PageHeader, Panel } from "../components/ui";
-import { RunButton } from "../components/RunButton";
+import { ResearchLauncher } from "../components/ResearchLauncher";
 import { useScope } from "../lib/scope";
 import { ScopeNote } from "../components/ScopePicker";
 import { CoverageMap, UpsideScatter } from "../components/charts";
@@ -40,7 +40,7 @@ export function CommandCenter() {
         crumbs={[{ label: "Analysis" }, { label: "Command Center" }]}
         title="Command Center"
         sub={hasIntel ? <>Research run #{meta?.run_id} · {meta?.mode} · {isoWhen(meta?.started)} · {meta?.llm_mode}</> : "Valuation and research across your coverage universe"}
-        actions={<><RunButton kind="agents" options={{ quick: true }} label="Quick sweep" icon="zap" secondary /><RunButton kind="agents" label="Run research" icon="rocket" /></>}
+        actions={<ResearchLauncher />}
       />
 
       {every.length > 0 && <ScopeNote shown={verdicts.length} total={every.length} />}

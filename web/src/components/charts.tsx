@@ -110,7 +110,7 @@ export function LensContribution({ r }: { r: HMResult }) {
   const max = Math.max(0.02, ...rows.map((x) => Math.abs(x.c ?? 0)));
   return (
     <table className="dg dense" style={{ fontSize: 12 }}>
-      <thead><tr><th>Lens</th><th className="r">Value</th><th className="r">Weight</th><th style={{ width: "40%" }}>Pull on the blend</th><th className="r">Calibration</th></tr></thead>
+      <thead><tr><th>Lens</th><th className="r">Value</th><th className="r">Weight</th><th style={{ width: "26%", minWidth: 90 }}>Pull on the blend</th><th className="r">Calib.</th></tr></thead>
       <tbody>
         {rows.map(({ l, v, wt, c }) => {
           const status = r.lenses_dropped?.includes(l) ? "outlier" : !r.lenses_applicable?.includes(l) ? "n/a for type" : !isNum(v) ? "no value" : null;
@@ -141,40 +141,43 @@ export function Bridge({ r, height = 220 }: { r: HMResult; height?: number }) {
   if (!isNum(core) || !isNum(r.value)) return <div ref={box} className="muted small">No bridge for this result.</div>;
   const afterQ = core * r.quality_multiplier;
   const afterH = afterQ * (1 - r.governance_haircut);
-  const steps: { label: string; from: number; to: number; kind: "total" | "delta" }[] = [
+  const steps: { label: string; sub?: string; from: number; to: number; kind: "total" | "delta" }[] = [
     { label: "Lens blend", from: 0, to: core, kind: "total" },
-    { label: "Quality ×" + r.quality_multiplier.toFixed(2), from: core, to: afterQ, kind: "delta" },
-    { label: "Governance −" + pct(r.governance_haircut, 0), from: afterQ, to: afterH, kind: "delta" },
+    { label: "Quality", sub: "×" + r.quality_multiplier.toFixed(2), from: core, to: afterQ, kind: "delta" },
+    { label: "Governance", sub: "−" + pct(r.governance_haircut, 0), from: afterQ, to: afterH, kind: "delta" },
     { label: "Scenarios", from: afterH, to: r.value, kind: "delta" },
-    { label: "HYBRID MODEL", from: 0, to: r.value, kind: "total" },
+    { label: "HYBRID", sub: "MODEL", from: 0, to: r.value, kind: "total" },
   ];
   if (isNum(r.buy_below)) steps.push({ label: "Buy-below", from: 0, to: r.buy_below, kind: "total" });
   const top = Math.max(...steps.map((s) => Math.max(s.from, s.to)), isNum(r.price) ? r.price : 0) * 1.12;
-  const W = Math.max(300, width), H = height, padB = 34, padT = 16;
-  const bw = (W / steps.length) * 0.56;
+  // the y-axis gets its own gutter, so no bar ever covers a tick label
+  const W = Math.max(320, width), H = height, padB = 40, padT = 16, padL = 46;
+  const col = (W - padL) / steps.length;
+  const bw = Math.min(56, col * 0.56);
   const y = (v: number) => padT + (1 - v / top) * (H - padT - padB);
   return (
     <div ref={box} style={{ width: "100%" }}>
       {width > 0 && (
         <svg width={W} height={H} style={{ display: "block" }}>
           {niceTicks(0, top, 4).map((t) => (
-            <g key={t}><line x1={0} x2={W} y1={y(t)} y2={y(t)} stroke="var(--c-grid)" /><text x={2} y={y(t) - 3} fill="var(--fg-3)" fontSize={9.5} fontFamily="var(--mono)">{money(t, 0)}</text></g>
+            <g key={t}><line x1={padL} x2={W} y1={y(t)} y2={y(t)} stroke="var(--c-grid)" /><text x={padL - 6} y={y(t) + 3} textAnchor="end" fill="var(--fg-3)" fontSize={9.5} fontFamily="var(--mono)">{money(t, 0)}</text></g>
           ))}
           {isNum(r.price) && (
-            <g><line x1={0} x2={W} y1={y(r.price)} y2={y(r.price)} stroke="#E0B97F" strokeDasharray="4 4" /><text x={W - 4} y={y(r.price) - 4} textAnchor="end" fill="#E0B97F" fontSize={10}>price {money(r.price, 0)}</text></g>
+            <g><line x1={padL} x2={W} y1={y(r.price)} y2={y(r.price)} stroke="#E0B97F" strokeDasharray="4 4" /><text x={W - 4} y={y(r.price) - 4} textAnchor="end" fill="#E0B97F" fontSize={10}>price {money(r.price, 0)}</text></g>
           )}
           {steps.map((s, i) => {
-            const cx = (W / steps.length) * (i + 0.5);
+            const cx = padL + col * (i + 0.5);
             const a = Math.max(s.from, s.to), b = Math.min(s.from, s.to);
             const up = s.to >= s.from;
-            const fill = s.kind === "total" ? (s.label === "HYBRID MODEL" ? HM_COLOR : s.label === "Buy-below" ? "#86CF86" : "#57A3F8") : up ? "#86CF86" : "#EF8773";
+            const fill = s.kind === "total" ? (s.label === "HYBRID" ? HM_COLOR : s.label === "Buy-below" ? "#86CF86" : "#57A3F8") : up ? "#86CF86" : "#EF8773";
             const d = s.to - s.from;
             return (
               <g key={i}>
                 <rect x={cx - bw / 2} y={y(a)} width={bw} height={Math.max(1.5, y(b) - y(a))} rx={2} fill={fill} opacity={s.kind === "total" ? 0.9 : 0.75} />
-                {i < steps.length - 1 && steps[i + 1].kind === "delta" && <line x1={cx + bw / 2} x2={cx + W / steps.length - bw / 2} y1={y(s.to)} y2={y(s.to)} stroke="var(--fg-3)" strokeDasharray="2 2" />}
+                {i < steps.length - 1 && steps[i + 1].kind === "delta" && <line x1={cx + bw / 2} x2={cx + col - bw / 2} y1={y(s.to)} y2={y(s.to)} stroke="var(--fg-3)" strokeDasharray="2 2" />}
                 <text x={cx} y={y(a) - 5} textAnchor="middle" fill="var(--fg-1)" fontSize={10.5} fontFamily="var(--mono)">{s.kind === "total" ? money(s.to, 0) : (d >= 0 ? "+" : "−") + money(Math.abs(d), 0)}</text>
-                <text x={cx} y={H - 14} textAnchor="middle" fill="var(--fg-2)" fontSize={10.5}>{s.label}</text>
+                <text x={cx} y={H - 22} textAnchor="middle" fill="var(--fg-2)" fontSize={10.5}>{s.label}</text>
+                {s.sub && <text x={cx} y={H - 9} textAnchor="middle" fill="var(--fg-3)" fontSize={10} fontFamily="var(--mono)">{s.sub}</text>}
               </g>
             );
           })}

@@ -5,7 +5,6 @@ import { api, Company } from "../lib/api";
 import { useCompanies } from "../lib/hooks";
 import { ErrorNote, Icon, PageHeader, QueryView } from "../components/ui";
 import { useApp } from "../components/workbenchContext";
-import { ExportButton } from "../components/ExportButton";
 import { ScopeNote } from "../components/ScopePicker";
 import { useScope } from "../lib/scope";
 import { useWatchlistMutations } from "../lib/live";
@@ -113,12 +112,11 @@ function Editor({ initial }: { initial: Company[] }) {
 
   return (
     <>
-      <PageHeader crumbs={[{ label: "Models & data" }, { label: "Universe" }]} title="Universe"
+      <PageHeader crumbs={[{ label: "Models & data" }, { label: "Universe" }]} title="Universe" data={exportTable}
         sub={`${rows.length} companies across ${sectors.length} sectors — every valuation and research job works through this list`}
         actions={<>
           <input ref={file} type="file" accept=".csv,text/csv" hidden onChange={(e) => { const fl = e.target.files?.[0]; if (fl) importCsv(fl); e.target.value = ""; }} />
           <button className="btn sec" onClick={() => file.current?.click()}><Icon name="cloud-upload" className="sm" />Import CSV</button>
-          <ExportButton title="Universe" table={exportTable} label="Export data" className="btn sec" />
           <button className="btn" disabled={!dirty || saving || blocking > 0} onClick={saveAll} title={blocking ? "Fix duplicate names and bad tickers first" : undefined}><Icon name={saving ? "loading" : "save"} className={`sm ${saving ? "spin" : ""}`} />Save{dirty ? " changes" : ""}</button>
         </>} />
       {blocker.state === "blocked" && <div className="note wrn"><Icon name="warning" /><div className="grow">Unsaved changes to the universe.</div><button className="btn xs sec" onClick={() => blocker.reset?.()}>Stay</button><button className="btn xs danger" onClick={() => blocker.proceed?.()}>Discard and leave</button></div>}

@@ -7,6 +7,7 @@ every file goes to a temporary folder.
     python -m pytest tests -q
 """
 
+import csv
 import json
 import os
 import sys
@@ -321,3 +322,39 @@ def test_watchlist_libraries(monkeypatch):
         L.add("GAMMA.NS")
     # the learning set reads every list
     assert {w["ticker"] for w in learning._watchlist()} == {"ALPHA.NS", "BETA.NS"}
+
+
+def test_directory_merges_known_and_nse_companies(monkeypatch, isolated):
+    from server import directory as DIR
+
+    monkeypatch.setattr(DIR, "CACHE", isolated / "live" / "directory.json")
+    import nse_source
+
+    monkeypatch.setattr(nse_source, "index_constituents", lambda: [
+        {"name": "Beta Ltd", "industry": "Information Technology", "symbol": "BETA"},
+        {"name": "Delta Motors", "industry": "Automobile and Auto Components", "symbol": "DELTA"},
+        {"name": "Epsilon IT", "industry": "it", "symbol": "EPS"},
+    ])
+    assert DIR.refresh() == 3
+    cos = DIR.companies()
+    assert cos["BETA.NS"]["source"] == "app" and cos["DELTA.NS"]["sector"] == "Automobiles and Auto Components"
+    assert cos["EPS.NS"]["sector"] == "IT"  # the app's own spelling of a known sector
+    sectors = {s["sector"]: s for s in DIR.sectors()["sectors"]}
+    assert sectors["IT"]["count"] == 3 and sectors["IT"]["known"] == 2
+    assert [c["ticker"] for c in DIR.in_sectors(["Automobiles and Auto Components"])] == ["DELTA.NS"]
+
+
+def test_research_and_valuation_on_a_watchlist(isolated):
+    L.create_list({"name": "Ideas", "tickers": [{"ticker": "ALPHA.NS", "name": "Alpha Ltd", "sector": "Banks"},
+                                               {"ticker": "NEWCO.NS", "name": "Newco", "sector": ""}]})
+    opts = {"quick": True, "watchlist": "ideas"}
+    a = J.build_args("agents", opts, "w1")
+    path = Path(a[a.index("--input") + 1])
+    rows = list(csv.reader(open(path, encoding="utf-8")))
+    assert rows[0] == ["company name", "sector name", "market cap", "ticker"]
+    assert [r[3] for r in rows[1:]] == ["ALPHA.NS", "NEWCO.NS"] and rows[2][1] == "Unclassified"
+    assert opts["watchlist_name"] == "Ideas" and "--quick" in a
+    v = J.build_args("valuation", {"watchlist": "ideas"}, "w2")
+    assert "--input" in v
+    with pytest.raises(ValueError):
+        J.build_args("agents", {"watchlist": "nope"}, "w3")

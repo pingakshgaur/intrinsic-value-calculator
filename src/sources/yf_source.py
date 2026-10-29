@@ -26,8 +26,9 @@ import pandas as pd
 import yfinance as yf
 
 import config
-import nse_source
 import overrides
+import price_chain
+import source_settings
 from result import R
 from fy_utils import (
     fy_window,
@@ -466,7 +467,9 @@ def _benchmark_price_for_fy(closes, closes_err, fy, diag, notes):
     return num(value), when.isoformat()
 
 
-def fetch_company(ticker: str, fy_list=None) -> dict:
+def fetch_company(ticker: str, fy_list=None, with_prices=True) -> dict:
+    """with_prices=False reads the statements only (data_hub asks a second
+    listing for its accounts without downloading its prices again)."""
     fy_list = fy_list or config.FY_LIST
     try:
         yf = importlib.import_module("yfinance")
@@ -485,7 +488,11 @@ def fetch_company(ticker: str, fy_list=None) -> dict:
     # and is comfortably inside this window.
     p_end = fy_window(max(fy_list) + 1)[1] + dt.timedelta(days=5)
     closes, closes_err = None, None
+    if not with_prices:
+        closes_err = "prices not requested"
     try:
+        if not with_prices:
+            raise LookupError("prices not requested")
         hist = t.history(
             start=p_start.isoformat(), end=p_end.isoformat(), auto_adjust=False
         )
@@ -494,22 +501,26 @@ def fetch_company(ticker: str, fy_list=None) -> dict:
         else:
             closes = hist["Close"]
             closes.index = pd.to_datetime(closes.index).tz_localize(None)
+    except LookupError:
+        pass
     except Exception as e:
         log.exception("price history failed for %s", ticker)
         closes_err = f"yfinance price download raised {type(e).__name__}: {e}"
 
-    if closes is None or closes.dropna().empty:
+    price_source = "Yahoo Finance"
+    if with_prices and (closes is None or closes.dropna().empty):
+        # the next providers in Configuration -> Data sources: Yahoo's BSE
+        # listing, the NSE and BSE websites, then any key-based provider
         try:
-            closes = nse_source.fetch_close_series(ticker, p_start, p_end)
-            if closes is None or closes.empty:
-                closes_err = (
-                    (closes_err or "") + "; NSE portal fallback also returned nothing "
-                    "(NSE blocks datacentre/VPN IPs)"
-                )
-                closes = None
+            closes, used, problems = price_chain.closes(ticker, p_start, p_end, skip=("yahoo",))
+            if closes is None:
+                closes_err = "; ".join([closes_err or "Yahoo Finance returned no prices", *problems]) + \
+                    " (the exchange websites block some datacentre/VPN addresses)"
+            else:
+                price_source = source_settings.BY_KEY[used]["label"]
         except Exception as e:
-            log.exception("NSE fallback failed for %s", ticker)
-            closes_err = f"{closes_err}; NSE fallback raised {type(e).__name__}: {e}"
+            log.exception("price fallback failed for %s", ticker)
+            closes_err = f"{closes_err}; price fallback raised {type(e).__name__}: {e}"
             closes = None
 
     beta = config.DEFAULT_BETA
@@ -528,16 +539,21 @@ def fetch_company(ticker: str, fy_list=None) -> dict:
     cf_map, cf_note = _fiscal_map(cf)
     fiscal_note = inc_note or bs_note or cf_note
 
-    out = {"ticker": ticker, "beta": beta, "years": {}}
+    out = {"ticker": ticker, "beta": beta, "years": {}, "price_source": price_source if closes is not None else None}
 
     for fy in fy_list:
         ic, ic_err = _col_for_fy(inc_map, fy, inc)
         bc, bc_err = _col_for_fy(bs_map, fy, bs)
         cc, cc_err = _col_for_fy(cf_map, fy, cf)
         d = {k: None for k in FIELDS}
+        # fields filled with an assumption below (zero debt, statutory tax...):
+        # data_hub lets a later provider replace them with a reported figure
+        d["_assumed"] = []
         diag, notes = {}, []
         if fiscal_note:
             notes.append(fiscal_note)
+        if price_source != "Yahoo Finance" and closes is not None:
+            notes.append(f"prices from {price_source} (Yahoo Finance had none)")
 
         P = _pick
         d["ebit"] = P(
@@ -738,6 +754,7 @@ def fetch_company(ticker: str, fy_list=None) -> dict:
         )
         if cwc_raw is None:
             d["delta_nwc"] = 0.0
+            d["_assumed"].append("delta_nwc")
             notes.append("change in working capital not reported; treated as zero")
             diag.pop("cwc", None)
         else:
@@ -746,13 +763,16 @@ def fetch_company(ticker: str, fy_list=None) -> dict:
         # --- non-fatal zero assumptions for capital structure ---
         if d["total_debt"] is None:
             d["total_debt"] = 0.0
+            d["_assumed"].append("total_debt")
             notes.append("total debt not reported; assumed zero (debt-free)")
         if d["cash"] is None:
             d["cash"] = 0.0
+            d["_assumed"].append("cash")
             notes.append("cash balance not reported; assumed zero")
 
         if d["shares"] is None and fallback_shares:
             d["shares"] = fallback_shares
+            d["_assumed"].append("shares")
             diag.pop("shares", None)
             notes.append(
                 "shares outstanding taken from current profile, "
@@ -793,6 +813,7 @@ def fetch_company(ticker: str, fy_list=None) -> dict:
             d["tax_rate"] = clamp(taxp / pretax, 0.05, 0.45)
         else:
             d["tax_rate"] = config.DEFAULT_TAX_RATE
+            d["_assumed"].append("tax_rate")
             notes.append(
                 f"effective tax rate not derivable; used statutory "
                 f"{config.DEFAULT_TAX_RATE:.2%}"

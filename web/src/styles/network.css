@@ -65,11 +65,33 @@
 .an-edge.k-custom.sel .line, .an-edge.k-custom:hover .line { stroke-width: 3px; stroke-opacity: 1; }
 .an-elabel.custom { fill: var(--accent-2); font-weight: 600; font-size: 11px; }
 .an-draft { stroke: var(--accent-2); stroke-width: 2px; stroke-dasharray: 4 4; fill: none; }
-.an-note { position: absolute; z-index: 3; min-width: 120px; max-width: 260px; padding: 8px 10px; border-radius: 6px; background: #f6e58d; color: #2b2a14;
-  font-size: 12px; line-height: 1.45; box-shadow: 0 4px 14px #0005; cursor: move; white-space: pre-wrap; overflow-wrap: anywhere; }
-.an-note::before { content: ""; position: absolute; top: -5px; left: 50%; width: 10px; height: 10px; border-radius: 50%; background: #e0b030; transform: translateX(-50%); box-shadow: 0 1px 2px #0005; }
-.an-note.editing { cursor: text; }
-.an-note textarea { width: 230px; min-height: 60px; border: 0; background: transparent; resize: both; font: inherit; color: inherit; outline: none; }
+/* your notes: a small card in the map's own surfaces, tinted by the colour you pick */
+.an-note { --nt: #e0b97f; position: absolute; z-index: 3; width: 240px; border-radius: 8px; overflow: hidden; cursor: grab;
+  background: color-mix(in srgb, var(--nt) 9%, var(--raise)); border: 1px solid color-mix(in srgb, var(--nt) 38%, var(--line-2));
+  box-shadow: var(--shadow-pop); color: var(--fg-1); font-size: 12.5px; line-height: 1.5; transition: box-shadow .15s ease, border-color .15s ease; }
+.an-note:hover { border-color: color-mix(in srgb, var(--nt) 60%, var(--line-2)); }
+.an-note:active { cursor: grabbing; }
+.an-note.editing { cursor: default; width: 280px; border-color: var(--nt); box-shadow: 0 0 0 3px color-mix(in srgb, var(--nt) 22%, transparent), var(--shadow-pop); }
+.an-note-h { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 4px 0 8px; border-bottom: 1px solid color-mix(in srgb, var(--nt) 22%, transparent);
+  background: color-mix(in srgb, var(--nt) 14%, transparent); }
+.an-note-grip { color: var(--fg-3); }
+.an-note-t { font-weight: 600; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: color-mix(in srgb, var(--nt) 70%, var(--fg-1)); }
+.an-note-when { margin-left: auto; font-size: 10.5px; color: var(--fg-3); }
+.an-note-tones { margin-left: auto; display: inline-flex; gap: 4px; }
+.an-note-tones button { width: 14px; height: 14px; border-radius: 50%; border: 0; cursor: pointer; padding: 0; opacity: .75; }
+.an-note-tones button:hover { opacity: 1; }
+.an-note-tones button.on { opacity: 1; box-shadow: 0 0 0 2px var(--raise), 0 0 0 3.5px currentColor; color: var(--fg-1); }
+.an-note-x { width: 22px; height: 22px; display: grid; place-items: center; border: 0; border-radius: 5px; background: none; color: var(--fg-3); cursor: pointer; }
+.an-note-x:hover { background: var(--hover); color: var(--fg-1); }
+.an-note-b { padding: 8px 10px 10px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow: auto; }
+.an-note textarea { display: block; width: 100%; box-sizing: border-box; min-height: 72px; padding: 8px 10px; border: 0; background: transparent; resize: vertical;
+  font: inherit; color: var(--fg-1); outline: none; }
+.an-note textarea::placeholder { color: var(--fg-3); }
+.an-note-f { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 10px; border-top: 1px solid color-mix(in srgb, var(--nt) 22%, transparent); font-size: 10.5px; color: var(--fg-3); }
+.an-note-f kbd { font-size: 9.5px; padding: 0 4px; }
+.an-note-done { margin-left: auto; height: 24px; padding: 0 12px; border-radius: 5px; border: 0; cursor: pointer; font-weight: 600; font-size: 11.5px;
+  background: var(--nt); color: #1b1b1b; }
+.an-note-done:hover { filter: brightness(1.08); }
 .an-mini { z-index: 11; }
 
 /* ---------- bottom bar */
@@ -140,7 +162,7 @@
 .net.light .an-count { box-shadow: 0 0 0 2px #f3f4f6; color: #fff; }
 .net.light .an-ov { box-shadow: 0 6px 18px #0000001f; }
 .net.light .an-ring .fg { filter: none; }
-.net.light .an-note { box-shadow: 0 4px 12px #00000026; }
+.net.light .an-note { box-shadow: 0 4px 12px #00000026; background: color-mix(in srgb, var(--nt) 12%, #fff); }
 
 /* ---------- tool / focus hint chip */
 .net-chip { height: 32px; padding: 0 4px; gap: 8px; line-height: 1; }

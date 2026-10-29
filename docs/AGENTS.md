@@ -225,11 +225,20 @@ knows what changed since the last one.
 **Auto-start.** `python run.py --web` starts the workforce a few seconds after
 the server comes up: a quick sweep, rule-based, so restarting the app never
 spends LLM quota. It is skipped only when another job is already running.
-The **Workforce** button on the Agent Network page turns this off, switches
-to a full run, lets it use the AI models, sets a "skip if a run finished in
-the last N minutes" window, and starts a run on demand. The settings are
-saved in `data/live/autostart.json`; the API is `GET`/`PUT
-/api/agents/autostart` and `POST /api/agents/autostart/run`.
+The **Auto-start** button on the Research workforce Overview turns this off, switches
+to a full run, lets it use the AI models, and sets a "skip if a run finished in
+the last N minutes" window. The settings are saved in
+`data/live/autostart.json`; the API is `GET`/`PUT /api/agents/autostart` and
+`POST /api/agents/autostart/run`.
+
+**Research on a watchlist.** The **Research** button (Overview, Agent
+Network, Command Center, Coverage, or a watchlist's own page) starts a quick
+sweep or full research on every covered company or on any watchlist. A
+watchlist run researches every company on the list, valued before or not:
+the server writes the list's companies (name, sector, size, ticker) to
+`output/web_runs/watchlist_<job>.csv` and runs `--agents --input` on it. The
+job API takes it as `{"kind": "agents", "options": {"watchlist": "<list id>",
+"quick": true}}`; a valuation report can be scoped to a watchlist the same way.
 
 The web app also opens **Ollama** when it starts, if Ollama is installed and
 *Open Ollama whenever INTVAL starts* is on (the default; saved in

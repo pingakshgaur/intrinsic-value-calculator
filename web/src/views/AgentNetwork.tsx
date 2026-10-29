@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { AgentStatus, colorOf, dmId, Kind, KIND_META, Msg, roleName, Roster, useAgentRuns, useLiveFeed, useProfiles, useRoster, workforceSize } from "../lib/agents";
 import { at, fmtClock, geom, Geom, GNode, layout, pathD, Pt, routes } from "../lib/agentGraph";
-import { DEFAULT_LAYERS, Layers, Link, Mesh, Note, posKey, Positions, uid, useStored, View } from "../lib/netPrefs";
+import { DEFAULT_LAYERS, Layers, Link, Mesh, Note, NOTE_TONES, posKey, Positions, uid, useStored, View } from "../lib/netPrefs";
 import { LABEL_HEX } from "../lib/labels";
 import { useTheme } from "../lib/theme";
 import { BotGlyph } from "../components/AgentAvatar";
@@ -12,8 +12,9 @@ import { ExportButton } from "../components/ExportButton";
 import { Density, MiniMap, NodeTip } from "../components/NetworkParts";
 import { InspectorTab, NetworkInspector } from "../components/NetworkInspector";
 import { EDGE_COLOR, LayersMenu, ViewsMenu } from "../components/NetworkLayers";
-import { WorkforceControl } from "../components/WorkforceControl";
+import { ResearchLauncher } from "../components/ResearchLauncher";
 import { Icon, Popover, QueryView } from "../components/ui";
+import { ago } from "../lib/format";
 import { useApp } from "../components/workbenchContext";
 
 interface Packet { g: Geom; t0: number; dur: number; el: SVGGElement; edge?: string; to: string; dir: Pt }
@@ -408,7 +409,7 @@ function Network({ roster }: { roster: Roster }) {
     app.toast(`${ids.length} hidden - Layers › Hidden brings them back`);
   };
   const addNote = (p: Pt) => {
-    const n: Note = { id: uid(), x: p.x - 80, y: p.y - 20, text: "", arrange: layers.arrange };
+    const n: Note = { id: uid(), x: p.x - 110, y: p.y - 24, text: "", arrange: layers.arrange, color: "amber", at: Date.now() };
     setMesh({ ...mesh, notes: [...mesh.notes, n] });
     setEditNote(n.id);
     setTool("select");
@@ -670,7 +671,7 @@ function Network({ roster }: { roster: Roster }) {
         <LayersMenu layers={layers} setLayers={setLayers} roster={roster} teamsOff={teamsOff} setTeamsOff={setTeamsOff} hidden={hidden} setHidden={setHidden}
           kindsOff={kindsOff} setKindsOff={setKindsOff} annotations={mesh.links.length + mesh.notes.length}
           clearAnnotations={() => setMesh({ links: [], notes: [] })} titleOf={(id) => byId.get(id)?.title ?? ""} />
-        <WorkforceControl active={!!feed.live?.active} />
+        {!feed.live?.active && <ResearchLauncher small secondary />}
         <ExportButton title="Agent Network" target={stage} className="net-btn icon" />
         <Popover className="pop net-pop sm" trigger={(open, toggle) => <button className={`net-btn icon ${open ? "on" : ""}`} onClick={toggle} title="Shortcuts"><Icon name="keyboard" className="sm" /></button>}>
           {() => (
@@ -847,16 +848,39 @@ function Network({ roster }: { roster: Roster }) {
                 </div>
               );
             })}
-            {notesHere.map((n) => (
-              <div key={n.id} data-note={n.id} className={`an-note ${editNote === n.id ? "editing" : ""}`} style={{ left: n.x, top: n.y }} onDoubleClick={() => setEditNote(n.id)}>
-                {editNote === n.id ? (
-                  <textarea autoFocus value={n.text} placeholder="Write a note…" rows={3}
-                    onChange={(e) => setMesh({ ...mesh, notes: mesh.notes.map((x) => (x.id === n.id ? { ...x, text: e.target.value } : x)) })}
-                    onBlur={() => { setEditNote(null); if (!n.text.trim()) setMesh((m) => ({ ...m, notes: m.notes.filter((x) => x.id !== n.id) })); }}
-                    onKeyDown={(e) => { if (e.key === "Escape" || (e.key === "Enter" && (e.ctrlKey || e.metaKey))) (e.target as HTMLTextAreaElement).blur(); }} />
-                ) : <span>{n.text}</span>}
-              </div>
-            ))}
+            {notesHere.map((n) => {
+              const editing = editNote === n.id;
+              const tone = NOTE_TONES.find((t) => t.id === n.color) ?? NOTE_TONES[0];
+              const update = (patch: Partial<Note>) => setMesh((m) => ({ ...m, notes: m.notes.map((x) => (x.id === n.id ? { ...x, ...patch, at: Date.now() } : x)) }));
+              const remove = () => { setMesh((m) => ({ ...m, notes: m.notes.filter((x) => x.id !== n.id) })); setEditNote(null); };
+              // finishing an empty note throws it away
+              const finish = () => { setEditNote(null); if (!n.text.trim()) remove(); };
+              return (
+                <div key={n.id} data-note={n.id} className={`an-note ${editing ? "editing" : ""}`} style={{ left: n.x, top: n.y, ["--nt" as string]: tone.c }}
+                  onDoubleClick={() => setEditNote(n.id)} onBlur={(e) => { if (editing && !e.currentTarget.contains(e.relatedTarget as Node)) finish(); }}>
+                  <div className="an-note-h">
+                    <Icon name="gripper" className="xs an-note-grip" />
+                    <span className="an-note-t">Note</span>
+                    {editing ? (
+                      <span className="an-note-tones" role="radiogroup" aria-label="Note colour">
+                        {NOTE_TONES.map((t) => <button key={t.id} role="radio" aria-checked={t.id === tone.id} aria-label={t.label} title={t.label} className={t.id === tone.id ? "on" : ""} style={{ background: t.c }} onClick={() => update({ color: t.id })} />)}
+                      </span>
+                    ) : <span className="an-note-when">{n.at ? ago(n.at / 1000) : ""}</span>}
+                    {!editing && <button className="an-note-x" onClick={() => setEditNote(n.id)} title="Edit"><Icon name="edit" className="xs" /></button>}
+                    <button className="an-note-x" onClick={remove} title="Delete this note"><Icon name="trash" className="xs" /></button>
+                  </div>
+                  {editing ? (
+                    <>
+                      <textarea autoFocus value={n.text} placeholder="What should you remember about this part of the network?" maxLength={600}
+                        rows={Math.min(10, Math.max(3, n.text.split("\n").length + 1))}
+                        onChange={(e) => update({ text: e.target.value })}
+                        onKeyDown={(e) => { if (e.key === "Escape" || (e.key === "Enter" && (e.ctrlKey || e.metaKey))) { e.preventDefault(); e.stopPropagation(); finish(); } }} />
+                      <div className="an-note-f"><span>{n.text.length}/600 · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to finish</span><button className="an-note-done" onClick={finish}>Done</button></div>
+                    </>
+                  ) : <div className="an-note-b">{n.text || <span className="faint">Empty — double-click to write</span>}</div>}
+                </div>
+              );
+            })}
           </div>
 
           {focusId && (

@@ -8,7 +8,7 @@ import { WorkforceControl } from "../components/WorkforceControl";
 import { Drawer, Empty, Icon, LabelBadge, PageHeader, Panel, QueryView } from "../components/ui";
 import { ScopeNote } from "../components/ScopePicker";
 import { useScope } from "../lib/scope";
-import { ResearchList } from "./WatchlistLibrary";
+import { ResearchLauncher } from "../components/ResearchLauncher";
 
 const TEAM_ORDER = ["CMD", "NWS", "EQR", "IGR", "MAO", "IRV"];
 
@@ -50,10 +50,8 @@ function Overview({ roster }: { roster: Roster }) {
           <span>{size.agents} agents · {size.teams} teams</span>
         </span>}
         actions={<>
-          {scope.list && <ResearchList list={scope.list} />}
           <WorkforceControl active={active} />
-          <Link className="btn sec" to="/agents/network"><Icon name="type-hierarchy" className="sm" />{active ? "Watch live" : "Agent Network"}</Link>
-          <Link className="btn sec" to="/agents/chat"><Icon name="comment-discussion" className="sm" />Research Room</Link>
+          {active ? <Link className="btn" to="/agents/network"><Icon name="type-hierarchy" className="sm" />Watch it live</Link> : <ResearchLauncher />}
         </>} />
 
       {verdicts.length + flags.length > 0 && <ScopeNote shown={myVerdicts.length} total={verdicts.length} what="verdicts this run" />}
@@ -61,7 +59,7 @@ function Overview({ roster }: { roster: Roster }) {
         <div>
           <div className="k">Run</div>
           <div className="v">{run ? `#${run.id}` : "-"}</div>
-          <div className="s">{run ? `${run.mode} · started ${isoWhen(run.started)}` : "start one from Workforce"}</div>
+          <div className="s">{run ? `${run.mode} · started ${isoWhen(run.started)}` : "start one with Research"}</div>
         </div>
         <div>
           <div className="k">Companies</div>

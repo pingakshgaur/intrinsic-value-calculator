@@ -23,7 +23,6 @@ import { Configuration } from "./views/Configuration";
 import { Markets } from "./views/Markets";
 import { WatchlistDetail } from "./views/Watchlist";
 import { Watchlist } from "./views/WatchlistLibrary";
-import { Learning } from "./views/Learning";
 import { AgentChat } from "./views/AgentChat";
 import { AgentNetwork } from "./views/AgentNetwork";
 import { AgentsOverview } from "./views/AgentsOverview";
@@ -49,7 +48,6 @@ const router = createBrowserRouter([
       { path: "markets", element: <Markets /> },
       { path: "watchlist", element: <Watchlist /> },
       { path: "watchlist/:id", element: <WatchlistDetail /> },
-      { path: "learning", element: <Learning /> },
       { path: "agents/network", element: <AgentNetwork /> },
       { path: "agents/chat", element: <AgentChat /> },
       { path: "agents", element: <AgentsOverview /> },
@@ -66,6 +64,7 @@ const router = createBrowserRouter([
       { path: "intel/:company", element: <OldCompany /> },
       { path: "lab", element: <Navigate to="/studio" replace /> },
       { path: "models", element: <Navigate to="/performance" replace /> },
+      { path: "learning", element: <Navigate to="/performance?tab=training" replace /> },
       { path: "run", element: <Navigate to="/operations" replace /> },
       { path: "companies", element: <Navigate to="/universe" replace /> },
       { path: "settings", element: <Navigate to="/configuration" replace /> },

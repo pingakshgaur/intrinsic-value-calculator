@@ -1,83 +1,90 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Area, Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useCharts, useDownloads, useEnsemble, useExcluded, useHybridDetail, useMetrics, useValuation } from "../lib/hooks";
 import { Metrics, Valuation } from "../lib/api";
 import { computeMetrics } from "../lib/metrics";
+import { bestBySector, NEAR_BAND, SectorForecast, sectorForecasts, winsBySector } from "../lib/sectors";
 import { useScope } from "../lib/scope";
 import { ScopeNote } from "../components/ScopePicker";
 import { ago, bytes, isNum, money, pct, pctUnits, shortName, slug, titleCase } from "../lib/format";
 import { HM_COLOR, LENSES, LENS_COLOR, LENS_NAME, SERIES } from "../lib/labels";
 import { Empty, Icon, PageHeader, Panel, QueryView, Tabs, Tip } from "../components/ui";
 import { RunButton } from "../components/RunButton";
+import { TrainingData } from "../components/TrainingData";
 import { Leaderboard } from "./CommandCenter";
 
-type Tab = "board" | "explore" | "hybrid" | "ensemble" | "charts" | "excluded" | "files";
+type Tab = "board" | "sectors" | "company" | "training" | "files";
+// addresses of the tabs this page used to have
+const OLD_TAB: Record<string, Tab> = { explore: "company", hybrid: "company", ensemble: "company", charts: "files", excluded: "files", learning: "training" };
 const color = (m: string, models: string[]) => (m === "HYBRID MODEL" ? HM_COLOR : m === "Ensemble" ? "#C586C0" : SERIES[Math.max(0, models.indexOf(m)) % SERIES.length]);
 
 export function Performance() {
   const [params, setParams] = useSearchParams();
-  const tab = (params.get("tab") as Tab) || "board";
+  const raw = params.get("tab") ?? "board";
+  const tab = (OLD_TAB[raw] ?? raw) as Tab;
   const q = useValuation();
   const scope = useScope();
-  const setTab = (t: Tab) => { const p = new URLSearchParams(params); p.set("tab", t); setParams(p, { replace: true }); };
+  const setTab = (t: Tab) => { const p = new URLSearchParams(params); p.set("tab", t); p.delete("view"); setParams(p, { replace: true }); };
   // a watchlist in focus: its companies' rows, and the metrics recomputed from them
   const scoped = useMemo<Valuation | undefined>(() => (q.data && scope.list ? { ...q.data, rows: q.data.rows.filter((r) => scope.has({ company: r.company })) } : q.data), [q.data, scope]);
   const allCos = q.data ? new Set(q.data.rows.map((r) => r.company)).size : 0;
   const cos = scoped ? new Set(scoped.rows.map((r) => r.company)).size : 0;
+  const needsReport = tab === "sectors" || tab === "company";
   return (
     <div className="page">
       <PageHeader crumbs={[{ label: "Models & data" }, { label: "Model Performance" }]} title="Model Performance"
         sub={q.data?.available ? `${cos} companies · ${q.data.models.length} models · report ${ago(q.data.updated)} · scored against the 1-May price` : "Every model, every financial year, scored against the market"}
-        actions={<><Link to="/operations" className="btn sec"><Icon name="settings" className="sm" />Run options</Link><RunButton kind="valuation" label="Run valuation report" icon="graph" /></>} />
+        actions={<RunButton kind="valuation" label="Run valuation report" icon="graph" />} />
       <Tabs<Tab> value={tab} onChange={setTab} tabs={[
         { id: "board", label: "Leaderboard", icon: "list-ordered" },
-        { id: "explore", label: "Company explorer", icon: "graph-line" },
-        { id: "hybrid", label: "HYBRID MODEL", icon: "beaker" },
-        { id: "ensemble", label: "Ensemble", icon: "layers" },
-        { id: "charts", label: "Chart gallery", icon: "file-media" },
-        { id: "excluded", label: "Left out", icon: "exclude" },
-        { id: "files", label: "Files", icon: "files" },
+        { id: "sectors", label: "Sectors", icon: "symbol-class" },
+        { id: "company", label: "Company", icon: "graph-line" },
+        { id: "training", label: "Training data", icon: "mortar-board" },
+        { id: "files", label: "Files & charts", icon: "files" },
       ]} />
-      {q.data?.available && <ScopeNote shown={cos} total={allCos} />}
-      <QueryView q={q} rows={10}>
-        {(all) => { const d = scoped ?? all; return scope.list && d.available && !d.rows.length && tab !== "charts" && tab !== "files"
-          ? <Panel><Empty icon="library" title={`No company on “${scope.list.name}” is in the valuation report`} action={<button className="btn sec" onClick={() => scope.set(null)}>Show every company</button>}>Add them to Coverage on the Universe page, then run the valuation report.</Empty></Panel>
-          : !d.available && ["explore", "hybrid", "ensemble"].includes(tab)
-          ? <Panel><Empty icon="graph-line" title="No valuation report yet" action={<RunButton kind="valuation" label="Run valuation report" icon="graph" />}>The report values every company for every year with every model, including the HYBRID MODEL.</Empty></Panel>
-          : <>
-            {tab === "board" && <Board scoped={scope.list && d.available ? d : null} />}
-            {tab === "explore" && <Explore d={d} />}
-            {tab === "hybrid" && <HybridDetail d={d} />}
-            {tab === "ensemble" && <EnsembleDetail d={d} />}
-            {tab === "charts" && <Gallery />}
-            {tab === "excluded" && <Excluded />}
-            {tab === "files" && <Files />}
-          </>; }}
-      </QueryView>
+      {q.data?.available && tab !== "training" && tab !== "files" && <ScopeNote shown={cos} total={allCos} />}
+      {tab === "training" ? <TrainingData /> : tab === "files" ? <FilesTab /> : (
+        <QueryView q={q} rows={10}>
+          {(all) => { const d = scoped ?? all; return scope.list && d.available && !d.rows.length
+            ? <Panel><Empty icon="library" title={`No company on “${scope.list.name}” is in the valuation report`} action={<button className="btn sec" onClick={() => scope.set(null)}>Show every company</button>}>Add them to Coverage on the Universe page, then run the valuation report.</Empty></Panel>
+            : !d.available && needsReport
+            ? <Panel><Empty icon="graph-line" title="No valuation report yet" action={<RunButton kind="valuation" label="Run valuation report" icon="graph" />}>The report values every company for every year with every model, including the HYBRID MODEL.</Empty></Panel>
+            : <>
+              {tab === "board" && <Board scoped={scope.list && d.available ? d : null} />}
+              {tab === "sectors" && <Sectors d={d} scoped={!!scope.list} />}
+              {tab === "company" && <CompanyTab d={d} />}
+            </>; }}
+        </QueryView>
+      )}
     </div>
   );
 }
 
-function Board({ scoped }: { scoped: Valuation | null }) {
+type Board4 = Pick<Metrics, "overall" | "by_year" | "by_sector" | "win_rate" | "updated">;
+/** The server's metric tables, or the same tables recomputed for a watchlist in focus. */
+function useBoardMetrics(scoped: Valuation | null) {
   const q = useMetrics();
   const local = useMemo(() => (scoped ? computeMetrics(scoped.rows, scoped.models) : null), [scoped]);
+  const m: Board4 | undefined = q.data ? (local ? { ...local, updated: q.data.updated } : q.data) : undefined;
+  return { q, m };
+}
+
+function Board({ scoped }: { scoped: Valuation | null }) {
+  const { q, m } = useBoardMetrics(scoped);
   return (
     <QueryView q={q}>
-      {(server) => {
-        // a watchlist in focus: the same tables, recomputed for its companies
-        const m: Pick<Metrics, "overall" | "by_year" | "by_sector" | "win_rate" | "updated"> = local ? { ...local, updated: server.updated } : server;
-        if (!m.overall.length) return <Panel><Empty icon="target" title="No accuracy metrics yet" action={<RunButton kind="valuation" label="Run valuation report" icon="graph" />}>A valuation run with charts switched on writes them.</Empty></Panel>;
+      {() => {
+        if (!m || !m.overall.length) return <Panel><Empty icon="target" title="No accuracy metrics yet" action={<RunButton kind="valuation" label="Run valuation report" icon="graph" />}>A valuation run with charts switched on writes them.</Empty></Panel>;
         const models = m.overall.map((r) => String(r.Model));
         const years = [...new Set(m.by_year.map((r) => String(r["Financial Year"])))];
         const byYear = years.map((y) => ({ fy: y, ...Object.fromEntries(m.by_year.filter((r) => r["Financial Year"] === y).map((r) => [String(r.Model), r["MedAPE %"]])) }));
-        const sectors = [...new Set(m.by_sector.map((r) => String(r["Sector Name"])))];
         const wins = m.win_rate.map((r) => ({ model: String(r.Model), win: r["Win rate %"] }));
         return (
           <>
             <Leaderboard rows={m.overall} updated={m.updated} />
             <div className="grid c-21">
-              <Panel title="Median error by financial year">
+              <Panel title="Median error by financial year" meta="lower is better">
                 <ResponsiveContainer width="100%" height={280}>
                   <LineChart data={byYear} margin={{ top: 6, right: 14, bottom: 0, left: 0 }}>
                     <CartesianGrid strokeDasharray="2 4" /><XAxis dataKey="fy" tickLine={false} axisLine={{ stroke: "var(--line)" }} /><YAxis unit="%" tickLine={false} axisLine={false} width={44} />
@@ -96,28 +103,220 @@ function Board({ scoped }: { scoped: Valuation | null }) {
                 </ResponsiveContainer>
               </Panel>
             </div>
-            <Panel title="Sector × model error matrix" meta="median absolute % error · darker = worse" flush>
-              <div className="dg-wrap">
-                <table className="dg dense">
-                  <thead><tr><th className="sticky">Sector</th>{models.map((mm) => <th key={mm} className="r" style={mm === "HYBRID MODEL" ? { color: HM_COLOR } : undefined}>{mm}</th>)}</tr></thead>
-                  <tbody>
-                    {sectors.map((s) => (
-                      <tr key={s}>
-                        <td className="sticky strong">{s}</td>
-                        {models.map((mm) => {
-                          const v = m.by_sector.find((x) => x["Sector Name"] === s && x.Model === mm)?.["MedAPE %"];
-                          return <td key={mm} className="r"><span className="heat" style={{ background: `rgba(239,135,115,${isNum(v) ? Math.min(0.55, v / 150) : 0})` }}>{pctUnits(v, 0)}</span></td>;
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Panel>
+            <div className="note inf"><Icon name="symbol-class" /><div>Which model works best in which sector, and what each model forecasts for every sector, is on the <Link to="/performance?tab=sectors">Sectors</Link> tab.</div></div>
           </>
         );
       }}
     </QueryView>
+  );
+}
+
+// ================================================================ sectors
+type SectorLens = "upside" | "move";
+const upColor = (x: number | null | undefined) => (!isNum(x) ? "transparent" : x >= 0 ? `rgba(134,207,134,${Math.min(0.5, Math.abs(x) / 1.2)})` : `rgba(239,135,115,${Math.min(0.5, Math.abs(x) / 1.2)})`);
+
+function Sectors({ d, scoped }: { d: Valuation; scoped: boolean }) {
+  const { q, m } = useBoardMetrics(scoped ? d : null);
+  const best = useMemo(() => bestBySector(m?.by_sector ?? []), [m]);
+  const wins = useMemo(() => winsBySector(best), [best]);
+  const fc = useMemo(() => sectorForecasts(d.rows, d.models), [d.rows, d.models]);
+  // metric files name models without " Valuation"; the report's rows use the full name
+  const full = (short: string) => d.models.find((x) => x.replace(/ Valuation$/, "") === short) ?? short;
+  if (q.isLoading) return <QueryView q={q}>{() => null}</QueryView>;
+  if (!best.length && !fc.length) return <Panel><Empty icon="symbol-class" title="No sector results yet" action={<RunButton kind="valuation" label="Run valuation report" icon="graph" />}>The valuation report scores every model in every sector.</Empty></Panel>;
+  const hardest = [...best].sort((a, b) => b.bestErr - a.bestErr)[0];
+  const easiest = [...best].sort((a, b) => a.bestErr - b.bestErr)[0];
+  const cheapest = fc.find((s) => isNum(s.consensusUpside));
+  return (
+    <>
+      <div className="band">
+        <div><div className="k">Sectors</div><div className="v">{fc.length || best.length}</div><div className="s">{new Set(d.rows.map((r) => r.company)).size} companies</div></div>
+        <div><div className="k">Best in most sectors</div><div className="v" style={{ fontSize: 17 }}>{wins[0]?.model ?? "—"}</div><div className="s">{wins[0] ? `most accurate in ${wins[0].sectors} of ${best.length}` : "run the report"}</div></div>
+        <div><div className="k">Easiest to value</div><div className="v" style={{ fontSize: 17 }}>{easiest?.sector ?? "—"}</div><div className="s">{easiest ? `${easiest.best} within ${pctUnits(easiest.bestErr, 1)}` : ""}</div></div>
+        <div><div className="k">Hardest to value</div><div className="v" style={{ fontSize: 17 }}>{hardest?.sector ?? "—"}</div><div className="s">{hardest ? `even the best model is ${pctUnits(hardest.bestErr, 1)} off` : ""}</div></div>
+        <div><div className="k">Most below value</div><div className="v up" style={{ fontSize: 17 }}>{cheapest?.sector ?? "—"}</div><div className="s">{cheapest ? `models put it ${pct(cheapest.consensusUpside, 0, true)} above the price` : ""}</div></div>
+      </div>
+      {best.length > 0 && <BestModel best={best} wins={wins} colorOf={(mm) => color(full(mm), d.models)} />}
+      {best.length > 0 && <ErrorMatrix best={best} />}
+      {fc.length > 0 && <SectorForecastTable fc={fc} models={d.models} />}
+      {fc.length > 0 && <Segregation fc={fc} />}
+    </>
+  );
+}
+
+function BestModel({ best, wins, colorOf }: { best: ReturnType<typeof bestBySector>; wins: ReturnType<typeof winsBySector>; colorOf: (m: string) => string }) {
+  return (
+    <div className="grid c-21">
+      <Panel title="Which model suits each sector" meta="median error against the 1-May price · lower is better" flush>
+        <div className="dg-wrap">
+          <table className="dg dense">
+            <thead><tr><th className="sticky">Sector</th><th>Best model</th><th className="r">Its error</th><th className="r">Within ±20%</th><th>Runner-up</th><th className="r">HYBRID MODEL</th><th className="r">Company-years</th></tr></thead>
+            <tbody>{best.map((b) => {
+              const hm = b.ranked.find((x) => x.model === "HYBRID MODEL");
+              const two = b.ranked[1];
+              return (
+                <tr key={b.sector}>
+                  <td className="sticky strong">{b.sector}</td>
+                  <td><span className="row" style={{ gap: 6 }}><i className="fc-sw" style={{ background: colorOf(b.best) }} /><b className={b.best === "HYBRID MODEL" ? "hm" : ""}>{b.best}</b></span></td>
+                  <td className="r mono up">{pctUnits(b.bestErr, 1)}</td>
+                  <td className="r mono">{pctUnits(b.ranked[0].hit, 0)}</td>
+                  <td className="muted">{two ? <>{two.model} <span className="mono faint">{pctUnits(two.err, 0)}</span></> : "—"}</td>
+                  <td className="r mono" style={{ color: HM_COLOR }}>{hm ? pctUnits(hm.err, 1) : "—"}</td>
+                  <td className="r mono faint">{b.n}</td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+        </div>
+      </Panel>
+      <Panel title="Sectors won, by model" meta="most accurate in">
+        <ResponsiveContainer width="100%" height={Math.max(160, wins.length * 30)}>
+          <BarChart data={wins} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
+            <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={{ stroke: "var(--line)" }} />
+            <YAxis type="category" dataKey="model" width={130} tickLine={false} axisLine={false} tick={{ fill: "var(--fg)", fontSize: 11 }} />
+            <Tooltip content={<Tip fmt={(x) => `${x} sector${x === 1 ? "" : "s"}`} />} cursor={{ fill: "var(--hover)" }} />
+            <Bar dataKey="sectors" name="Sectors" radius={[0, 3, 3, 0]} barSize={12}>{wins.map((w) => <Cell key={w.model} fill={colorOf(w.model)} />)}</Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </Panel>
+    </div>
+  );
+}
+
+function ErrorMatrix({ best }: { best: ReturnType<typeof bestBySector> }) {
+  const models = [...new Set(best.flatMap((b) => b.ranked.map((r) => r.model)))];
+  return (
+    <Panel title="Error by sector and model" meta="median absolute % error · darker = worse · outlined = best in the sector" flush>
+      <div className="dg-wrap">
+        <table className="dg dense">
+          <thead><tr><th className="sticky">Sector</th>{models.map((mm) => <th key={mm} className="r" style={mm === "HYBRID MODEL" ? { color: HM_COLOR } : undefined}>{mm}</th>)}</tr></thead>
+          <tbody>{best.map((b) => (
+            <tr key={b.sector}>
+              <td className="sticky strong">{b.sector}</td>
+              {models.map((mm) => {
+                const v = b.ranked.find((x) => x.model === mm)?.err;
+                return <td key={mm} className="r"><span className={`heat ${mm === b.best ? "best" : ""}`} style={{ background: `rgba(239,135,115,${isNum(v) ? Math.min(0.55, v / 150) : 0})` }}>{pctUnits(v, 0)}</span></td>;
+              })}
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </Panel>
+  );
+}
+
+function SectorForecastTable({ fc, models }: { fc: SectorForecast[]; models: string[] }) {
+  const [lens, setLens] = useState<SectorLens>("upside");
+  const used = models.filter((mm) => fc.some((s) => (s.byModel[mm]?.n ?? 0) > 0));
+  return (
+    <Panel title="Sector valuation forecast, by model" flush
+      meta={lens === "upside" ? "median of each model's value against today's price" : "median projected price move over the next year"}
+      tools={<div className="seg"><button className={lens === "upside" ? "on" : ""} onClick={() => setLens("upside")}>Value vs price</button><button className={lens === "move" ? "on" : ""} onClick={() => setLens("move")}>1-year projection</button></div>}>
+      <div className="dg-wrap">
+        <table className="dg dense">
+          <thead><tr><th className="sticky">Sector</th><th className="r">Cos</th>{used.map((mm) => <th key={mm} className="r" style={mm === "HYBRID MODEL" ? { color: HM_COLOR } : undefined}>{mm.replace(/ Valuation$/, "")}</th>)}<th className="r">All models</th></tr></thead>
+          <tbody>{fc.map((s) => (
+            <tr key={s.sector}>
+              <td className="sticky strong">{s.sector}</td>
+              <td className="r mono faint">{s.companies}</td>
+              {used.map((mm) => {
+                const x = s.byModel[mm]?.[lens];
+                return <td key={mm} className="r"><span className="heat" style={{ background: upColor(x) }} title={`${s.byModel[mm]?.n ?? 0} companies`}>{pct(x, 0, true)}</span></td>;
+              })}
+              <td className="r"><b className={`mono ${((lens === "upside" ? s.consensusUpside : s.consensusMove) ?? 0) >= 0 ? "up" : "down"}`}>{pct(lens === "upside" ? s.consensusUpside : s.consensusMove, 0, true)}</b></td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <div className="fc-note xs faint"><Icon name="info" className="xs" />Green: the model values the sector above today's price; red: below. The 1-year projection assumes prices keep closing each model's gap at the pace they have in the report — a projection from history, not advice.</div>
+    </Panel>
+  );
+}
+
+function Segregation({ fc }: { fc: SectorForecast[] }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const chart = fc.filter((s) => isNum(s.consensusUpside)).map((s) => ({ sector: s.sector, upside: s.consensusUpside, move: s.consensusMove }));
+  return (
+    <div className="grid c2">
+      <Panel title="Sector segregation" meta={`companies below, near (±${Math.round(NEAR_BAND * 100)}%) and above the models' value`} flush>
+        <div className="dg-wrap">
+          <table className="dg dense">
+            <thead><tr><th className="sticky">Sector</th><th style={{ width: "22%", minWidth: 120 }}>Below · near · above</th><th className="r">Upside</th><th className="r">1-year view</th><th>Top pick</th></tr></thead>
+            <tbody>{fc.map((s) => {
+              const n = Math.max(1, s.below + s.near + s.above);
+              return (
+                <Fragment key={s.sector}>
+                  <tr className="click" onClick={() => setOpen(open === s.sector ? null : s.sector)}>
+                    <td className="sticky strong"><span className="row" style={{ gap: 6 }}><Icon name={open === s.sector ? "chevron-down" : "chevron-right"} className="xs faint" />{s.sector}</span></td>
+                    <td><div className="seg-bar" title={`${s.below} below value · ${s.near} near · ${s.above} above`}>
+                      <i style={{ width: `${(100 * s.below) / n}%`, background: "var(--up)" }} /><i style={{ width: `${(100 * s.near) / n}%`, background: "var(--c-blue)" }} /><i style={{ width: `${(100 * s.above) / n}%`, background: "var(--down)" }} />
+                    </div><span className="xs faint">{s.below} · {s.near} · {s.above}</span></td>
+                    <td className={`r mono ${(s.consensusUpside ?? 0) >= 0 ? "up" : "down"}`}>{pct(s.consensusUpside, 0, true)}</td>
+                    <td className={`r mono ${(s.consensusMove ?? 0) >= 0 ? "up" : "down"}`}>{pct(s.consensusMove, 1, true)}</td>
+                    <td className="ellipsis" style={{ maxWidth: 200 }}>{s.names[0] ? <Link to={`/coverage/${slug(s.names[0].company)}`} onClick={(e) => e.stopPropagation()}>{shortName(s.names[0].company)}</Link> : "—"}</td>
+                  </tr>
+                  {open === s.sector && (
+                    <tr className="analyst-row"><td colSpan={5} style={{ whiteSpace: "normal", padding: "8px 12px 12px" }}>
+                      <div className="sec-names">{s.names.map((x) => (
+                        <Link key={x.company} to={`/coverage/${slug(x.company)}`} className="sec-name">
+                          <span className="ellipsis">{shortName(x.company)}</span>
+                          <b className={`mono ${x.upside >= 0 ? "up" : "down"}`}>{pct(x.upside, 0, true)}</b>
+                        </Link>
+                      ))}</div>
+                    </td></tr>
+                  )}
+                </Fragment>
+              );
+            })}</tbody>
+          </table>
+        </div>
+      </Panel>
+      <Panel title="Sector prediction" meta="median across models · value vs price, and the 1-year projection">
+        <ResponsiveContainer width="100%" height={Math.max(220, chart.length * 30)}>
+          <BarChart data={chart} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
+            <CartesianGrid strokeDasharray="2 4" horizontal={false} />
+            <XAxis type="number" tickFormatter={(x) => pct(x, 0, true)} tickLine={false} axisLine={{ stroke: "var(--line)" }} />
+            <YAxis type="category" dataKey="sector" width={170} tickLine={false} axisLine={false} tick={{ fill: "var(--fg)", fontSize: 11 }} />
+            <ReferenceLine x={0} stroke="var(--fg-3)" />
+            <Tooltip content={<Tip fmt={(x) => pct(x as number, 1, true)} />} cursor={{ fill: "var(--hover)" }} />
+            <Legend />
+            <Bar dataKey="upside" name="Value vs price" barSize={9} radius={2} fill="#86CF86">{chart.map((c) => <Cell key={c.sector} fill={(c.upside ?? 0) >= 0 ? "#86CF86" : "#EF8773"} />)}</Bar>
+            <Bar dataKey="move" name="1-year projection" barSize={9} radius={2} fill="#57A3F8" />
+          </BarChart>
+        </ResponsiveContainer>
+      </Panel>
+    </div>
+  );
+}
+
+// ================================================================ one company
+type View = "models" | "hybrid" | "ensemble";
+function CompanyTab({ d }: { d: Valuation }) {
+  const [params, setParams] = useSearchParams();
+  const raw = params.get("view") ?? (params.get("tab") === "hybrid" ? "hybrid" : params.get("tab") === "ensemble" ? "ensemble" : "models");
+  const view = (["models", "hybrid", "ensemble"].includes(raw) ? raw : "models") as View;
+  const set = (v: View) => { const p = new URLSearchParams(params); p.set("tab", "company"); p.set("view", v); setParams(p, { replace: true }); };
+  return (
+    <>
+      <div className="seg" style={{ alignSelf: "flex-start" }}>
+        <button className={view === "models" ? "on" : ""} onClick={() => set("models")}>Every model</button>
+        <button className={view === "hybrid" ? "on" : ""} onClick={() => set("hybrid")}>HYBRID MODEL detail</button>
+        <button className={view === "ensemble" ? "on" : ""} onClick={() => set("ensemble")}>Ensemble detail</button>
+      </div>
+      {view === "models" && <Explore d={d} />}
+      {view === "hybrid" && <HybridDetail d={d} />}
+      {view === "ensemble" && <EnsembleDetail d={d} />}
+    </>
+  );
+}
+
+function FilesTab() {
+  return (
+    <>
+      <Panel title="Downloads" meta="the report workbook, metrics and HTML index" flush><Files /></Panel>
+      <Panel title="Companies left out of the last report"><Excluded /></Panel>
+      <Panel title="Chart gallery" meta="drawn by the analysis stage of a valuation run"><Gallery /></Panel>
+    </>
   );
 }
 
@@ -276,7 +475,7 @@ function Gallery() {
   const [open, setOpen] = useState<string | null>(null);
   return (
     <QueryView q={q}>
-      {(names) => !names.length ? <Panel><Empty icon="file-media" title="No charts yet">The analysis stage of a valuation run draws them.</Empty></Panel> : (
+      {(names) => !names.length ? <Empty icon="file-media" title="No charts yet">The analysis stage of a valuation run draws them.</Empty> : (
         <>
           <div className="gallery">{names.map((n) => <figure key={n} onClick={() => setOpen(n)}><img src={`/api/charts/${n}`} alt={n} loading="lazy" /><figcaption>{titleCase(n.replace(/\.png$/, ""))}</figcaption></figure>)}</div>
           {open && <div className="lightbox" onClick={() => setOpen(null)}><img src={`/api/charts/${open}`} alt={open} /></div>}
@@ -291,13 +490,13 @@ function Excluded() {
   const scope = useScope();
   return (
     <QueryView q={q}>
-      {(all) => { const d = { ...all, rows: all.rows.filter((r) => scope.has({ company: String(r["Company name"] ?? "") })) }; return !d.rows.length ? <Panel><Empty icon="pass" title="Every company was used">Nobody was left out of the last report for missing data.</Empty></Panel> : (
-        <Panel flush>
+      {(all) => { const d = { ...all, rows: all.rows.filter((r) => scope.has({ company: String(r["Company name"] ?? "") })) }; return !d.rows.length ? <Empty icon="pass" title="Every company was used">Nobody was left out of the last report for missing data.</Empty> : (
+        <div className="dg-wrap">
           <table className="dg">
             <thead><tr><th>Company</th><th>Problem</th><th>What went wrong</th><th>What you can do</th></tr></thead>
             <tbody>{d.rows.map((r, i) => <tr key={i}><td className="strong">{r["Company name"]}</td><td><span className="tag warn">{r["Type of problem"]}</span></td><td style={{ whiteSpace: "normal" }} className="small">{r["In plain words, what went wrong"]}</td><td style={{ whiteSpace: "normal" }} className="small muted">{r["What you can do about it"]}</td></tr>)}</tbody>
           </table>
-        </Panel>
+        </div>
       ); }}
     </QueryView>
   );
@@ -307,8 +506,8 @@ function Files() {
   const q = useDownloads();
   return (
     <QueryView q={q}>
-      {(files) => !files.length ? <Panel><Empty icon="files" title="No files yet" /></Panel> : (
-        <Panel flush>
+      {(files) => !files.length ? <Empty icon="files" title="No files yet">A valuation run writes them.</Empty> : (
+        <div className="dg-wrap">
           <table className="dg">
             <thead><tr><th>File</th><th>Updated</th><th className="r">Size</th><th /></tr></thead>
             <tbody>{files.map((f) => (
@@ -317,7 +516,7 @@ function Files() {
                 <td className="r"><a className="btn xs sec" href={`/api/downloads/${f.key}`} download><Icon name="desktop-download" className="xs" />Download</a></td></tr>
             ))}</tbody>
           </table>
-        </Panel>
+        </div>
       )}
     </QueryView>
   );

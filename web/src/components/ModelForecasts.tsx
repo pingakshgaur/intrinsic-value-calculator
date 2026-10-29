@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useValuation } from "../lib/hooks";
-import { Verdict } from "../lib/api";
+import { ValuationRow, Verdict } from "../lib/api";
 import { forecast, HORIZONS, learnSkills, ModelForecast } from "../lib/forecast";
 import { isNum, money, pct } from "../lib/format";
 import { HM, HM_COLOR, SERIES } from "../lib/labels";
@@ -18,6 +18,31 @@ const SPANS: { id: Span; label: string; steps: { t: number; x: string }[] }[] = 
 
 const colourOf = (m: string, i: number) => (m === HM ? HM_COLOR : SERIES[i % SERIES.length]);
 const convColour = (c: number) => (c >= 60 ? "var(--up)" : c >= 40 ? "var(--c-yellow, #E0B97F)" : "var(--down)");
+
+/** The models' one-year view for the plain-English summary: how many rise, and the conviction-weighted price. */
+export function useOneYearView(v: Verdict) {
+  const q = useValuation();
+  return useMemo(() => {
+    const d = q.data;
+    if (!d?.available || !isNum(v.price) || v.price <= 0) return null;
+    const mine = d.rows.filter((r) => r.company === v.company).sort((a, b) => a.fy.localeCompare(b.fy));
+    if (!mine.length) return null;
+    const list = buildForecasts(v, v.price, mine, d.models, learnSkills(d.rows, d.models));
+    if (!list.length) return null;
+    const w = list.reduce((s, f) => s + f.conviction, 0) || 1;
+    return { rising: list.filter((f) => f.at(1).mid > v.price!).length, total: list.length, oneYear: list.reduce((s, f) => s + f.at(1).mid * f.conviction, 0) / w };
+  }, [q.data, v]);
+}
+
+function buildForecasts(v: Verdict, price: number, mine: ValuationRow[], models: string[], skills: ReturnType<typeof learnSkills>) {
+  const latest = mine[mine.length - 1];
+  const values: Record<string, number> = {};
+  for (const m of models) { const x = latest.values?.[m]; if (isNum(x) && x > 0) values[m] = x; }
+  // the research run's own HYBRID MODEL value is the one the page shows
+  if (isNum(v.expected_value) && v.expected_value > 0) values[HM] = v.expected_value;
+  // values compound at the long-run rate: the near-term rate would carry every model upward
+  return forecast(price, values, skills, mine, isNum(v.growth_terminal) ? v.growth_terminal : v.growth);
+}
 
 /** Every model's predicted price path for this company, and how strongly each one believes it. */
 export function ModelForecasts({ v }: { v: Verdict }) {
@@ -40,15 +65,7 @@ function Forecasts({ v, price, rows, models, mine }: { v: Verdict; price: number
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [focus, setFocus] = useState<string | null>(null);
   const skills = useMemo(() => learnSkills(rows, models), [rows, models]);
-  const list = useMemo(() => {
-    const latest = mine[mine.length - 1];
-    const values: Record<string, number> = {};
-    for (const m of models) { const x = latest.values?.[m]; if (isNum(x) && x > 0) values[m] = x; }
-    // the research run's own HYBRID MODEL value is the one the page shows
-    if (isNum(v.expected_value) && v.expected_value > 0) values[HM] = v.expected_value;
-    // values compound at the long-run rate: the near-term rate would carry every model upward
-    return forecast(price, values, skills, mine, isNum(v.growth_terminal) ? v.growth_terminal : v.growth);
-  }, [mine, models, skills, price, v.expected_value, v.growth, v.growth_terminal]);
+  const list = useMemo(() => buildForecasts(v, price, mine, models, skills), [mine, models, skills, price, v]);
   const colour = useMemo(() => Object.fromEntries(models.map((m, i) => [m, colourOf(m, i)])), [models]);
   const steps = SPANS.find((s) => s.id === span)!.steps;
   const shown = list.filter((f) => !hidden.has(f.model));
@@ -82,15 +99,20 @@ function Forecasts({ v, price, rows, models, mine }: { v: Verdict; price: number
       <Panel title="Predicted price, by model" meta="from today's price toward each model's value" exportTitle={`${v.company} — predicted price by model`}
         tools={<>
           <div className="seg">{SPANS.map((s) => <button key={s.id} className={span === s.id ? "on" : ""} onClick={() => setSpan(s.id)}>{s.label}</button>)}</div>
+          <div className="seg" role="group" aria-label="Lines">
+            <button onClick={() => setHidden(new Set())} disabled={!hidden.size} title="Show every model's line">Show all</button>
+            <button onClick={() => setHidden(new Set(list.map((f) => f.model)))} disabled={hidden.size === list.length} title="Hide every line, then click models below to compare a few">Remove all</button>
+          </div>
         </>}>
         <div>
+          {!shown.length && <div className="fc-empty xs faint">Every line is hidden — click a model below, or Show all.</div>}
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 4 }}>
               <CartesianGrid strokeDasharray="2 4" />
               <XAxis dataKey="x" tickLine={false} axisLine={{ stroke: "var(--line)" }} minTickGap={18} />
               <YAxis tickLine={false} axisLine={false} width={74} tickFormatter={(x) => money(x, 0)} domain={["auto", "auto"]} />
               <Tooltip content={<Tip fmt={(x) => money(x as number, 0)} />} itemSorter={(p) => -Number(p.value ?? 0)} />
-              <ReferenceLine y={price} stroke="var(--price)" strokeDasharray="4 4" label={{ value: `price ${money(price, 0)}`, position: "insideTopLeft", fill: "var(--fg-3)", fontSize: 11 }} />
+              <ReferenceLine y={price} stroke="var(--price)" strokeDasharray="4 4" label={{ value: `today ${money(price, 0)}`, position: "insideBottomRight", fill: "var(--fg-3)", fontSize: 11 }} />
               {shown.map((f) => (
                 <Line key={f.model} type="monotone" dataKey={f.model} name={metricName(f.model)} stroke={colour[f.model]} dot={false} isAnimationActive={false}
                   strokeWidth={focus === f.model || (f.model === HM && !focus) ? 3 : 1.6} strokeOpacity={focus && focus !== f.model ? 0.25 : 1} />
@@ -104,7 +126,6 @@ function Forecasts({ v, price, rows, models, mine }: { v: Verdict; price: number
               <i style={{ background: colour[f.model] }} />{metricName(f.model)}
             </button>
           ))}
-          {hidden.size > 0 && <button className="reset" onClick={() => setHidden(new Set())}>Show all</button>}
         </div>
       </Panel>
 

@@ -29,7 +29,7 @@ AppPublisherURL=https://github.com/pingakshgaur/intrinsic-value-calculator
 AppSupportURL=https://github.com/pingakshgaur/intrinsic-value-calculator/issues
 ; Program Files for everyone, or the user's own programs folder - the user picks,
 ; and can then choose any folder on the next page
-DefaultDirName={autopf}\{#AppName}
+DefaultDirName={code:DefaultDir}
 DefaultGroupName={#AppName}
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
@@ -72,7 +72,7 @@ Type: filesandordirs; Name: "{app}\_internal"
 Type: filesandordirs; Name: "{app}\web\dist"
 
 [Files]
-Source: "{#StageDir}\*"; DestDir: "{app}"; Excludes: "agent_settings.yaml,data\*.csv"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#StageDir}\*"; DestDir: "{app}"; Excludes: "agent_settings.yaml,data\*.csv,output\*,.env,llm_providers.json,backups\*"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; the user's own settings and company lists survive an upgrade
 Source: "{#StageDir}\agent_settings.yaml"; DestDir: "{app}"; Flags: onlyifdoesntexist uninsneveruninstall
 Source: "{#StageDir}\data\*.csv"; DestDir: "{app}\data"; Flags: onlyifdoesntexist uninsneveruninstall
@@ -91,11 +91,60 @@ Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"; Tasks: startme
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExe}"; Comment: "Open the INTVAL workbench"; Tasks: desktopicon
 
 [Run]
+; installing over an earlier version: back up the data, then add the new training companies and settings (src/migrate.py)
+Filename: "{app}\{#AppExe}"; Parameters: "--migrate --previous-version ""{code:EarlierVersion}"""; WorkingDir: "{app}"; StatusMsg: "Keeping your data and bringing it up to date..."; Flags: runhidden waituntilterminated; Check: IsUpgrade
 Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; Description: "Launch INTVAL now"; Flags: nowait postinstall skipifsilent
 
 [Code]
+const
+  UninstKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{6B0F2E5C-9C4E-4E6B-A7C1-3D2B8F1E7A51}_is1';
+
 var
   RemoveData: Boolean;
+  EarlierDir, EarlierVer: String;
+
+{ an INTVAL already on this computer - for this user or for everyone }
+function FindEarlier(): Boolean;
+var
+  V: String;
+begin
+  Result := (RegQueryStringValue(HKCU, UninstKey, 'InstallLocation', V) or RegQueryStringValue(HKLM, UninstKey, 'InstallLocation', V)) and (V <> '');
+  if Result then begin
+    EarlierDir := RemoveBackslashUnlessRoot(V);
+    if not (RegQueryStringValue(HKCU, UninstKey, 'DisplayVersion', EarlierVer) or RegQueryStringValue(HKLM, UninstKey, 'DisplayVersion', EarlierVer)) then
+      EarlierVer := 'earlier version';
+    Result := DirExists(EarlierDir);
+  end;
+end;
+
+{ installing again lands in the same folder, so no data is left behind in another one }
+function DefaultDir(Param: String): String;
+begin
+  if EarlierDir <> '' then
+    Result := EarlierDir
+  else
+    Result := ExpandConstant('{autopf}\{#AppName}');
+end;
+
+function EarlierVersion(Param: String): String;
+begin
+  Result := EarlierVer;
+end;
+
+function IsUpgrade(): Boolean;
+begin
+  Result := (EarlierDir <> '') and (CompareText(RemoveBackslashUnlessRoot(ExpandConstant('{app}')), EarlierDir) = 0);
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+  if FindEarlier() and not WizardSilent() then
+    Result := MsgBox('INTVAL ' + EarlierVer + ' is already installed in' + #13#10 + EarlierDir + #13#10 + #13#10 +
+      'The easiest way to keep all of your data is the updater, INTVAL-Update-{#AppVersion}-windows-x64.exe.' + #13#10 + #13#10 +
+      'Continue with this Setup instead? It installs into the same folder and also keeps your data.',
+      mbConfirmation, MB_YESNO) = IDYES;
+end;
 
 function InitializeUninstall(): Boolean;
 begin

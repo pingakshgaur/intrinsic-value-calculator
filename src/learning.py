@@ -114,7 +114,7 @@ def feed(rows=None, limit=None):
     missing or stale, one at a time at the polite request pace. Prints a line
     per company for the web app's job log. -> summary dict"""
     import auto_train
-    import yf_source
+    import data_hub
 
     rows = companies() if rows is None else rows
     write_csv(rows)
@@ -128,7 +128,7 @@ def feed(rows=None, limit=None):
     for i, r in enumerate(todo, 1):
         print(f"[learn] {i}/{len(todo)} {r['name']} ({r['ticker']}) ...", end=" ", flush=True)
         try:
-            data = yf_source.fetch_company(r["ticker"], config.FY_LIST)
+            data = data_hub.fetch_company(r["ticker"], config.FY_LIST)
         except Exception as e:  # noqa: BLE001 - one bad company never stops the feed
             failed += 1
             print(f"FAILED ({type(e).__name__})")

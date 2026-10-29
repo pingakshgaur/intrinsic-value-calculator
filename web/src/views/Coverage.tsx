@@ -6,8 +6,7 @@ import { isNum, isoWhen, money, pct, shortName, signed, slug } from "../lib/form
 import { HM_COLOR, LABELS, LABEL_HEX, LEAD_SHORT, LENSES, LENS_COLOR, LENS_NAME, scoreColor } from "../lib/labels";
 import { Diverge, Empty, Icon, LabelBadge, Meter, PageHeader, Panel, QueryView, RangeBar } from "../components/ui";
 import { Column, DataGrid, GridTools, useGridState } from "../components/DataGrid";
-import { RunButton } from "../components/RunButton";
-import { ExportButton } from "../components/ExportButton";
+import { ResearchLauncher } from "../components/ResearchLauncher";
 import { useScope } from "../lib/scope";
 import { ScopeNote } from "../components/ScopePicker";
 
@@ -23,16 +22,16 @@ export function Coverage() {
           !d.available || !d.verdicts.length ? (
             <>
               <PageHeader crumbs={[{ label: "Analysis" }, { label: "Coverage" }]} title="Coverage" />
-              <Panel><Empty icon="table" title="No research yet" action={<RunButton kind="agents" label="Run research" icon="rocket" />}>
+              <Panel><Empty icon="table" title="No research yet" action={<ResearchLauncher />}>
                 Every company gets a HYBRID MODEL value with its range, confidence, red flags and the evidence behind each finding.
               </Empty></Panel>
             </>
           ) : scope.list && !d.verdicts.some((v) => scope.has({ ticker: v.ticker, company: v.company })) ? (
             <>
-              <PageHeader crumbs={[{ label: "Analysis" }, { label: "Coverage" }]} title="Coverage" />
+              <PageHeader crumbs={[{ label: "Analysis" }, { label: "Coverage" }]} title="Coverage" actions={<ResearchLauncher />} />
               <ScopeNote shown={0} total={d.verdicts.length} />
               <Panel><Empty icon="library" title={`No company on “${scope.list.name}” has been researched yet`} action={<button className="btn sec" onClick={() => scope.set(null)}>Show every company</button>}>
-                Open the list and use <b>Research this list</b>, or run research on the whole universe.
+                Use <b>Research</b> above and pick the list, or open the list and use <b>Research this list</b>.
               </Empty></Panel>
             </>
           ) : <Grid verdicts={scope.list ? d.verdicts.filter((v) => scope.has({ ticker: v.ticker, company: v.company })) : d.verdicts} total={d.verdicts.length} sub={`Run #${d.meta?.run_id} · ${d.meta?.mode} · ${isoWhen(d.meta?.started)}`} />
@@ -90,8 +89,8 @@ function Grid({ verdicts, total, sub }: { verdicts: Verdict[]; total: number; su
 
   return (
     <>
-      <PageHeader crumbs={[{ label: "Analysis" }, { label: "Coverage" }]} title="Coverage" sub={sub}
-        actions={<><ExportButton title="Coverage" table={exportTable} label="Export data" className="btn sec" /><RunButton kind="agents" options={{ quick: true }} label="Quick sweep" icon="zap" secondary /><RunButton kind="agents" label="Run research" icon="rocket" /></>} />
+      <PageHeader crumbs={[{ label: "Analysis" }, { label: "Coverage" }]} title="Coverage" sub={sub} data={exportTable}
+        actions={<ResearchLauncher />} />
       <ScopeNote shown={verdicts.length} total={total} />
       <div className={`split ${sel ? "" : "closed"}`}>
         <section className="panel" style={{ minHeight: 0 }}>

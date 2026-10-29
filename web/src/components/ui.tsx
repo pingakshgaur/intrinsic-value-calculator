@@ -4,6 +4,7 @@ import { UseQueryResult } from "@tanstack/react-query";
 import { LABEL_COLOR } from "../lib/labels";
 import { isNum, money } from "../lib/format";
 import { ExportButton } from "./ExportButton";
+import type { TableData } from "./ExportButton";
 
 export function Icon({ name, className = "", title, style }: { name: string; className?: string; title?: string; style?: React.CSSProperties }) {
   return <i className={`codicon codicon-${name} ${className}`} title={title} aria-hidden={title ? undefined : true} style={style} />;
@@ -31,7 +32,8 @@ export function Panel({ title, meta, tools, children, flush, className = "", sty
   );
 }
 
-export function PageHeader({ crumbs, title, sub, actions }: { crumbs?: { label: string; to?: string }[]; title: ReactNode; sub?: ReactNode; actions?: ReactNode }) {
+/** `data`: the page's rows, offered in the same download menu as the whole page. */
+export function PageHeader({ crumbs, title, sub, actions, data }: { crumbs?: { label: string; to?: string }[]; title: ReactNode; sub?: ReactNode; actions?: ReactNode; data?: () => TableData }) {
   const ref = useRef<HTMLDivElement>(null);
   const name = typeof title === "string" ? title : "Page";
   return (
@@ -52,7 +54,7 @@ export function PageHeader({ crumbs, title, sub, actions }: { crumbs?: { label: 
       </div>
       <div className="acts">
         {actions}
-        <ExportButton title={name} kind="page" target={() => (ref.current?.closest(".page") as HTMLElement | null) ?? null} label="Export page" className="btn sec" tip={`Export the whole ${name} page (PDF or Word)`} />
+        <ExportButton title={name} kind="page" data={data} target={() => (ref.current?.closest(".page") as HTMLElement | null) ?? null} label="Export page" className="btn sec" tip={data ? `Download the ${name} data (CSV, Excel) or the whole page (PDF, Word)` : `Export the whole ${name} page (PDF or Word)`} />
       </div>
     </div>
   );
