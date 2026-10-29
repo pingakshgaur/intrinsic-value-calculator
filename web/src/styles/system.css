@@ -727,3 +727,6 @@ table.dg tbody tr.checked td:first-child { box-shadow: inset 2px 0 0 var(--accen
 table.dg td.wrap { white-space: normal; min-width: 220px; line-height: 1.45; padding-top: 6px; padding-bottom: 6px; }
 .seg button:disabled { opacity: .4; cursor: default; }
 .seg button:disabled:hover { color: var(--fg-2); }
+/* a panel's tools never squeeze a segmented control: on a narrow panel the header wraps instead */
+.panel-h .tools .seg { flex: none; }
+@media (max-width: 900px) { .panel-h { height: auto; min-height: 40px; flex-wrap: wrap; padding-top: 6px; padding-bottom: 6px; } }
