@@ -61,6 +61,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       { id: "r-learn", group: "Run", label: "Refresh training data", icon: "cloud-download", run: job("learn") },
       { id: "r-retrain", group: "Run", label: "Refresh training data and retrain", icon: "sync", run: job("learn", { retrain: true }) },
       { id: "p-ai", group: "Go to", label: "Configuration · AI providers", icon: "sparkle", run: go("/configuration?section=ai") },
+      { id: "p-ollama", group: "Go to", label: "Configuration · Local AI (Ollama) · free models on this computer", icon: "vm", run: go("/configuration?section=local") },
       { id: "p-src", group: "Go to", label: "Configuration · data sources (NSE, BSE, Screener.in…)", icon: "database", run: go("/configuration?section=sources") },
       { id: "p-help", group: "Go to", label: "Glossary", icon: "book", hint: "?", run: app.openHelp },
       { id: "r-full", group: "Run", label: "Full research (23 agents)", icon: "rocket", run: job("agents") },

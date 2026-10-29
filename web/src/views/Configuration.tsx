@@ -10,11 +10,13 @@ import { useApp } from "../components/workbenchContext";
 import { NotifySettings } from "../components/NotifySettings";
 import { AiProviders } from "../components/AiProviders";
 import { DataSources } from "../components/DataSources";
+import { OllamaPanel } from "../components/OllamaPanel";
 
 const SECTIONS = [
   { id: "run", label: "Run settings", icon: "settings" },
   { id: "sources", label: "Data sources", icon: "database" },
   { id: "ai", label: "AI providers", icon: "sparkle" },
+  { id: "local", label: "Local AI (Ollama)", icon: "vm" },
   { id: "agents", label: "Research agents", icon: "organization" },
   { id: "notify", label: "Notifications & sounds", icon: "bell" },
   { id: "macro", label: "Macro inputs", icon: "globe" },
@@ -37,6 +39,7 @@ export function Configuration() {
           {section === "run" && <RunSettings />}
           {section === "sources" && <DataSources />}
           {section === "ai" && <><AiProviders /><YamlFields kind="llm" /></>}
+          {section === "local" && <OllamaPanel />}
           {section === "agents" && <YamlFields kind="agents" />}
           {section === "macro" && <YamlFields kind="macro" />}
           {section === "notify" && <Panel title="Notifications & sounds" meta="saved in this browser"><NotifySettings wide /></Panel>}

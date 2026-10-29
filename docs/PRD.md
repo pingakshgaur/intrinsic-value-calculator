@@ -164,7 +164,7 @@ AI is optional: every number is calculated by ordinary code, and AI is used only
 
 **Providers.** INTVAL talks to free-tier services from Groq, Google Gemini and NVIDIA through the same standard interface, so any similar service can be added in settings. The user pastes their own keys in Configuration → AI providers, picks a model from each provider's live list, and presses **Test** to see the provider's exact reply.
 
-**Local models.** Below the keys, a *Local models (Ollama)* section lets the agents use free models running on the user's own computer, with no key and no daily limit:
+**Local models.** Configuration → *Local AI (Ollama)*, its own section in the Configuration menu, lets the agents use free models running on the user's own computer, with no key and no daily limit:
 
 - It shows whether Ollama is installed and running, the models already downloaded, and the free disk space.
 - The user downloads a free model from a list of 18, filtered by how much storage they can spare (up to 1, 2, 5 or 10 GB), or names any other model. Progress is shown live, and models that would not fit on the disk cannot be chosen.

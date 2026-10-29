@@ -322,7 +322,7 @@ original defaults worked. So:
   They are tried in order: a rate-limited key hands over to the next, a
   rejected key is skipped for the rest of the run. Test, reorder or remove
   each key; only the last four characters are ever shown.
-- **Local models (Ollama)**, in their own section below the keys
+- **Local models (Ollama)**, in their own section: Configuration → Local AI (Ollama)
   ([`server/ollama_api.py`](../server/ollama_api.py)):
   - Shows whether Ollama is installed and running, the models already on
     this computer, and the free disk space where Ollama keeps them.

@@ -10,7 +10,7 @@ It ships with a command-line interface, a browser app (`python run.py --web`), a
 
 > **New: Market Intelligence Agents.** `python run.py --agents` runs a 23-agent research team: news, filings, forensics, ownership, macro and geopolitics, plus bull/bear review. The team turns its findings into an agent-adjusted intrinsic value, with every constant editable in [`agent_settings.yaml`](agent_settings.yaml). It can run on GitHub's cloud on a schedule, using free Groq / Gemini / NVIDIA API keys. See [docs/AGENTS.md](docs/AGENTS.md).
 
-> **New: local AI with Ollama.** The agents can also use free models running on your own computer, with no API key or daily limit. Configuration → AI providers → *Local models (Ollama)* finds the models you already have, downloads new ones sized to the disk space you can spare, and switches them on or off. Ollama opens with INTVAL and stays open after it stops. See [docs/WEB.md](docs/WEB.md#ai-models).
+> **New: local AI with Ollama.** The agents can also use free models running on your own computer, with no API key or daily limit. Configuration → *Local AI (Ollama)* finds the models you already have, downloads new ones sized to the disk space you can spare, and switches them on or off. Ollama opens with INTVAL and stays open after it stops. See [docs/WEB.md](docs/WEB.md#ai-models).
 
 > **New: installers.** Share INTVAL with people who don't have Python: `packaging/` builds a Windows setup `.exe` and a Linux setup wizard (folder choice, desktop shortcut, launch when finished, uninstaller). See [Installers](#installers-share-it-without-python).
 
