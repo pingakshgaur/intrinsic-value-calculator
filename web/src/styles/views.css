@@ -641,3 +641,13 @@
 .pa.row-form .pa-f { grid-template-columns: repeat(2, minmax(140px, 220px)) auto; align-items: end; justify-content: start; }
 .pa .fld { margin: 0; }
 @media (max-width: 640px) { .pa.row-form .pa-f { grid-template-columns: 1fr 1fr; } }
+
+/* the note, folded into a button under the figures; it opens as a floating panel */
+.pb-right { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 0; max-width: 100%; }
+.pb-right .pb-figs { margin-left: 0; }
+.pb-note { max-width: 320px; }
+.pb-note .ellipsis { min-width: 0; }
+.pb-note:not(.has) .ellipsis { color: var(--fg-3); }
+.pb-note-pop { width: 360px; max-width: calc(100vw - 24px); padding: 12px; }
+.pb-note-b { display: flex; flex-direction: column; gap: 10px; }
+.pb-note-b .nb textarea { min-height: 110px; }

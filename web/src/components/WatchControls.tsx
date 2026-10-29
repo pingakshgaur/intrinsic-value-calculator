@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWatchlistMutations, useWatchlists, useWatchMutations, WatchItem, WatchList } from "../lib/live";
 import { isNum, num, when } from "../lib/format";
@@ -43,16 +43,23 @@ export function PriceAlerts({ w, row }: { w: WatchItem; row?: boolean }) {
 }
 
 /** Why you watch it, which lists it is on, and taking it off this one. */
-export function NoteBox({ w, list, onRemoved, titled }: { w: WatchItem; list?: WatchList | null; onRemoved?: () => void; titled?: boolean }) {
+export function NoteBox({ w, list, onRemoved, titled, autoFocus }: { w: WatchItem; list?: WatchList | null; onRemoved?: () => void; titled?: boolean; autoFocus?: boolean }) {
   const m = useWatchMutations();
   const app = useApp();
   const [note, setNote] = useState(w.note ?? "");
   useEffect(() => { setNote(w.note ?? ""); }, [w.ticker, w.note]);
+  // in a floating panel the box is placed (and made visible) a frame after it mounts: focus it then
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!autoFocus) return;
+    const id = requestAnimationFrame(() => requestAnimationFrame(() => { const el = box.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }));
+    return () => cancelAnimationFrame(id);
+  }, [autoFocus]);
   const dirty = note !== (w.note ?? "");
   const save = () => m.update.mutate({ ticker: w.ticker, note }, { onSuccess: () => app.toast("Note saved", "ok"), onError: err(app) });
   return (
     <div className="nb">
-      <label className="fld">{!titled && <span>Note</span>}<textarea className="inp" rows={4} aria-label="Note" value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="Why you are watching it"
+      <label className="fld">{!titled && <span>Note</span>}<textarea ref={box} className="inp" rows={4} aria-label="Note" value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="Why you are watching it"
         onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && dirty) save(); }} /></label>
       <div className="row">
         <button className="btn sm" disabled={!dirty || m.update.isPending} onClick={save}>Save</button>

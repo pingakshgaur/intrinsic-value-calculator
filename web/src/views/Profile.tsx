@@ -7,7 +7,7 @@ import { useWatchlist, WatchItem, WatchList } from "../lib/live";
 import { isNum, money, pct, shortName, signed, slug, titleCase } from "../lib/format";
 import { AGENT_NAME, HM_COLOR, LEAD_ICON, LEAD_SHORT, scoreColor } from "../lib/labels";
 import { companyPath, findVerdict, listCompanyPath } from "../lib/company";
-import { Diverge, Empty, Icon, LabelBadge, Meter, Panel, QueryView, Tip } from "../components/ui";
+import { Diverge, Empty, Icon, LabelBadge, Meter, Panel, Popover, QueryView, Tip } from "../components/ui";
 import { Bridge, LensContribution, RangeLegend, RateStack, ValueRange } from "../components/charts";
 import { RunButton } from "../components/RunButton";
 import { ModelForecasts, useOneYearView } from "../components/ModelForecasts";
@@ -163,12 +163,28 @@ function CompanyPage({ v, w, list, ticker, nav: n, homeList, researchLoading }: 
             {q?.chg_pct != null && <span className={`tag ${q.chg_pct >= 0 ? "up" : "down"}`}>{pct(q.chg_pct, 2, true)} today</span>}
           </div>
         </div>
-        <div className="pb-figs">
-          <div><div className="k">{q?.last ? "Live price" : "Price"}</div><div className="v" style={{ color: "var(--price)" }}>{money(price)}</div></div>
-          <div><div className="k">HYBRID MODEL</div><div className="v" style={{ color: HM_COLOR }}>{money(value)}</div></div>
-          <div><div className="k">Upside</div><div className={`v ${isNum(upside) ? (upside >= 0 ? "up" : "down") : ""}`}>{pct(upside, 1, true)}</div></div>
-          <div><div className="k">Buy-below</div><div className="v">{money(q?.hm?.buy_below ?? v?.buy_below, 0)}</div></div>
-          <div><div className="k">Confidence</div><div className="v">{isNum(q?.hm?.confidence ?? v?.confidence) ? (q?.hm?.confidence ?? v!.confidence)!.toFixed(0) : "—"}</div></div>
+        <div className="pb-right">
+          <div className="pb-figs">
+            <div><div className="k">{q?.last ? "Live price" : "Price"}</div><div className="v" style={{ color: "var(--price)" }}>{money(price)}</div></div>
+            <div><div className="k">HYBRID MODEL</div><div className="v" style={{ color: HM_COLOR }}>{money(value)}</div></div>
+            <div><div className="k">Upside</div><div className={`v ${isNum(upside) ? (upside >= 0 ? "up" : "down") : ""}`}>{pct(upside, 1, true)}</div></div>
+            <div><div className="k">Buy-below</div><div className="v">{money(q?.hm?.buy_below ?? v?.buy_below, 0)}</div></div>
+            <div><div className="k">Confidence</div><div className="v">{isNum(q?.hm?.confidence ?? v?.confidence) ? (q?.hm?.confidence ?? v!.confidence)!.toFixed(0) : "—"}</div></div>
+          </div>
+          {w && (
+            <Popover className="pop pb-note-pop" align="end" trigger={(open, toggle) => (
+              <button className={`btn sm sec pb-note ${open ? "on" : ""} ${w.note ? "has" : ""}`} onClick={toggle} aria-expanded={open} title={w.note ? w.note : "Write a note on why you watch it"}>
+                <Icon name="note" className="sm" /><span className="ellipsis">{w.note ? w.note : "Add a note"}</span><Icon name={open ? "chevron-up" : "chevron-down"} className="xs" />
+              </button>
+            )}>
+              {(close) => (
+                <div className="pb-note-b">
+                  <div className="row" style={{ gap: 6 }}><b className="small">Note</b><span className="xs faint">{list ? `on “${list.name}”` : homeList ? "on your watchlists" : ""}</span><span className="spacer" /><button className="ibtn sm" onClick={close} title="Close"><Icon name="close" className="xs" /></button></div>
+                  <NoteBox titled autoFocus w={w} list={list} onRemoved={() => { close(); if (list) nav(`/watchlist/${encodeURIComponent(list.id)}`); }} />
+                </div>
+              )}
+            </Popover>
+          )}
         </div>
         <div className="row">
           {v && <Link to={`/studio?company=${slug(v.company)}`} className="btn sm sec"><Icon name="beaker" className="sm" />Studio</Link>}
@@ -184,9 +200,6 @@ function CompanyPage({ v, w, list, ticker, nav: n, homeList, researchLoading }: 
           <nav className="anchors" aria-label="Sections">
             {sections.map((x) => <a key={x.id} href={`#${x.id}`} className={on === x.id ? "on" : ""} onClick={(e) => { e.preventDefault(); go(x.id); }}><Icon name={x.icon} className="sm" />{x.label}</a>)}
           </nav>
-          {w && <Panel title="Note" meta={list ? `on “${list.name}”` : homeList ? "on your watchlists" : undefined} className="side-note" noExport>
-            <NoteBox titled w={w} list={list} onRemoved={() => list && nav(`/watchlist/${encodeURIComponent(list.id)}`)} />
-          </Panel>}
         </aside>
         <div className="col" style={{ gap: 28, minWidth: 0 }}>
           {ticker && (
