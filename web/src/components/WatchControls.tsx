@@ -6,28 +6,54 @@ import { Icon } from "./ui";
 import { useApp } from "./workbenchContext";
 import { ActionMenu } from "./Select";
 
-/** A watched company's price alerts, note and lists - the same form in the side panel and on its page. */
+/** A watched company's price alerts, note and lists - the watchlist side panel shows both parts together. */
 export function WatchControls({ w, list, onRemoved }: { w: WatchItem; list?: WatchList | null; onRemoved?: () => void }) {
+  return (
+    <div className="wl-form">
+      <PriceAlerts w={w} />
+      <NoteBox w={w} list={list} onRemoved={onRemoved} />
+    </div>
+  );
+}
+
+const err = (app: ReturnType<typeof useApp>) => (e: unknown) => app.toast(e instanceof Error ? e.message : String(e), "error");
+
+/** Alert levels: one row of two prices and Save (under the chart on a company's page). */
+export function PriceAlerts({ w, row }: { w: WatchItem; row?: boolean }) {
   const m = useWatchMutations();
   const app = useApp();
   const [below, setBelow] = useState(w.alert_below?.toString() ?? "");
   const [above, setAbove] = useState(w.alert_above?.toString() ?? "");
-  const [note, setNote] = useState(w.note ?? "");
-  useEffect(() => { setBelow(w.alert_below?.toString() ?? ""); setAbove(w.alert_above?.toString() ?? ""); setNote(w.note ?? ""); }, [w.ticker, w.alert_below, w.alert_above, w.note]);
-  const dirty = below !== (w.alert_below?.toString() ?? "") || above !== (w.alert_above?.toString() ?? "") || note !== (w.note ?? "");
-  const save = () => m.update.mutate({ ticker: w.ticker, alert_below: below || null, alert_above: above || null, note }, {
-    onSuccess: () => app.toast("Alerts and note saved", "ok"), onError: (e) => app.toast(e instanceof Error ? e.message : String(e), "error"),
-  });
+  useEffect(() => { setBelow(w.alert_below?.toString() ?? ""); setAbove(w.alert_above?.toString() ?? ""); }, [w.ticker, w.alert_below, w.alert_above]);
+  const dirty = below !== (w.alert_below?.toString() ?? "") || above !== (w.alert_above?.toString() ?? "");
+  const save = () => m.update.mutate({ ticker: w.ticker, alert_below: below || null, alert_above: above || null }, { onSuccess: () => app.toast("Price alerts saved", "ok"), onError: err(app) });
   const last = w.quote?.last;
   return (
-    <div className="wl-form">
+    <div className={`pa ${row ? "row-form" : ""}`}>
       <div className="label">Price alerts</div>
-      <div className="row">
-        <label className="fld grow"><span>Alert when at or below</span><input className="inp sm num" inputMode="decimal" value={below} placeholder={isNum(last) ? num(last * 0.95, 0) : "price"} onChange={(e) => setBelow(e.target.value.replace(/[^\d.]/g, ""))} /></label>
-        <label className="fld grow"><span>Alert when at or above</span><input className="inp sm num" inputMode="decimal" value={above} placeholder={isNum(last) ? num(last * 1.05, 0) : "price"} onChange={(e) => setAbove(e.target.value.replace(/[^\d.]/g, ""))} /></label>
+      <div className="pa-f">
+        <label className="fld"><span>Alert when at or below</span><input className="inp sm num" inputMode="decimal" value={below} placeholder={isNum(last) ? num(last * 0.95, 0) : "price"} onChange={(e) => setBelow(e.target.value.replace(/[^\d.]/g, ""))} onKeyDown={(e) => e.key === "Enter" && dirty && save()} /></label>
+        <label className="fld"><span>Alert when at or above</span><input className="inp sm num" inputMode="decimal" value={above} placeholder={isNum(last) ? num(last * 1.05, 0) : "price"} onChange={(e) => setAbove(e.target.value.replace(/[^\d.]/g, ""))} onKeyDown={(e) => e.key === "Enter" && dirty && save()} /></label>
+        {row && <button className="btn sm" disabled={!dirty || m.update.isPending} onClick={save}>Save alerts</button>}
       </div>
       <span className="xs faint">Also alerted automatically when the price falls below the HYBRID MODEL buy-below, or moves more than the daily-move limit.</span>
-      <label className="fld"><span>Note</span><textarea className="inp" rows={3} value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="Why you are watching it" /></label>
+      {!row && <div className="row"><button className="btn sm" disabled={!dirty || m.update.isPending} onClick={save}>Save alerts</button></div>}
+    </div>
+  );
+}
+
+/** Why you watch it, which lists it is on, and taking it off this one. */
+export function NoteBox({ w, list, onRemoved, titled }: { w: WatchItem; list?: WatchList | null; onRemoved?: () => void; titled?: boolean }) {
+  const m = useWatchMutations();
+  const app = useApp();
+  const [note, setNote] = useState(w.note ?? "");
+  useEffect(() => { setNote(w.note ?? ""); }, [w.ticker, w.note]);
+  const dirty = note !== (w.note ?? "");
+  const save = () => m.update.mutate({ ticker: w.ticker, note }, { onSuccess: () => app.toast("Note saved", "ok"), onError: err(app) });
+  return (
+    <div className="nb">
+      <label className="fld">{!titled && <span>Note</span>}<textarea className="inp" rows={4} aria-label="Note" value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="Why you are watching it"
+        onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && dirty) save(); }} /></label>
       <div className="row">
         <button className="btn sm" disabled={!dirty || m.update.isPending} onClick={save}>Save</button>
         <span className="spacer" />

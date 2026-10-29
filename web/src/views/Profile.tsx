@@ -13,7 +13,7 @@ import { RunButton } from "../components/RunButton";
 import { ModelForecasts, useOneYearView } from "../components/ModelForecasts";
 import { ChartPanel } from "../components/ChartPanel";
 import { LiveForecast } from "../components/LiveForecast";
-import { AddToList, WatchControls } from "../components/WatchControls";
+import { AddToList, NoteBox, PriceAlerts } from "../components/WatchControls";
 import { plainSummary } from "../lib/plainSummary";
 
 const LIVE = { id: "live", label: "Live", icon: "pulse" };
@@ -180,16 +180,18 @@ function CompanyPage({ v, w, list, ticker, nav: n, homeList, researchLoading }: 
       </div>
 
       <div className="profile" style={{ marginTop: 16, ["--pb-h" as string]: `${barH}px` }}>
-        <nav className="anchors" aria-label="Sections">
-          {sections.map((x) => <a key={x.id} href={`#${x.id}`} className={on === x.id ? "on" : ""} onClick={(e) => { e.preventDefault(); go(x.id); }}><Icon name={x.icon} className="sm" />{x.label}</a>)}
-        </nav>
+        <aside className="profile-side">
+          <nav className="anchors" aria-label="Sections">
+            {sections.map((x) => <a key={x.id} href={`#${x.id}`} className={on === x.id ? "on" : ""} onClick={(e) => { e.preventDefault(); go(x.id); }}><Icon name={x.icon} className="sm" />{x.label}</a>)}
+          </nav>
+          {w && <Panel title="Note" meta={list ? `on “${list.name}”` : homeList ? "on your watchlists" : undefined} className="side-note" noExport>
+            <NoteBox titled w={w} list={list} onRemoved={() => list && nav(`/watchlist/${encodeURIComponent(list.id)}`)} />
+          </Panel>}
+        </aside>
         <div className="col" style={{ gap: 28, minWidth: 0 }}>
           {ticker && (
             <Section id="live" title="Live">
-              <div className={w ? "grid c-21" : ""}>
-                <Panel noExport><ChartPanel ticker={ticker} watch={w} height={300} compactHead /></Panel>
-                {w && <Panel title="Alerts and note" meta={list ? `on “${list.name}”` : homeList ? "on your watchlists" : undefined}><WatchControls w={w} list={list} onRemoved={() => list && nav(`/watchlist/${encodeURIComponent(list.id)}`)} /></Panel>}
-              </div>
+              <ChartPanel ticker={ticker} watch={w} height={520} compactHead extra={w ? <PriceAlerts w={w} row /> : undefined} />
               <LiveForecast ticker={ticker} />
             </Section>
           )}
