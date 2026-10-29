@@ -13,6 +13,7 @@ import { ChatMessage, RichText } from "../components/ChatMessage";
 import { ExportButton } from "../components/ExportButton";
 import { Empty, Icon, Popover, QueryView } from "../components/ui";
 import { useApp } from "../components/workbenchContext";
+import { Select } from "../components/Select";
 
 const SHOWN_KINDS: Kind[] = ["task", "finding", "request", "reply", "flag", "review", "summary", "verdict", "system", "user"];
 const READ_KEY = "rr.read.v1";
@@ -215,10 +216,9 @@ function Room({ roster }: { roster: Roster }) {
             </div>
             <span className={`live-dot ${active ? "on" : ""}`}>{active ? "Live" : ""}</span>
           </div>
-          <select className="sel sm" value={run ?? ""} onChange={(e) => set({ run: e.target.value || null })}>
-            <option value="">Latest run{feed.live?.run ? ` (#${feed.live.run.id})` : ""}</option>
-            {(runs.data ?? []).map((r) => <option key={r.id} value={r.id}>#{r.id} · {r.mode} · {r.started?.slice(5, 16).replace("T", " ")} · {r.messages ?? 0} msgs</option>)}
-          </select>
+          <Select size="sm" value={run == null ? "" : String(run)} onChange={(v) => set({ run: v || null })} ariaLabel="Which run" style={{ width: "100%" }}
+            options={[{ value: "", label: `Latest run${feed.live?.run ? ` (#${feed.live.run.id})` : ""}` },
+              ...(runs.data ?? []).map((r) => ({ value: String(r.id), label: `#${r.id} · ${r.mode} · ${r.started?.slice(5, 16).replace("T", " ") ?? ""}`, hint: `${r.messages ?? 0} msgs` }))]} />
           {active && prog && (
             <div className="rr-prog"><div style={{ width: `${(100 * prog.done) / Math.max(1, prog.total)}%` }} /><span>{prog.done}/{prog.total} companies · {prog.saved} calls saved</span></div>
           )}
@@ -290,11 +290,9 @@ function Room({ roster }: { roster: Roster }) {
           </div>
           <div className="rr-tools">
             <div className="search sm"><Icon name="search" /><input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Search" /></div>
-            <select className="sel sm" value={company} onChange={(e) => setCompany(e.target.value)} style={{ maxWidth: 170 }}>
-              <option value="">All companies</option>
-              {scope.list && <option value="@list">On {scope.list.name}</option>}
-              {companies.map((c) => <option key={c}>{c}</option>)}
-            </select>
+            <Select size="sm" value={company} onChange={setCompany} style={{ maxWidth: 170 }} ariaLabel="Company" menuWidth={260}
+              options={[{ value: "", label: "All companies" }, ...(scope.list ? [{ value: "@list", label: `On ${scope.list.name}`, icon: "eye" }] : []),
+                ...companies.map((c) => ({ value: c, label: c }))]} />
             <Popover trigger={(o, toggle) => <button className={`ibtn ${o || kinds.size ? "on" : ""}`} onClick={toggle} title="Filter by kind"><Icon name="filter" /></button>}>
               {() => (
                 <>

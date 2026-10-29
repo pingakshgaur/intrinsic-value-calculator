@@ -1,7 +1,12 @@
 import { inQuietHours, resetPrefs, setEvent, setPrefs, useNotifyPrefs } from "../lib/notify";
 import { EVENTS, playPreset, PRESETS } from "../lib/sound";
 import { Icon, Toggle } from "./ui";
+import { Select } from "./Select";
 import { useApp } from "./workbenchContext";
+
+/** every half hour of the day, plus a time set before this list existed */
+const HALF_HOURS = Array.from({ length: 48 }, (_, i) => `${String(i >> 1).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
+const timeOpts = (cur: string) => [...new Set([...HALF_HOURS, cur])].sort().map((t) => ({ value: t, label: t }));
 
 /** Every notification setting. `wide` lays the cues out as a table (Configuration). */
 export function NotifySettings({ wide = false }: { wide?: boolean }) {
@@ -50,8 +55,8 @@ export function NotifySettings({ wide = false }: { wide?: boolean }) {
         </Row>
         {p.quiet.on && (
           <div className="ns-quiet">
-            <label>From <input type="time" className="inp sm" value={p.quiet.from} onChange={(e) => setPrefs({ quiet: { ...p.quiet, from: e.target.value || "22:00" } })} /></label>
-            <label>to <input type="time" className="inp sm" value={p.quiet.to} onChange={(e) => setPrefs({ quiet: { ...p.quiet, to: e.target.value || "07:00" } })} /></label>
+            <span className="row" style={{ gap: 6 }}>From <Select size="sm" value={p.quiet.from} ariaLabel="Quiet from" options={timeOpts(p.quiet.from)} onChange={(v) => setPrefs({ quiet: { ...p.quiet, from: v } })} /></span>
+            <span className="row" style={{ gap: 6 }}>to <Select size="sm" value={p.quiet.to} ariaLabel="Quiet until" options={timeOpts(p.quiet.to)} onChange={(v) => setPrefs({ quiet: { ...p.quiet, to: v } })} /></span>
           </div>
         )}
       </section>
@@ -68,11 +73,9 @@ export function NotifySettings({ wide = false }: { wide?: boolean }) {
                   <span>{ev.desc}</span>
                 </div>
                 <div className="ns-cue-c">
-                  <select className="sel sm" value={e.preset} disabled={soundOff || !e.on}
-                    onChange={(x) => { setEvent(ev.id, { preset: x.target.value }); playPreset(x.target.value, e.volume * p.volume || 0.5); }}
-                    title={PRESETS[e.preset]?.hint}>
-                    {Object.entries(PRESETS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                  </select>
+                  <Select size="sm" value={e.preset} disabled={soundOff || !e.on} title={PRESETS[e.preset]?.hint} ariaLabel={`${ev.label} sound`}
+                    onChange={(v) => { setEvent(ev.id, { preset: v }); playPreset(v, e.volume * p.volume || 0.5); }}
+                    options={Object.entries(PRESETS).map(([k, v]) => ({ value: k, label: v.label }))} />
                   <input type="range" className="sl" min={0} max={1} step={0.05} value={e.volume} disabled={soundOff || !e.on}
                     onChange={(x) => setEvent(ev.id, { volume: Number(x.target.value) })} onPointerUp={() => playPreset(e.preset, e.volume * p.volume)} title={`${Math.round(e.volume * 100)}%`} />
                   <button className="ibtn sm" title="Preview" onClick={() => playPreset(e.preset, (e.volume * p.volume) || 0.5)} disabled={e.preset === "none"}><Icon name="play" className="xs" /></button>

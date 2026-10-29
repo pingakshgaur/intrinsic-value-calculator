@@ -4,6 +4,7 @@ import { useWatchlists, WatchList } from "../lib/live";
 import { useScope } from "../lib/scope";
 import { Icon, Popover } from "./ui";
 import { useApp } from "./workbenchContext";
+import { Select } from "./Select";
 
 const LAST = "research.target.v1";
 const ALL = "__all__";
@@ -47,10 +48,9 @@ export function ResearchLauncher({ list, secondary, small }: { list?: WatchList;
           <div className="label">Research</div>
           {!list && (
             <label className="fld"><span>Companies</span>
-              <select className="sel" value={chosen ? chosen.id : ALL} onChange={(e) => setTarget(e.target.value)}>
-                <option value={ALL}>Every covered company ({covered})</option>
-                {lists.length > 0 && <optgroup label="A watchlist">{lists.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.count})</option>)}</optgroup>}
-              </select>
+              <Select value={chosen ? chosen.id : ALL} onChange={setTarget} style={{ width: "100%" }}
+                options={[{ value: ALL, label: "Every covered company", hint: covered, icon: "table" },
+                  ...lists.map((l) => ({ value: l.id, label: l.name, hint: l.count, icon: "eye", group: "A watchlist" }))]} />
             </label>
           )}
           <div className="fld"><span>Depth</span>

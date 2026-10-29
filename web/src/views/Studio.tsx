@@ -10,6 +10,7 @@ import { Bridge, LensContribution, RangeLegend, ValueRange } from "../components
 import { Column, DataGrid, useGridState } from "../components/DataGrid";
 import { RunButton } from "../components/RunButton";
 import { useApp } from "../components/workbenchContext";
+import { Select } from "../components/Select";
 
 type Overrides = Record<string, number | boolean>;
 const CUR = "studio.overrides.v1";
@@ -295,10 +296,9 @@ function CompanyCanvas({ company, list, onPick, overrides, byPath, setOverrides,
     <>
       <section className="canvas">
         <div className="pane-h">
-          <select className="sel sm" value={company} onChange={(e) => onPick(e.target.value)} style={{ maxWidth: 280 }}>
-            <optgroup label="Research run (agent signals)">{list.filter((c) => c.source === "research").map((c) => <option key={c.company} value={c.company}>{shortName(c.company)}</option>)}</optgroup>
-            <optgroup label="Valuation report (accounts only)">{list.filter((c) => c.source === "report").map((c) => <option key={c.company} value={c.company}>{shortName(c.company)}</option>)}</optgroup>
-          </select>
+          <Select size="sm" value={company} onChange={onPick} style={{ maxWidth: 280 }} ariaLabel="Company" menuWidth={280}
+            options={[...list.filter((c) => c.source === "research").map((c) => ({ value: c.company, label: shortName(c.company), text: c.company, group: "Research run (agent signals)" })),
+              ...list.filter((c) => c.source === "report").map((c) => ({ value: c.company, label: shortName(c.company), text: c.company, group: "Valuation report (accounts only)" }))]} />
           {sim && <span className={`tag ${sim.source === "research" ? "hm" : ""}`}>{sim.source === "research" ? "agent signals" : "accounts only"} · FY{sim.fy}</span>}
           {busy && <Icon name="loading" className="spin faint sm" />}
           <span className="spacer" />

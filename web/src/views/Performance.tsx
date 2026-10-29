@@ -13,6 +13,7 @@ import { Empty, Icon, PageHeader, Panel, QueryView, Tabs, Tip } from "../compone
 import { RunButton } from "../components/RunButton";
 import { TrainingData } from "../components/TrainingData";
 import { Leaderboard } from "./CommandCenter";
+import { Select } from "../components/Select";
 
 type Tab = "board" | "sectors" | "company" | "training" | "files";
 // addresses of the tabs this page used to have
@@ -331,9 +332,7 @@ function useCompany(d: Valuation) {
 
 function Picker({ c }: { c: ReturnType<typeof useCompany> }) {
   return (
-    <select className="sel" value={c.company} onChange={(e) => c.set(e.target.value)} style={{ minWidth: 280 }}>
-      {c.companies.map((x) => <option key={x} value={x}>{shortName(x)}</option>)}
-    </select>
+    <Select value={c.company} onChange={c.set} style={{ minWidth: 280 }} ariaLabel="Company" options={c.companies.map((x) => ({ value: x, label: shortName(x), text: x }))} />
   );
 }
 

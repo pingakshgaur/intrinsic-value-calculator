@@ -16,6 +16,7 @@ import { ResearchLauncher } from "../components/ResearchLauncher";
 import { Icon, Popover, QueryView } from "../components/ui";
 import { ago } from "../lib/format";
 import { useApp } from "../components/workbenchContext";
+import { Select } from "../components/Select";
 
 interface Packet { g: Geom; t0: number; dur: number; el: SVGGElement; edge?: string; to: string; dir: Pt }
 interface Spring { x: number; y: number; vx: number; vy: number }
@@ -648,10 +649,10 @@ function Network({ roster }: { roster: Roster }) {
           <b>Agent Network</b>
           <span className={`live-dot ${live ? "on" : ""}`}>{live ? "Live" : "Replay"}</span>
         </div>
-        <select className="sel sm" value={run ?? ""} onChange={(e) => { const p = new URLSearchParams(params); if (e.target.value) p.set("run", e.target.value); else p.delete("run"); setParams(p, { replace: true }); }} title="Which run to show">
-          <option value="">{feed.live?.active ? "Live run" : "Latest run"}{runInfo ? ` (#${runInfo.id})` : ""}</option>
-          {(runs.data ?? []).map((r) => <option key={r.id} value={r.id}>#{r.id} · {r.mode} · {r.started?.slice(5, 16).replace("T", " ")}</option>)}
-        </select>
+        <Select size="sm" value={run == null ? "" : String(run)} title="Which run to show" ariaLabel="Which run to show" style={{ maxWidth: 220 }} menuWidth={260}
+          onChange={(v) => { const p = new URLSearchParams(params); if (v) p.set("run", v); else p.delete("run"); setParams(p, { replace: true }); }}
+          options={[{ value: "", label: `${feed.live?.active ? "Live run" : "Latest run"}${runInfo ? ` (#${runInfo.id})` : ""}` },
+            ...(runs.data ?? []).map((r) => ({ value: String(r.id), label: `#${r.id} · ${r.mode}`, hint: r.started?.slice(5, 16).replace("T", " ") }))]} />
         <div className="net-find">
           <div className="search sm"><Icon name="search" /><input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find an agent"
             onKeyDown={(e) => { if (e.key === "Enter" && searchHits[0]) { pick(searchHits[0].id); setFind(""); } else if (e.key === "Escape") setFind(""); }} /></div>
@@ -939,7 +940,7 @@ function Network({ roster }: { roster: Roster }) {
             <Density replay={replay} span={span} />
             <input type="range" className="sl" min={0} max={span} step={0.1} value={clockShow} onChange={(e) => seek(Number(e.target.value))} aria-label="Replay position" />
             <span className="mono xs">{fmtClock(clockShow)} / {fmtClock(span)}</span>
-            <select className="sel sm" value={speed} onChange={(e) => setSpeed(Number(e.target.value))} aria-label="Replay speed">{[1, 2, 4, 8, 16].map((s) => <option key={s} value={s}>{s}×</option>)}</select>
+            <Select size="sm" value={speed} onChange={setSpeed} ariaLabel="Replay speed" options={[1, 2, 4, 8, 16].map((s) => ({ value: s, label: `${s}×` }))} />
           </div>
         ) : (
           <div className="net-transport">

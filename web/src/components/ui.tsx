@@ -1,4 +1,6 @@
-import { Component, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Component, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { popupOpen, useDismiss, usePlacement } from "../lib/popup";
 import { Link } from "react-router-dom";
 import { UseQueryResult } from "@tanstack/react-query";
 import { LABEL_COLOR } from "../lib/labels";
@@ -158,7 +160,8 @@ export function Toggle({ checked, onChange, label, disabled }: { checked: boolea
 
 export function Drawer({ title, icon, onClose, children, wide, footer, actions }: { title: ReactNode; icon?: string; onClose: () => void; children: ReactNode; wide?: boolean; footer?: ReactNode; actions?: ReactNode }) {
   useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    // a menu open inside the drawer takes Escape first
+    const k = (e: KeyboardEvent) => e.key === "Escape" && !popupOpen() && onClose();
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, [onClose]);
@@ -177,32 +180,24 @@ export function Drawer({ title, icon, onClose, children, wide, footer, actions }
   );
 }
 
-/** Click-outside popover anchored to its trigger. */
-export function Popover({ trigger, children, className = "menu" }: { trigger: (open: boolean, toggle: () => void) => ReactNode; children: (close: () => void) => ReactNode; className?: string }) {
+/**
+ * A popup anchored to its trigger - menus and small panels. It is drawn on the
+ * page's top layer (see lib/popup.ts), so a scrolling table or a clipped panel
+ * never cuts it off, it stays inside the window, and it opens upwards when
+ * there is no room below. Click outside or Escape closes it.
+ */
+export function Popover({ trigger, children, className = "menu", align = "end" }: { trigger: (open: boolean, toggle: () => void) => ReactNode; children: (close: () => void) => ReactNode; className?: string; align?: "start" | "end" }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    const k = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", h);
-    window.addEventListener("keydown", k);
-    return () => { document.removeEventListener("mousedown", h); window.removeEventListener("keydown", k); };
-  }, [open]);
-  // keep the popup inside the window (narrow windows, buttons near an edge)
   const pop = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const el = pop.current;
-    if (!open || !el) return;
-    el.style.translate = "";
-    const r = el.getBoundingClientRect();
-    const dx = r.left < 8 ? 8 - r.left : r.right > innerWidth - 8 ? Math.max(8 - r.left, innerWidth - 8 - r.right) : 0;
-    if (dx) el.style.translate = `${dx}px 0`;
-  }, [open]);
+  const close = useMemo(() => () => setOpen(false), []);
+  const refs = useMemo(() => [ref, pop], []);
+  useDismiss(open, close, refs);
+  const place = usePlacement(open, ref, pop, align);
   return (
     <div ref={ref} style={{ position: "relative" }}>
       {trigger(open, () => setOpen((o) => !o))}
-      {open && <div ref={pop} className={className}>{children(() => setOpen(false))}</div>}
+      {open && createPortal(<div ref={pop} className={className} style={place}>{children(close)}</div>, document.body)}
     </div>
   );
 }

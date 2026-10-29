@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ModelTestResult, OllamaCatalogItem, OllamaStatus } from "../lib/api";
 import { ErrorNote, Icon, Loading, Panel, Toggle } from "./ui";
 import { useApp } from "./workbenchContext";
+import { Select } from "./Select";
 
 const err = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const GB = 1024 ** 3;
@@ -99,10 +100,8 @@ function Installed({ d, busy, onSave, onDelete }: { d: OllamaStatus; busy: strin
       <div className="ol-tiers">
         {(["fast", "smart"] as const).map((tier) => (
           <label key={tier} className="fld grow"><span>{tier === "fast" ? "Fast model (bulk reading)" : "Smart model (reasoning and writing)"}</span>
-            <select className="sel sm" value={d.chosen[tier] ?? ""} disabled={busy === "models"} onChange={(e) => e.target.value && choose(tier, e.target.value)}>
-              {!d.chosen[tier] && <option value="">- choose -</option>}
-              {d.models.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
-            </select></label>
+            <Select size="sm" value={d.chosen[tier] ?? null} placeholder="Choose a model…" disabled={busy === "models" || !d.models.length} onChange={(v) => choose(tier, v)}
+              options={d.models.map((m) => ({ value: m.name, label: m.name, hint: [m.params, m.quant].filter(Boolean).join(" · ") || undefined }))} /></label>
         ))}
       </div>
       <div className="scroll-x" style={{ marginTop: 8 }}>

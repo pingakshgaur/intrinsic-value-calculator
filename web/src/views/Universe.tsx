@@ -8,6 +8,7 @@ import { useApp } from "../components/workbenchContext";
 import { ScopeNote } from "../components/ScopePicker";
 import { useScope } from "../lib/scope";
 import { useWatchlistMutations } from "../lib/live";
+import { ActionMenu, Combobox, Select } from "../components/Select";
 
 const CAPS = ["Large", "Mid", "Small", ""];
 const TICKER = /^[A-Za-z0-9&\-_.]{0,30}$/;
@@ -125,19 +126,16 @@ function Editor({ initial }: { initial: Company[] }) {
       <section className="panel" style={{ flex: 1, minHeight: 0 }}>
         <div className="toolbar">
           <div className="search" style={{ width: 260 }}><Icon name="search" /><input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by name, sector or ticker" /></div>
-          <select className="sel" value={sector} onChange={(e) => setSector(e.target.value)}><option value="">All sectors</option>{sectors.map((s) => <option key={s}>{s}</option>)}</select>
+          <Select value={sector} onChange={setSector} ariaLabel="Sector" style={{ minWidth: 180 }} options={[{ value: "", label: "All sectors" }, ...sectors.map((s) => ({ value: s, label: s }))]} />
           {scope.list && <button className={`btn sm sec ${onlyList ? "on" : ""}`} onClick={() => setOnlyList(!onlyList)} title={onlyList ? "Show the whole universe" : `Show only “${scope.list.name}”`}><Icon name="filter" className="sm" />{onlyList ? `Only ${scope.list.name}` : "Whole universe"}</button>}
           <button className="btn sec sm" onClick={() => { setFilter(""); setSector(""); setRows((rs) => [{ name: "", sector: "", cap: "Large", ticker: "", _k: ++seq }, ...rs]); }}><Icon name="add" className="sm" />Add row</button>
           {checked.size > 0 && (
             <>
               <span className="tag">{checked.size} selected</span>
-              <select className="sel sm" value="" onChange={(e) => { const s = e.target.value; if (s) setRows((rs) => rs.map((r) => (checked.has(r._k) ? { ...r, sector: s } : r))); }}>
-                <option value="">Set sector…</option>{sectors.map((s) => <option key={s}>{s}</option>)}
-              </select>
+              <ActionMenu small label="Set sector" icon="symbol-class" items={sectors.map((s) => ({ label: s, onClick: () => setRows((rs) => rs.map((r) => (checked.has(r._k) ? { ...r, sector: s } : r))) }))} />
               {scope.lists.length > 0 && (
-                <select className="sel sm" value="" disabled={lm.addMany.isPending} onChange={(e) => { const l = scope.lists.find((x) => x.id === e.target.value); if (l) addToList(l.id, l.name); }} title="Track the selected companies on a watchlist">
-                  <option value="">Add to watchlist…</option>{scope.lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
+                <ActionMenu small label="Add to watchlist" icon="eye" disabled={lm.addMany.isPending} title="Track the selected companies on a watchlist"
+                  items={scope.lists.map((l) => ({ label: l.name, onClick: () => addToList(l.id, l.name) }))} />
               )}
               <button className="btn danger sm" onClick={() => { setRows((rs) => rs.filter((r) => !checked.has(r._k))); setChecked(new Set()); }}><Icon name="trash" className="sm" />Delete</button>
             </>
@@ -146,7 +144,6 @@ function Editor({ initial }: { initial: Company[] }) {
           {dirty && <span className="tag info">unsaved</span>}
           <span className="faint xs">Ticker: NSE symbol + .NS (BSE .BO); blank = look up by name</span>
         </div>
-        <datalist id="sectors">{sectors.map((s) => <option key={s} value={s} />)}</datalist>
         <div className="dg-wrap">
           <table className="dg dense">
             <thead><tr>
@@ -161,9 +158,9 @@ function Editor({ initial }: { initial: Company[] }) {
                   <tr key={r._k} className={checked.has(r._k) ? "sel" : ""}>
                     <td><input type="checkbox" className="cb" checked={checked.has(r._k)} onChange={() => { const s = new Set(checked); if (s.has(r._k)) s.delete(r._k); else s.add(r._k); setChecked(s); }} /></td>
                     <td title={pb}>{pb && <Icon name="warning" className={`sm ${hard ? "down" : "warn"}`} />}</td>
-                    <td className="edit"><input className={`inp ${pb === "duplicate name" ? "bad" : ""}`} value={r.name} placeholder="Company name" onChange={(e) => update(r._k, { name: e.target.value })} /></td>
-                    <td className="edit"><input className="inp" list="sectors" value={r.sector} placeholder="Sector" onChange={(e) => update(r._k, { sector: e.target.value })} /></td>
-                    <td className="edit"><select className="sel" value={r.cap} onChange={(e) => update(r._k, { cap: e.target.value })}>{CAPS.map((c) => <option key={c} value={c}>{c || "—"}</option>)}</select></td>
+                    <td className="edit"><input className={`inp ${pb === "duplicate name" ? "bad" : ""}`} value={r.name} title={r.name} placeholder="Company name" onChange={(e) => update(r._k, { name: e.target.value })} /></td>
+                    <td className="edit"><Combobox value={r.sector} placeholder="Sector" ariaLabel="Sector" style={{ width: "100%" }} suggestions={sectors} onChange={(v) => update(r._k, { sector: v })} /></td>
+                    <td className="edit"><Select value={r.cap} onChange={(v) => update(r._k, { cap: v })} ariaLabel="Size" style={{ width: "100%" }} options={CAPS.map((c) => ({ value: c, label: c || "—" }))} /></td>
                     <td className="edit"><input className={`inp mono ${pb?.startsWith("ticker") ? "bad" : ""}`} value={r.ticker} placeholder="TCS.NS" onChange={(e) => update(r._k, { ticker: e.target.value })} /></td>
                   </tr>
                 );

@@ -9,6 +9,7 @@ import { Column, DataGrid, GridTools, useGridState } from "../components/DataGri
 import { ResearchLauncher } from "../components/ResearchLauncher";
 import { useScope } from "../lib/scope";
 import { ScopeNote } from "../components/ScopePicker";
+import { Select } from "../components/Select";
 
 const EXPORT_TITLE = "Coverage";
 
@@ -96,7 +97,7 @@ function Grid({ verdicts, total, sub }: { verdicts: Verdict[]; total: number; su
         <section className="panel" style={{ minHeight: 0 }}>
           <div className="toolbar">
             <div className="search" style={{ width: 240 }}><Icon name="search" /><input value={text} onChange={(e) => setText(e.target.value)} placeholder="Filter by company or ticker" /></div>
-            <select className="sel" value={sector} onChange={(e) => setSector(e.target.value)}><option value="">All sectors</option>{sectors.map((s) => <option key={s}>{s}</option>)}</select>
+            <Select value={sector} onChange={setSector} ariaLabel="Sector" style={{ minWidth: 170 }} options={[{ value: "", label: "All sectors" }, ...sectors.map((s) => ({ value: s, label: s, hint: verdicts.filter((v) => v.sector === s).length }))]} />
             {LABELS.map((l) => {
               const n = verdicts.filter((v) => v.label === l).length;
               if (!n) return null;

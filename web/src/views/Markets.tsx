@@ -8,6 +8,7 @@ import { Column, DataGrid, GridTools, useGridState } from "../components/DataGri
 import { ChartPanel } from "../components/ChartPanel";
 import { Position, Spark } from "../components/Spark";
 import { useApp } from "../components/workbenchContext";
+import { Select } from "../components/Select";
 
 type Preset = "all" | "gainers" | "losers" | "active" | "volume" | "high52" | "low52" | "oversold" | "value";
 const PRESETS: { id: Preset; label: string; icon: string; hint: string }[] = [
@@ -205,8 +206,8 @@ function Scanner({ selected, onPick }: { selected: string; onPick: (t: string) =
       </div>
       <div className="toolbar">
         <div className="search" style={{ width: 200 }}><Icon name="search" /><input value={text} onChange={(e) => setText(e.target.value)} placeholder="Filter" /></div>
-        <select className="sel sm" value={list} onChange={(e) => setList(e.target.value)}>{LISTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-        <select className="sel sm" value={sector} onChange={(e) => setSector(e.target.value)} style={{ maxWidth: 200 }}><option value="">All sectors</option>{sectors.map((s) => <option key={s}>{s}</option>)}</select>
+        <Select size="sm" value={list} onChange={setList} ariaLabel="Which companies" options={LISTS.map(([v, l]) => ({ value: v, label: l }))} />
+        <Select size="sm" value={sector} onChange={setSector} style={{ maxWidth: 220 }} ariaLabel="Sector" options={[{ value: "", label: "All sectors" }, ...sectors.map((s) => ({ value: s, label: s }))]} />
         <span className="spacer" />
         <span className="xs faint">{PRESETS.find((p) => p.id === preset)?.hint} · {rows.length}</span>
       </div>

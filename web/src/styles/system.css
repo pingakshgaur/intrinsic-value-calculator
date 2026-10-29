@@ -349,10 +349,50 @@ table.dg td.edit .inp:focus, table.dg td.edit .sel:focus { border-color: var(--a
 .drawer-f { border-top: 1px solid var(--line); padding: 12px 16px; display: flex; gap: 8px; justify-content: flex-end; flex: none; }
 .pop { position: absolute; z-index: 60; top: calc(100% + 6px); right: 0; width: 380px; max-height: 480px; overflow: auto; background: var(--raise); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: var(--shadow-pop); animation: pop .12s ease; }
 .pop-h { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); font-weight: 600; color: var(--fg-1); position: sticky; top: 0; background: var(--raise); }
-.menu { position: absolute; z-index: 60; top: calc(100% + 4px); right: 0; min-width: 220px; background: var(--raise); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: var(--shadow-pop); padding: 4px; animation: pop .1s ease; }
-.menu label, .menu button { display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 8px; border-radius: 5px; border: 0; background: none; color: var(--fg); cursor: pointer; font-size: 12.5px; text-align: left; }
-.menu label:hover, .menu button:hover { background: var(--hover); }
-.menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+/* ------------------------------------------------------------- menus and dropdowns: one look everywhere
+   .menu (popovers, ActionMenu, Select's list .dd-menu) and .tc-menu (right-click
+   menus on charts and the Agent Network) share the surface, the 30px rows,
+   the hover, separators, group labels and the disabled and danger states. */
+.menu, .tc-menu, .tc-drop { z-index: 60; min-width: 220px; background: var(--raise); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: var(--shadow-pop); padding: 4px; animation: pop .1s ease; overflow: auto; }
+.menu { position: absolute; top: calc(100% + 4px); right: 0; }
+.menu label, .menu button, .menu a.menu-item, .tc-menu > button, .tc-drop > button {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 30px; padding: 0 8px; border-radius: 5px; border: 0; background: none;
+  color: var(--fg); cursor: pointer; font: inherit; font-size: 12.5px; text-align: left; white-space: nowrap; text-decoration: none; }
+.menu label:hover, .menu button:hover:not(:disabled), .tc-menu > button:hover:not(:disabled), .tc-drop > button:hover:not(:disabled) { background: var(--hover); color: var(--fg-1); }
+.menu button:disabled, .tc-menu > button:disabled { opacity: .45; cursor: default; }
+.menu button .codicon, .tc-menu > button .codicon, .tc-drop > button .codicon { color: var(--fg-2); flex: none; }
+/* the chosen entry of a menu that picks one thing: a check-style highlight, as in the dropdowns */
+.menu button.on, .tc-drop > button.on { color: var(--fg-1); font-weight: 500; background: var(--accent-bg); }
+.menu button.on .codicon, .tc-drop > button.on .codicon { color: var(--accent-2); }
+.menu button.danger, .tc-menu > button.danger { color: var(--down); }
+.menu button.danger .codicon, .tc-menu > button.danger .codicon { color: var(--down); }
+.menu button.danger:hover:not(:disabled), .tc-menu > button.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--down) 14%, transparent); }
+.menu hr, .tc-menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
+.menu kbd, .tc-menu kbd { margin-left: auto; }
+.menu .label, .tc-menu .tc-mh { display: block; padding: 6px 8px 3px; font-weight: 600; font-size: 10.5px; line-height: 1.3; letter-spacing: .05em; text-transform: uppercase; color: var(--fg-3); }
+
+/* the dropdown (components/Select.tsx): a .sel that opens a .menu */
+.sel.dd { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; text-align: left; font: inherit; font-size: 12.5px; max-width: 100%; }
+.sel.dd.sm { font-size: 12px; }
+.sel.dd:hover:not(:disabled) { border-color: var(--fg-3); }
+.sel.dd:disabled { opacity: .5; cursor: default; }
+.sel.dd.open { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+.sel.dd .dd-v { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel.dd .dd-chev { color: var(--fg-3); transition: transform .12s ease; }
+.sel.dd.open .dd-chev { transform: rotate(180deg); }
+.menu.dd-menu { display: flex; flex-direction: column; overflow: hidden; padding: 0; max-width: min(460px, calc(100vw - 16px)); }
+.dd-find { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--line); color: var(--fg-3); }
+.dd-find input { flex: 1; min-width: 0; height: 24px; border: 0; background: none; color: var(--fg-1); outline: none; font: inherit; font-size: 12.5px; }
+.dd-list { overflow: auto; max-height: 320px; padding: 4px; display: flex; flex-direction: column; }
+.dd-list .dd-opt { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 30px; padding: 0 8px; border: 0; border-radius: 5px; background: none; color: var(--fg); cursor: pointer; font: inherit; font-size: 12.5px; text-align: left; flex: none; }
+.dd-list .dd-opt.active { background: var(--hover); color: var(--fg-1); }
+.dd-list .dd-opt.on { color: var(--fg-1); font-weight: 500; }
+.dd-list .dd-opt:disabled { opacity: .45; cursor: default; }
+.dd-check { color: var(--accent-2); flex: none; }
+.dd-check.hide { visibility: hidden; }
+.dd-hint, .menu .dd-hint { margin-left: auto; padding-left: 12px; font-size: 11px; color: var(--fg-3); font-family: var(--mono); flex: none; }
+.dd-group { padding: 8px 8px 3px !important; }
+.dd-none { padding: 10px; }
 
 .terminal { font: 11.5px/1.6 var(--mono); color: #b9bcbe; background: #0e0f10; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
 .term-line.err { color: var(--down); } .term-line.ok { color: var(--up); } .term-line.head { color: var(--c-blue); } .term-line.warn { color: var(--c-yellow); } .term-line.cmd { color: var(--fg-3); }

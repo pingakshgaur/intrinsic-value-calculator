@@ -23,6 +23,8 @@ An analyst workspace:
 - **Side navigation:** grouped into Analysis, Research workforce, Models & data and Operations, with live status for the server, AI providers, last report and last research. Collapse it with `Ctrl+\`.
 - **Top bar:** a live market tape (Nifty 50, India VIX, USD/INR, Brent, US 10Y, gold, with 1-month change), the watchlist focus picker, global search (`Ctrl+K`), an alerts inbox (red flags and changes), the glossary (`?`), and a run indicator that opens the runs drawer.
 
+- **Menus and dropdowns** are one component everywhere (`web/src/components/Select.tsx`). Every choice, from sectors and companies to runs, models and sounds, opens the same themed list. Use the arrow keys, Home/End, Enter and Escape, or type to jump. Lists longer than 12 get a filter box. Action buttons such as *Copy to*, *Move to*, *Research*, *Set sector* and *Add to watchlist* open the same menu. Menus open on the page's top layer, so a table or panel never cuts them off, and they flip upward near the bottom of the window. Escape closes only the topmost menu.
+
 | Page | |
 |---|---|
 | **Command Center** | Metric band; coverage treemap (tile size = market cap, colour = upside); signals feed; upside vs confidence; label mix and extremes; model leaderboard |

@@ -11,6 +11,7 @@ import { NotifySettings } from "../components/NotifySettings";
 import { AiProviders } from "../components/AiProviders";
 import { DataSources } from "../components/DataSources";
 import { OllamaPanel } from "../components/OllamaPanel";
+import { Select } from "../components/Select";
 
 const SECTIONS = [
   { id: "run", label: "Run settings", icon: "settings" },
@@ -60,7 +61,7 @@ function Field({ label, desc, dirty, children }: { label: string; desc?: ReactNo
   );
 }
 function Sel<T extends string>({ v, opts, on }: { v: T; opts: [T, string][]; on: (x: T) => void }) {
-  return <select className="sel grow" value={v} onChange={(e) => on(e.target.value as T)}>{opts.map(([a, b]) => <option key={a} value={a}>{b}</option>)}</select>;
+  return <Select className="grow" value={v} onChange={on} options={opts.map(([a, b]) => ({ value: a, label: b }))} />;
 }
 function Num({ v, on, min, max }: { v: number; on: (x: number) => void; min: number; max: number }) {
   return <input className="inp num" style={{ width: 110 }} type="number" min={min} max={max} value={v} onChange={(e) => on(Math.max(min, Math.min(max, Number(e.target.value) || min)))} />;

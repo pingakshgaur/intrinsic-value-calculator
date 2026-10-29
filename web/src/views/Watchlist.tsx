@@ -15,6 +15,7 @@ import { ChartPanel } from "../components/ChartPanel";
 import { Position, Spark } from "../components/Spark";
 import { useApp } from "../components/workbenchContext";
 import { chime } from "../lib/notify";
+import { ActionMenu } from "../components/Select";
 
 
 /** One watchlist from the library, opened: its companies live, with charts, alerts and notes. */
@@ -271,19 +272,13 @@ function BulkBar({ list, items, checked, setChecked, onClosed }: { list: WatchLi
       <button className="btn sm ghost" onClick={() => setChecked(new Set(items.map((w) => w.ticker)))} disabled={checked.size === items.length}>Select all {items.length}</button>
       {others.length > 0 && (
         <>
-          <select className="sel sm" value="" disabled={busy} onChange={(e) => copyTo(e.target.value, false)} title="Add them to another list as well">
-            <option value="">Copy to…</option>{others.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select>
-          <select className="sel sm" value="" disabled={busy} onChange={(e) => copyTo(e.target.value, true)} title="Move them to another list">
-            <option value="">Move to…</option>{others.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select>
+          <ActionMenu small label="Copy to" icon="copy" disabled={busy} title="Add them to another list as well" items={others.map((l) => ({ label: l.name, onClick: () => copyTo(l.id, false) }))} />
+          <ActionMenu small label="Move to" icon="arrow-right" disabled={busy} title="Move them to another list" items={others.map((l) => ({ label: l.name, onClick: () => copyTo(l.id, true) }))} />
         </>
       )}
-      <select className="sel sm" value="" disabled={busy || !researchable.length || !!status.data?.active_job || start.isPending}
-        onChange={(e) => e.target.value && research(e.target.value === "quick")}
-        title={!researchable.length ? "None of the selected companies is in Coverage yet" : status.data?.active_job ? "Another run is in progress" : `Research the ${researchable.length} covered companies`}>
-        <option value="">Research…</option><option value="quick">Quick sweep ({researchable.length})</option><option value="full">Full research ({researchable.length})</option>
-      </select>
+      <ActionMenu small label="Research" icon="rocket" disabled={busy || !researchable.length || !!status.data?.active_job || start.isPending}
+        title={!researchable.length ? "None of the selected companies is in Coverage yet" : status.data?.active_job ? "Another run is in progress" : `Research the ${researchable.length} covered companies`}
+        items={[{ label: "Quick sweep", icon: "zap", hint: researchable.length, onClick: () => research(true) }, { label: "Full research", icon: "rocket", hint: researchable.length, onClick: () => research(false) }]} />
       <button className="btn danger sm" onClick={remove} disabled={busy}><Icon name={busy ? "loading" : "trash"} className={`sm ${busy ? "spin" : ""}`} />Remove from list</button>
       <span className="spacer" />
       <button className="btn sm ghost" onClick={() => setChecked(new Set())} title="Clear the selection"><Icon name="close" className="xs" />Clear</button>

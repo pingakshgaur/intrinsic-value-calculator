@@ -5,6 +5,7 @@ import { api, LlmAuth, LlmStyle, ModelTestResult, Provider, ProviderPreset, Prov
 import { useProviders } from "../lib/hooks";
 import { Drawer, ErrorNote, Icon, Panel, QueryView, Toggle } from "./ui";
 import { useApp } from "./workbenchContext";
+import { ActionMenu, Select } from "./Select";
 
 const STYLE_TEXT: Record<LlmStyle, string> = { openai: "OpenAI-compatible", anthropic: "Anthropic Messages API" };
 const AUTH_TEXT: Record<LlmAuth, string> = { bearer: "Authorization: Bearer <key>", "x-api-key": "x-api-key header", "api-key": "api-key header (Azure)", none: "No key (local server)" };
@@ -143,11 +144,12 @@ function ModelPick({ p, tier, current, models, loading, onSaved }: { p: Provider
       {typed || (!loading && !models.length) ? (
         <input className="inp sm mono" value={v} placeholder="model id" onChange={(e) => { setV(e.target.value.trim()); setRes(null); }} />
       ) : (
-        <select className="sel sm" style={{ width: "100%" }} title={v} value={v} disabled={loading} onChange={(e) => { setV(e.target.value); setRes(null); }}>
-          {!known && <option value={current}>{current ? `${current} (not offered)` : "- choose -"}</option>}
-          {models.filter((m) => m.chat).map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}
-          {models.some((m) => !m.chat) && <optgroup label="Probably not chat models">{models.filter((m) => !m.chat).map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}</optgroup>}
-        </select>
+        <Select size="sm" style={{ width: "100%" }} title={v} value={v || null} disabled={loading} placeholder="Choose a model…" menuWidth={320} onChange={(x) => { setV(x); setRes(null); }}
+          options={[
+            ...(!known && current ? [{ value: current, label: current, hint: "not offered" }] : []),
+            ...models.filter((m) => m.chat).map((m) => ({ value: m.id, label: m.id })),
+            ...models.filter((m) => !m.chat).map((m) => ({ value: m.id, label: m.id, group: "Probably not chat models" })),
+          ]} />
       )}
       <div className="row" style={{ gap: 4 }}>
         <button className="btn xs sec" onClick={test} disabled={!v || busy}><Icon name={busy ? "loading" : "beaker"} className={`xs ${busy ? "spin" : ""}`} />Test</button>
@@ -171,7 +173,7 @@ function ProviderForm({ value, onChange, info, isNew }: { value: Partial<Provide
       <div className="fld"><span>API dialect</span><div className="seg">{info.styles.map((s) => <button key={s} className={value.style === s ? "on" : ""} onClick={() => set("style", s)}>{STYLE_TEXT[s]}</button>)}</div></div>
       <label className="fld"><span>Base URL</span><input className="inp sm mono" value={value.base_url ?? ""} placeholder="https://api.example.com/v1" onChange={(e) => set("base_url", e.target.value)} /></label>
       <label className="fld"><span>How the key is sent</span>
-        <select className="sel sm" value={value.auth ?? "bearer"} onChange={(e) => set("auth", e.target.value)}>{info.auths.map((a) => <option key={a} value={a}>{AUTH_TEXT[a]}</option>)}</select></label>
+        <Select size="sm" value={value.auth ?? "bearer"} onChange={(v) => set("auth", v)} options={info.auths.map((a) => ({ value: a, label: AUTH_TEXT[a] }))} /></label>
       {value.auth === "api-key" && <label className="fld"><span>Header name</span><input className="inp sm mono" value={value.header ?? ""} placeholder="api-key" onChange={(e) => set("header", e.target.value)} /></label>}
       <label className="fld"><span>Extra query (optional)</span><input className="inp sm mono" value={value.query ?? ""} placeholder="api-version=2024-10-21" onChange={(e) => set("query", e.target.value)} /></label>
       <div className="row" style={{ gap: 10 }}>
@@ -297,10 +299,7 @@ function Routes({ info }: { info: ProvidersInfo }) {
                 );
               })}
               {rest.length > 0 && (
-                <select className="sel sm" style={{ marginTop: 8 }} value="" onChange={(e) => e.target.value && add(tier, e.target.value)}>
-                  <option value="">+ add a provider…</option>
-                  {rest.map((p) => <option key={p.name} value={p.name}>{p.label}</option>)}
-                </select>
+                <div style={{ marginTop: 8 }}><ActionMenu small label="Add a provider" icon="add" items={rest.map((p) => ({ label: p.label, onClick: () => add(tier, p.name) }))} /></div>
               )}
             </div>
           );

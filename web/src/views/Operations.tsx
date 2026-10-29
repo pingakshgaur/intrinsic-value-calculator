@@ -9,6 +9,7 @@ import { Column, DataGrid, useGridState } from "../components/DataGrid";
 import { RunMonitor } from "../components/JobLog";
 import { jobTitle } from "../components/Shell";
 import { useApp } from "../components/workbenchContext";
+import { Select } from "../components/Select";
 
 type Kind = "valuation" | "research" | "learn" | "screen";
 const KINDS: { id: Kind; icon: string; t: string; d: string }[] = [
@@ -124,9 +125,7 @@ export function Operations() {
                   <button className={scope === "pick" ? "on" : ""} onClick={() => { setScope("pick"); setPicker(true); }}>Pick…</button>
                 </div>
                 {scope === "list" && chosenList && (
-                  <select className="sel" value={chosenList.id} onChange={(e) => setListId(e.target.value)} style={{ maxWidth: 360 }}>
-                    {lists.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.count})</option>)}
-                  </select>
+                  <Select value={chosenList.id} onChange={setListId} style={{ maxWidth: 360 }} ariaLabel="Watchlist" options={lists.map((l) => ({ value: l.id, label: l.name, hint: l.count, icon: "eye" }))} />
                 )}
                 {scope === "pick" && <div className="row small"><span className="strong">{included.length}</span><span className="muted">of {list.length} covered companies</span><button className="btn xs sec" onClick={() => setPicker(true)}><Icon name="checklist" className="xs" />Change</button></div>}
                 {scope === "list" && <span className="xs faint">Every company on the list is included, valued before or not — its accounts are fetched when needed.</span>}
