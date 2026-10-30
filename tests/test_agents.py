@@ -424,6 +424,12 @@ def test_chat_api_answers_commands(monkeypatch):
     live = A.live()
     assert live["progress"]["done"] == 1 and live["status"]["CMD-00"]["done"] == 1
     assert all(m["channel"] != "trace" for m in A.messages()["messages"])
+    # the whole run's output, one latest verdict per company
+    summ = A.summary()
+    name = mock_source.COMPANIES[0]["name"] if isinstance(mock_source.COMPANIES[0], dict) else None
+    assert summ["run"] == live["run"]["id"] and len(summ["verdicts"]) == 1 and summ["verdicts"][0]["kind"] == "verdict"
+    assert summ["verdicts"][0]["company"] in summ["companies"] and summ["kinds"]["verdict"] >= 1
+    assert name is None or summ["companies"] == [name]
 
     from server import agent_chat, agents_api
     from agents import profiles

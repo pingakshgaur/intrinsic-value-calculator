@@ -112,6 +112,29 @@ def channel_stats(run=None):
     return {"run": run, "channels": {c: {"count": n, "last": last, "ts": ts} for c, n, last, ts in rows}}
 
 
+def summary(run=None):
+    """A run's output in full, however long the run: every company it touched, the
+    latest verdict on each, its red flags and its message counts by kind."""
+    con = _con()
+    if con is None:
+        return {"run": None, "companies": [], "verdicts": [], "flags": [], "kinds": {}}
+    try:
+        run = int(run) if run else _latest_run(con)
+        companies = [r[0] for r in con.execute(
+            "SELECT DISTINCT company FROM messages WHERE run_id=? AND company IS NOT NULL AND company!='' "
+            "AND channel!='trace' ORDER BY company", (run,))]
+        # a company can be judged more than once in a run (a review can revise it): the last word counts
+        verdicts = [_row(r) for r in con.execute(
+            f"SELECT {COLS} FROM messages WHERE id IN (SELECT MAX(id) FROM messages WHERE run_id=? AND kind='verdict' "
+            "AND company IS NOT NULL AND company!='' GROUP BY company) ORDER BY id DESC", (run,))]
+        flags = [_row(r) for r in con.execute(
+            f"SELECT {COLS} FROM messages WHERE run_id=? AND kind='flag' ORDER BY id DESC LIMIT 500", (run,))]
+        kinds = dict(con.execute("SELECT kind, COUNT(*) FROM messages WHERE run_id=? AND channel!='trace' GROUP BY kind", (run,)).fetchall())
+    finally:
+        con.close()
+    return D.clean({"run": run, "companies": companies, "verdicts": verdicts, "flags": flags, "kinds": kinds})
+
+
 def live(after=0, run=None, active_job=None):
     """Everything the graph and the chat need on one poll."""
     con = _con()

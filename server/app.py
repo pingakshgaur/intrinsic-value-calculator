@@ -848,6 +848,11 @@ def agents_channels(run: int | None = None):
     return agents_api.channel_stats(run)
 
 
+@app.get("/api/agents/summary")
+def agents_summary(run: int | None = None):
+    return agents_api.summary(run)
+
+
 @app.get("/api/agents/live")
 def agents_live(after: int = 0, run: int | None = None):
     return agents_api.live(after, run, jobs.active())
