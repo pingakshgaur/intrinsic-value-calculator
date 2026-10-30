@@ -209,35 +209,40 @@ function Room({ roster }: { roster: Roster }) {
       <aside className="rr-side">
         <div className="rr-ws">
           <div className="rr-ws-h">
-            <span className="rr-logo"><Icon name="organization" /></span>
-            <div className="grow" style={{ minWidth: 0 }}>
-              <b>Research Room</b>
-              <div className="xs faint">{workforceSize(roster).agents} agents · {workforceSize(roster).teams} teams</div>
+            <div className="crumbs"><span>Research workforce</span><Icon name="chevron-right" className="xs" /><span>Research Room</span></div>
+            <h1>Research Room</h1>
+            <div className="rr-ws-s">
+              <span className={`live-dot ${active ? "on" : ""}`}>{active ? `Run #${runId} live` : "Idle"}</span>
+              <span className="faint">{workforceSize(roster).agents} agents · {workforceSize(roster).teams} teams</span>
             </div>
-            <span className={`live-dot ${active ? "on" : ""}`}>{active ? "Live" : ""}</span>
           </div>
           <Select size="sm" value={run == null ? "" : String(run)} onChange={(v) => set({ run: v || null })} ariaLabel="Which run" style={{ width: "100%" }}
             options={[{ value: "", label: `Latest run${feed.live?.run ? ` (#${feed.live.run.id})` : ""}` },
               ...(runs.data ?? []).map((r) => ({ value: String(r.id), label: `#${r.id} · ${r.mode} · ${r.started?.slice(5, 16).replace("T", " ") ?? ""}`, hint: `${r.messages ?? 0} msgs` }))]} />
           {active && prog && (
-            <div className="rr-prog"><div style={{ width: `${(100 * prog.done) / Math.max(1, prog.total)}%` }} /><span>{prog.done}/{prog.total} companies · {prog.saved} calls saved</span></div>
+            <div className="rr-prog" role="progressbar" aria-label="Run progress" aria-valuemin={0} aria-valuemax={prog.total} aria-valuenow={prog.done}>
+              <div className="rr-prog-bar"><i style={{ width: `${(100 * prog.done) / Math.max(1, prog.total)}%` }} /></div>
+              <span>{prog.done} of {prog.total} companies · {prog.saved} calls saved</span>
+            </div>
           )}
         </div>
-        <div className="rr-list">
+        <nav className="rr-list" aria-label="Channels and agents">
           <div className="rr-sec">Channels</div>
           {roster.channels.map((c) => {
             const n = counts[c.id]?.count ?? 0;
             const unread = Math.max(0, n - (read[rk(c.id)] ?? 0));
             const busy = c.members.some((cs) => status[cs]?.state === "working");
             return (
-              <button key={c.id} className={`rr-item ${channel === c.id ? "on" : ""} ${unread ? "unread" : ""}`} onClick={() => open(c.id)} style={{ ["--tc" as string]: roster.teams[c.team].color }}>
-                <span className="hash">#</span><span className="grow ellipsis">{c.name}</span>
-                {busy && <span className="typing-dots"><i /><i /><i /></span>}
-                {unread > 0 && channel !== c.id ? <span className="badge">{unread > 99 ? "99+" : unread}</span> : n > 0 ? <span className="xs faint">{n}</span> : null}
+              <button key={c.id} className={`rr-item ${channel === c.id ? "on" : ""} ${unread ? "unread" : ""}`} onClick={() => open(c.id)} style={{ ["--tc" as string]: roster.teams[c.team].color }}
+                aria-current={channel === c.id ? "page" : undefined}>
+                <span className="hash" aria-hidden="true">#</span><span className="grow ellipsis">{c.name}</span>
+                {busy && <span className="typing-dots" title="An agent here is working"><i /><i /><i /><span className="sr-only">, agents working</span></span>}
+                {unread > 0 && channel !== c.id ? <span className="badge">{unread > 99 ? "99+" : unread}<span className="sr-only"> unread</span></span> : n > 0 ? <span className="xs faint">{n}<span className="sr-only"> messages</span></span> : null}
               </button>
             );
           })}
-          <button className={`rr-item ${channel === "trace" ? "on" : ""}`} onClick={() => open("trace")} style={{ ["--tc" as string]: "#4EC9B0" }} title="Every feed fetch and every reuse between agents">
+          <button className={`rr-item ${channel === "trace" ? "on" : ""}`} onClick={() => open("trace")} style={{ ["--tc" as string]: "#4EC9B0" }} title="Every feed fetch and every reuse between agents"
+            aria-current={channel === "trace" ? "page" : undefined}>
             <span className="hash"><Icon name="pulse" className="xs" /></span><span className="grow ellipsis">data-exchange trace</span>
             {(counts.trace?.count ?? 0) > 0 && <span className="xs faint">{counts.trace.count}</span>}
           </button>
@@ -246,8 +251,8 @@ function Room({ roster }: { roster: Roster }) {
           {dms.slice(0, 40).map((d) => {
             const [x, y] = d.slice(3).split("|");
             return (
-              <button key={d} className={`rr-item dm ${channel === d ? "on" : ""}`} onClick={() => open(d)}>
-                <span className="pair"><i style={{ background: colorOf(roster, x) }} /><i style={{ background: colorOf(roster, y) }} /></span>
+              <button key={d} className={`rr-item dm ${channel === d ? "on" : ""}`} onClick={() => open(d)} aria-current={channel === d ? "page" : undefined}>
+                <span className="pair" aria-hidden="true"><i style={{ background: colorOf(roster, x) }} /><i style={{ background: colorOf(roster, y) }} /></span>
                 <span className="grow ellipsis">{x === "YOU" || y === "YOU" ? `You ↔ ${x === "YOU" ? y : x}` : `${x} ↔ ${y}`}</span>
                 <span className="xs faint">{counts[d].count}</span>
               </button>
@@ -260,8 +265,8 @@ function Room({ roster }: { roster: Roster }) {
             const working = people.filter((a) => status[a.callsign]?.state === "working").length;
             return (
               <div key={code}>
-                <button className="rr-team" onClick={() => toggleTeam(code)} style={{ ["--tc" as string]: t.color }}>
-                  <Icon name={shut ? "chevron-right" : "chevron-down"} className="xs" /><i className="sw" /><span className="grow ellipsis">{code} · {t.name}</span>
+                <button className="rr-team" onClick={() => toggleTeam(code)} style={{ ["--tc" as string]: t.color }} aria-expanded={!shut}>
+                  <Icon name={shut ? "chevron-right" : "chevron-down"} className="xs" /><i className="sw" aria-hidden="true" /><span className="grow ellipsis">{code} · {t.name}</span>
                   {working > 0 && <span className="xs" style={{ color: "var(--up)" }}>{working} busy</span>}
                 </button>
                 {!shut && people.map((a) => (
@@ -273,27 +278,33 @@ function Room({ roster }: { roster: Roster }) {
               </div>
             );
           })}
-        </div>
+        </nav>
       </aside>
 
-      <section className="rr-main">
+      <section className="rr-main" aria-label={`Channel ${title}`}>
         <header className="rr-h">
           <div className="grow" style={{ minWidth: 0 }}>
-            <div className="rr-title" style={{ ["--tc" as string]: meta ? roster.teams[meta.team].color : "#9A9B9C" }}>
-              {meta ? <span className="hash">#</span> : <Icon name={channel === "trace" ? "pulse" : "comment"} />}<b>{channel === "trace" ? "data-exchange trace" : meta ? meta.name : title}</b>
-            </div>
+            <Select className="rr-chsel" size="sm" value={channel} onChange={(c) => open(c)} ariaLabel="Channel" style={{ width: "100%" }}
+              options={[...roster.channels.map((c) => ({ value: c.id, label: `#${c.name}` })), { value: "trace", label: "data-exchange trace" }, ...dms.map((d) => ({ value: d, label: dmName(d), group: "Direct exchanges" }))]} />
+            <h2 className="rr-title" style={{ ["--tc" as string]: meta ? roster.teams[meta.team].color : "#9A9B9C" }}>
+              {meta ? <span className="hash" aria-hidden="true">#</span> : <Icon name={channel === "trace" ? "pulse" : "comment"} />}<b>{channel === "trace" ? "data-exchange trace" : meta ? meta.name : title}</b>
+            </h2>
             <div className="xs faint ellipsis">{meta?.purpose ?? (channel === "trace" ? "Every feed an agent fetched, and every time another agent reused it instead of fetching again." : isDm(channel) ? "A direct exchange between two agents." : "This channel does not exist - pick one on the left.")}</div>
           </div>
           <div className="rr-members" title={members.join(", ")}>
-            {members.slice(0, 6).map((cs) => <span key={cs} onClick={() => setSide({ type: "agent", cs })}><AgentAvatar role={agentOf(roster, cs)?.role ?? "user"} color={colorOf(roster, cs)} size={24} status={status[cs]?.state} /></span>)}
+            {members.slice(0, 6).map((cs) => (
+              <button key={cs} onClick={() => cs !== "YOU" && setSide({ type: "agent", cs })} aria-label={`${cs}${agentOf(roster, cs) ? `, ${agentOf(roster, cs)!.title}` : ""}: open the profile`} title={cs}>
+                <AgentAvatar role={agentOf(roster, cs)?.role ?? "user"} color={colorOf(roster, cs)} size={24} status={status[cs]?.state} />
+              </button>
+            ))}
             {members.length > 6 && <span className="more">+{members.length - 6}</span>}
           </div>
           <div className="rr-tools">
-            <div className="search sm"><Icon name="search" /><input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Search" /></div>
+            <div className="search sm"><Icon name="search" /><input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Search" aria-label="Search messages in this channel" /></div>
             <Select size="sm" value={company} onChange={setCompany} style={{ maxWidth: 170 }} ariaLabel="Company" menuWidth={260}
               options={[{ value: "", label: "All companies" }, ...(scope.list ? [{ value: "@list", label: `On ${scope.list.name}`, icon: "eye" }] : []),
                 ...companies.map((c) => ({ value: c, label: c }))]} />
-            <Popover trigger={(o, toggle) => <button className={`ibtn ${o || kinds.size ? "on" : ""}`} onClick={toggle} title="Filter by kind"><Icon name="filter" /></button>}>
+            <Popover trigger={(o, toggle) => <button className={`ibtn ${o || kinds.size ? "on" : ""}`} onClick={toggle} title="Filter by kind" aria-label={kinds.size ? `Filter by kind, ${kinds.size} shown` : "Filter by kind"} aria-expanded={o}><Icon name="filter" /></button>}>
               {() => (
                 <>
                   <div className="label" style={{ padding: "6px 8px" }}>Show</div>
@@ -306,10 +317,11 @@ function Room({ roster }: { roster: Roster }) {
               )}
             </Popover>
             <ExportButton title={`Research Room ${title}`} table={exportTable} />
-            <button className={`ibtn ${side ? "on" : ""}`} onClick={() => setSide(side ? null : { type: "channel" })} title="Details"><Icon name="layout-sidebar-right" /></button>
+            <button className={`ibtn ${side ? "on" : ""}`} onClick={() => setSide(side ? null : { type: "channel" })} title="Details" aria-label="Channel details" aria-pressed={!!side}><Icon name="layout-sidebar-right" /></button>
           </div>
         </header>
-        <div className="rr-msgs" ref={listRef} onScroll={onScroll}>
+        {/* a chat log: new messages are read out politely, but not while a run floods the channel */}
+        <div className="rr-msgs" ref={listRef} onScroll={onScroll} role="log" aria-label={`Messages in ${title}`} aria-live={active ? "off" : "polite"} tabIndex={0}>
           {ch.more && ch.msgs.length > 0 && <button className="rr-more" onClick={ch.loadEarlier}>Load earlier messages</button>}
           {ch.loading ? <div className="empty" style={{ padding: 40 }}><Icon name="loading" className="spin" /></div>
             : shown.length === 0 ? (ch.msgs.length ? (
@@ -346,11 +358,11 @@ function Room({ roster }: { roster: Roster }) {
       </section>
 
       {side && (
-        <aside className="rr-info">
+        <aside className="rr-info" aria-labelledby="rr-info-t" onKeyDown={(e) => { if (e.key === "Escape") setSide(null); }}>
           <div className="rr-info-h">
-            <b>{side.type === "agent" ? "Agent" : side.type === "msg" ? "Message" : "About this channel"}</b>
+            <h2 id="rr-info-t">{side.type === "agent" ? "Agent" : side.type === "msg" ? "Message" : "About this channel"}</h2>
             <span className="spacer" />
-            <button className="ibtn sm" onClick={() => setSide(null)}><Icon name="close" className="xs" /></button>
+            <button className="ibtn sm" onClick={() => setSide(null)} aria-label="Close the details" title="Close (Esc)"><Icon name="close" className="xs" /></button>
           </div>
           <div className="rr-info-b">
             {side.type === "agent" && <AgentProfile cs={side.cs} roster={roster} status={status[side.cs]} messages={feed.messages}
@@ -439,22 +451,23 @@ function Composer({ roster, title, text, setText, onSend, disabled, inputRef }: 
   return (
     <div className={`rr-compose ${disabled ? "off" : ""}`}>
       {options.length > 0 && (
-        <div className="rr-auto">
+        <div className="rr-auto" id="rr-auto" role="listbox" aria-label={word.startsWith("/") ? "Commands" : "Agents"}>
           {options.map((o, i) => (
-            <button key={o.label} className={i === hi ? "on" : ""} onMouseDown={(e) => { e.preventDefault(); pick(o.value); }}>
+            <div key={o.label} id={`rr-auto-${i}`} role="option" aria-selected={i === hi} className={i === hi ? "on" : ""} onMouseDown={(e) => { e.preventDefault(); pick(o.value); }}>
               <b className="mono">{o.label}</b><span className="faint">{o.help}</span>
-            </button>
+            </div>
           ))}
         </div>
       )}
-      <textarea ref={inputRef} rows={1} value={text} disabled={disabled} placeholder={disabled ? "The trace is read-only" : `Message ${title} — ask, instruct ("focus on debt") or task ("re-check HAL"); @EQR-02 to address an agent`}
+      <textarea ref={inputRef} rows={1} value={text} disabled={disabled} aria-label={`Message ${title}`} role="combobox" aria-autocomplete="list"
+        aria-expanded={options.length > 0} aria-controls="rr-auto" aria-activedescendant={options.length ? `rr-auto-${hi}` : undefined} placeholder={disabled ? "The trace is read-only" : `Message ${title} — ask, instruct ("focus on debt") or task ("re-check HAL"); @EQR-02 to address an agent`}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (options.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); setHi((h) => (h + (e.key === "ArrowDown" ? 1 : options.length - 1)) % options.length); return; }
           if (options.length && (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && word.length > 0 && !text.endsWith(" ")))) { e.preventDefault(); pick(options[hi].value); return; }
           if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); }
         }} />
-      <button className="btn" onClick={onSend} disabled={disabled || !text.trim()} title="Send (Enter)"><Icon name="send" className="sm" /></button>
+      <button className="btn" onClick={onSend} disabled={disabled} title="Send (Enter)" aria-label="Send"><Icon name="send" className="sm" /></button>
       <span className="rr-hint xs faint">Agents answer from their latest research (with an AI model when one is set up) and keep your instructions for the next run · <kbd>/help</kbd> commands · <kbd>Enter</kbd> send · <kbd>Shift Enter</kbd> new line</span>
     </div>
   );

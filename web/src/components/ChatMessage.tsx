@@ -72,7 +72,7 @@ export function ChatMessage({ m, roster, grouped, byMid, onAgent, onCompany, onS
     <div className={`msg k-${m.kind} ${grouped ? "grouped" : ""} ${me ? "mine" : ""} ${m.to === "YOU" ? "tome" : ""} ${selected ? "sel" : ""}`}
       style={{ ["--tc" as string]: color }}>
       <div className="msg-av">
-        {!grouped && (me ? <AgentAvatar role="user" color={color} size={34} /> : <button className="av-btn" onClick={(e) => { e.stopPropagation(); onAgent(m.sender); }}><AgentAvatar role={a?.role ?? "system"} color={color} size={34} /></button>)}
+        {!grouped && (me ? <AgentAvatar role="user" color={color} size={34} /> : <button className="av-btn" onClick={(e) => { e.stopPropagation(); onAgent(m.sender); }} aria-label={`${m.sender}: open the profile`}><AgentAvatar role={a?.role ?? "system"} color={color} size={34} /></button>)}
         {grouped && (
           <div className="msg-gut" ref={menuRef}>
             <span className="msg-time-g">{timeOf(m.ts).slice(0, 5)}</span>

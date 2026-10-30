@@ -347,12 +347,16 @@ function CompanyTab({ d }: { d: Valuation }) {
   );
 }
 
+/** Everything a valuation run writes: the files to download, the charts it drew and who it left out. */
 function FilesTab() {
+  const ex = useExcluded();
+  const scope = useScope();
+  const left = (ex.data?.rows ?? []).filter((r) => scope.has({ company: String(r["Company name"] ?? "") })).length;
   return (
     <>
-      <Panel title="Downloads" meta="the report workbook, metrics and HTML index" flush><Files /></Panel>
-      <Panel title="Companies left out of the last report"><Excluded /></Panel>
-      <Panel title="Chart gallery" meta="drawn by the analysis stage of a valuation run"><Gallery /></Panel>
+      <Panel title="Downloads" meta="every file the last valuation run wrote" flush><Files /></Panel>
+      <Panel title="Charts" meta="drawn by the analysis stage of a valuation run"><Gallery /></Panel>
+      <Panel title="Left out of the last report" meta={ex.data ? (left ? `${left} compan${left === 1 ? "y" : "ies"} without enough data` : "nobody") : undefined} flush><Excluded /></Panel>
     </>
   );
 }
@@ -505,23 +509,53 @@ function EnsembleDetail({ d }: { d: Valuation }) {
   );
 }
 
+/** What a chart file is, in words, and which group it belongs to. */
+function chartInfo(file: string) {
+  const base = file.replace(/\.png$/, "");
+  const m = base.match(/^sector_(.+)_(levels|normalised)$/);
+  if (m) return { group: "sector", title: `${titleCase(m[1].replace(/_/g, " "))}`, sub: m[2] === "levels" ? "every model against the price, per company" : "values relative to the price" , kind: m[2] };
+  return { group: "overview", title: titleCase(base.replace(/_/g, " ")), sub: "across every company", kind: "overview" };
+}
+const CHART_GROUPS = [["all", "All"], ["overview", "Overview"], ["levels", "Sectors · against the price"], ["normalised", "Sectors · relative to the price"]] as const;
+
 function Gallery() {
   const q = useCharts();
   const [open, setOpen] = useState<number | null>(null);
+  const [group, setGroup] = useState<(typeof CHART_GROUPS)[number][0]>("all");
+  const [find, setFind] = useState("");
   return (
     <QueryView q={q}>
       {(names) => {
         if (!names.length) return <Empty icon="file-media" title="No charts yet">The analysis stage of a valuation run draws them.</Empty>;
-        const images = names.map((n) => ({ src: `/api/charts/${n}`, title: titleCase(n.replace(/\.png$/, "").replace(/_/g, " ")) }));
+        const all = names.map((n) => ({ src: `/api/charts/${n}`, ...chartInfo(n) }));
+        const shown = all.filter((c) => (group === "all" || c.kind === group || (group === "overview" && c.group === "overview"))
+          && (!find || `${c.title} ${c.sub}`.toLowerCase().includes(find.toLowerCase())));
+        const images = shown.map((c) => ({ src: c.src, title: c.group === "sector" ? `${c.title} — ${c.sub}` : c.title }));
         return (
-          <>
-            <div className="gallery">{images.map((im, i) => (
-              <figure key={im.src} onClick={() => setOpen(i)} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setOpen(i)} tabIndex={0} role="button" aria-label={`Open ${im.title}`}>
-                <img src={im.src} alt={im.title} loading="lazy" /><figcaption>{im.title}</figcaption>
-              </figure>
-            ))}</div>
-            {open != null && <ImageViewer images={images} index={Math.min(open, images.length - 1)} onIndex={setOpen} onClose={() => setOpen(null)} />}
-          </>
+          <div className="fc">
+            <div className="fc-bar">
+              <div className="seg" role="group" aria-label="Show charts">
+                {CHART_GROUPS.map(([k, l]) => {
+                  const n = k === "all" ? all.length : all.filter((c) => c.kind === k || (k === "overview" && c.group === "overview")).length;
+                  return n || k === "all" ? <button key={k} className={group === k ? "on" : ""} aria-pressed={group === k} onClick={() => setGroup(k)}>{l}<span className="fc-n">{n}</span></button> : null;
+                })}
+              </div>
+              <label className="search fc-find"><Icon name="search" /><input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a chart or sector" aria-label="Find a chart or sector" /></label>
+            </div>
+            {!shown.length ? <p className="fc-none">No chart matches “{find}”.</p> : (
+              <ul className="fc-grid">
+                {shown.map((c, i) => (
+                  <li key={c.src}>
+                    <button className="fc-card" onClick={() => setOpen(i)} aria-label={`Open the chart: ${images[i].title}`}>
+                      <span className="fc-img"><img src={c.src} alt="" loading="lazy" /></span>
+                      <span className="fc-t"><b>{c.title}</b><small>{c.sub}</small></span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {open != null && images.length > 0 && <ImageViewer images={images} index={Math.min(open, images.length - 1)} onIndex={setOpen} onClose={() => setOpen(null)} />}
+          </div>
         );
       }}
     </QueryView>
@@ -545,20 +579,62 @@ function Excluded() {
   );
 }
 
+/** A file the report writes, in words, and the group it belongs to. */
+const FILE_INFO: [RegExp, string, string][] = [
+  [/^Intrinsic_Value_Report\.xlsx$/, "report", "The valuation report · Excel workbook"],
+  [/^Intrinsic_Value_Report\.csv$/, "report", "The valuation report · CSV"],
+  [/^analysis_report\.html$/, "report", "The analysis report · web page with every chart"],
+  [/^Intrinsic_Value_Data\.csv$/, "report", "The numbers behind the report"],
+  [/^metrics_overall\.csv$/, "metrics", "Accuracy of every model"],
+  [/^metrics_by_(\w+)\.csv$/, "metrics", "Accuracy by $1"],
+  [/^metrics_win_rate\.csv$/, "metrics", "Which model came closest, how often"],
+  [/^analysis_summary\.json$/, "metrics", "Analysis summary · JSON"],
+  [/^Hybrid_Model_Detail\.csv$/, "models", "HYBRID MODEL · every lens, weight and band"],
+  [/^hybrid_model_bases\.json$/, "models", "HYBRID MODEL · each company's latest inputs"],
+  [/^Ensemble_Detail\.csv$/, "models", "Ensemble · weights and components"],
+  [/^ml_metrics\.csv$/, "models", "AI models · accuracy per year"],
+  [/^ml_feature_importance\.csv$/, "models", "AI models · what they rely on"],
+  [/^ml_dataset\.csv$/, "models", "AI models · the training rows"],
+  [/^Intrinsic_Value_Diagnostics\.csv$/, "quality", "Why some cells are blank"],
+  [/^Intrinsic_Value_Methods\.csv$/, "quality", "How each value was worked out"],
+  [/^Intrinsic_Value_Excluded\.csv$|^Why_Companies_Were_Left_Out\.csv$/, "quality", "Companies left out, and why"],
+  [/^Why_Companies_Were_Left_Out_By_Year\.csv$/, "quality", "Companies left out, year by year"],
+  [/^run_log\.txt$/, "other", "The last run's full log"],
+];
+const FILE_GROUPS: [string, string][] = [["report", "The report"], ["metrics", "Accuracy"], ["models", "Model detail"], ["quality", "Data quality"], ["other", "Other files"]];
+function fileInfo(file: string) {
+  for (const [re, group, label] of FILE_INFO) { const m = file.match(re); if (m) return { group, label: label.replace("$1", m[1] ?? "") }; }
+  return { group: "other", label: titleCase(file.replace(/\.[a-z]+$/, "").replace(/_/g, " ")) };
+}
+
 function Files() {
   const q = useDownloads();
   return (
     <QueryView q={q}>
       {(files) => !files.length ? <Empty icon="files" title="No files yet">A valuation run writes them.</Empty> : (
-        <div className="dg-wrap">
-          <table className="dg">
-            <thead><tr><th>File</th><th>Updated</th><th className="r">Size</th><th /></tr></thead>
-            <tbody>{files.map((f) => (
-              <tr key={f.key}><td><span className="row"><Icon name={f.file.endsWith(".xlsx") ? "table" : f.file.endsWith(".html") ? "globe" : "file"} className="sm faint" /><span className="mono">{f.file}</span></span></td>
-                <td className="muted">{ago(f.updated)}</td><td className="r mono faint">{bytes(f.size)}</td>
-                <td className="r"><a className="btn xs sec" href={`/api/downloads/${f.key}`} download><Icon name="desktop-download" className="xs" />Download</a></td></tr>
-            ))}</tbody>
-          </table>
+        <div className="fd">
+          {FILE_GROUPS.map(([g, title]) => {
+            const mine = files.map((f) => ({ f, ...fileInfo(f.file) })).filter((x) => x.group === g);
+            if (!mine.length) return null;
+            return (
+              <section key={g} className="fd-g" aria-labelledby={`fd-${g}`}>
+                <h4 id={`fd-${g}`}>{title}</h4>
+                <ul>
+                  {mine.map(({ f, label }) => {
+                    const ext = (f.file.split(".").pop() ?? "").toUpperCase();
+                    return (
+                      <li key={f.key} className="fd-row">
+                        <span className={`fd-ext x-${ext.toLowerCase()}`} aria-hidden="true">{ext}</span>
+                        <span className="fd-n"><b>{label}</b><small className="mono">{f.file}</small></span>
+                        <span className="fd-m">{ago(f.updated)} · {bytes(f.size)}</span>
+                        <a className="btn xs sec" href={`/api/downloads/${f.key}`} download aria-label={`Download ${label} (${f.file})`}><Icon name="desktop-download" className="xs" />Download</a>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            );
+          })}
         </div>
       )}
     </QueryView>

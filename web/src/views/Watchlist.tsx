@@ -149,7 +149,7 @@ function Board({ items, tracker, list, max, tracked, sel, pick }: { items: Watch
                   {!sorted.length && <div className="xs faint" style={{ padding: 16 }}>No company on this list matches “{find}”.</div>}</div>
               ) : <WatchTable items={sorted} sel={sel} pick={pick} open={openFull} state={sortState} checked={checked} setChecked={setChecked} find={find} />}
             </section>
-            {current && <Detail w={current} v={rows.find((r) => r.ticker === current.ticker)?.v ?? null} list={list} onClose={() => pick(null)} onOpen={() => openFull(current.ticker)} />}
+            {current && <Detail w={current} v={rows.find((r) => r.ticker === current.ticker)?.v ?? null} list={list} onClose={() => pick(null)} />}
           </div>
           <AlertsPanel />
         </>
@@ -346,34 +346,46 @@ function EditBar({ list, count, onClose }: { list: WatchList; count: number; onC
   );
 }
 
-/** The side panel for one company: live chart, its research in brief, the next hours and days, alerts. */
-function Detail({ w, v, list, onClose, onOpen }: { w: WatchItem; v: Verdict | null; list: WatchList; onClose: () => void; onOpen: () => void }) {
+/** The side panel for one company: the way into its full analysis, the live chart, its research in brief, the next hours and days, alerts. */
+function Detail({ w, v, list, onClose }: { w: WatchItem; v: Verdict | null; list: WatchList; onClose: () => void }) {
   const hm = w.quote?.hm;
+  const conf = hm?.confidence ?? v?.confidence;
+  const flags = v?.red_flags?.length ?? 0;
   return (
-    <aside className="insp wl-detail">
-      <div className="insp-h">
-        <div className="row">
-          <div className="grow" style={{ minWidth: 0 }}><div className="strong ellipsis" style={{ fontSize: 14 }}>{shortName(w.name)}</div><div className="faint xs mono">{w.ticker} · {w.sector}</div></div>
-          <button className="ibtn" onClick={onClose} title="Close"><Icon name="close" /></button>
+    <aside className="wl-side" aria-labelledby="wl-side-name" onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
+      <header className="wl-side-h">
+        <div className="wl-side-id">
+          <h2 id="wl-side-name" className="ellipsis" title={w.name}>{shortName(w.name)}</h2>
+          <span><span className="mono">{w.ticker}</span>{w.sector ? ` · ${w.sector}` : ""}</span>
         </div>
-        <button className="btn wl-full" onClick={onOpen}><Icon name="go-to-file" className="sm" />Full analysis<span className="xs faint">research, valuation, forecasts</span></button>
-      </div>
-      <div className="insp-b" style={{ gap: 12 }}>
-        <ChartPanel ticker={w.ticker} watch={w} height={190} compactHead simple />
+        <button className="ibtn" onClick={onClose} aria-label="Close the company panel" title="Close (Esc)"><Icon name="close" /></button>
+      </header>
+
+      <Link className="wl-open" to={listCompanyPath(list.id, w.ticker)}>
+        <Icon name="go-to-file" />
+        <span><b>Full analysis</b><small>Research, valuation, model forecasts and history</small></span>
+        <Icon name="arrow-right" className="sm" />
+      </Link>
+
+      <ChartPanel ticker={w.ticker} watch={w} height={190} compactHead hideName simple />
+
+      <Panel title="Research" meta={v ? (flags ? `${flags} red flag${flags > 1 ? "s" : ""}` : "no red flags") : "not researched yet"}>
         {v ? (
           <div className="wl-brief">
-            <div className="row" style={{ gap: 6 }}><span className="label">Research</span><LabelBadge label={hm?.label ?? v.label} /><span className="spacer" />{(v.red_flags?.length ?? 0) > 0 && <span className="tag down">{v.red_flags.length} red flag{v.red_flags.length > 1 ? "s" : ""}</span>}</div>
-            {v.summary?.headline && <p className="small" style={{ lineHeight: 1.55, margin: 0 }}>{v.summary.headline}</p>}
-            <div className="row xs muted" style={{ gap: 12, flexWrap: "wrap" }}>
-              <span>Confidence <b className="mono">{isNum(hm?.confidence ?? v.confidence) ? (hm?.confidence ?? v.confidence)!.toFixed(0) : "—"}</b></span>
-              <span>Research score <b className="mono">{signed(v.research_score)}</b></span>
-              <span>Range <b className="mono">{money(v.low, 0)}–{money(v.high, 0)}</b></span>
+            <div className="wl-brief-figs">
+              <div><span>Label</span><LabelBadge label={hm?.label ?? v.label} /></div>
+              <div><span>Confidence</span><b className="mono">{isNum(conf) ? conf.toFixed(0) : "—"}</b></div>
+              <div><span>Value range</span><b className="mono">{money(v.low, 0)}–{money(v.high, 0)}</b></div>
+              <div><span>Research score</span><b className="mono">{signed(v.research_score)}</b></div>
             </div>
+            {v.summary?.headline && <p className="wl-brief-p">{v.summary.headline}</p>}
           </div>
-        ) : <div className="xs faint">Not researched yet — <button className="linkish" onClick={onOpen}>open the full analysis</button> to start research on it.</div>}
-        <LiveForecast ticker={w.ticker} compact />
-        <WatchControls w={w} list={list} onRemoved={onClose} />
-      </div>
+        ) : <p className="wl-brief-p faint">The agents have not researched {shortName(w.name)} yet. The full analysis can start a run on it.</p>}
+      </Panel>
+
+      <LiveForecast ticker={w.ticker} compact />
+
+      <Panel title="Alerts and lists"><WatchControls w={w} list={list} onRemoved={onClose} /></Panel>
     </aside>
   );
 }

@@ -645,8 +645,8 @@ function Network({ roster }: { roster: Roster }) {
     <div className={`net ${light ? "light" : ""}`}>
       <header className="net-top">
         <div className="net-title">
-          <Icon name="type-hierarchy" />
-          <b>Agent Network</b>
+          <span className="net-crumb">Research workforce</span>
+          <h1>Agent Network</h1>
           <span className={`live-dot ${live ? "on" : ""}`}>{live ? "Live" : "Replay"}</span>
         </div>
         <Select size="sm" value={run == null ? "" : String(run)} title="Which run to show" ariaLabel="Which run to show" style={{ maxWidth: 220 }} menuWidth={260}
@@ -654,7 +654,7 @@ function Network({ roster }: { roster: Roster }) {
           options={[{ value: "", label: `${feed.live?.active ? "Live run" : "Latest run"}${runInfo ? ` (#${runInfo.id})` : ""}` },
             ...(runs.data ?? []).map((r) => ({ value: String(r.id), label: `#${r.id} · ${r.mode}`, hint: r.started?.slice(5, 16).replace("T", " ") }))]} />
         <div className="net-find">
-          <div className="search sm"><Icon name="search" /><input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find an agent"
+          <div className="search sm"><Icon name="search" /><input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find an agent" aria-label="Find an agent on the map"
             onKeyDown={(e) => { if (e.key === "Enter" && searchHits[0]) { pick(searchHits[0].id); setFind(""); } else if (e.key === "Escape") setFind(""); }} /></div>
           {searchHits.length > 0 && (
             <div className="net-hits">
@@ -674,7 +674,7 @@ function Network({ roster }: { roster: Roster }) {
           clearAnnotations={() => setMesh({ links: [], notes: [] })} titleOf={(id) => byId.get(id)?.title ?? ""} />
         {!feed.live?.active && <ResearchLauncher small secondary />}
         <ExportButton title="Agent Network" target={stage} className="net-btn icon" />
-        <Popover className="pop net-pop sm" trigger={(open, toggle) => <button className={`net-btn icon ${open ? "on" : ""}`} onClick={toggle} title="Shortcuts"><Icon name="keyboard" className="sm" /></button>}>
+        <Popover className="pop net-pop sm" trigger={(open, toggle) => <button className={`net-btn icon ${open ? "on" : ""}`} onClick={toggle} title="Shortcuts" aria-label="Keyboard shortcuts" aria-expanded={open}><Icon name="keyboard" className="sm" /></button>}>
           {() => (
             <div className="nl keys">
               {TOOLS.map((t) => <div key={t.id}><kbd>{t.key}</kbd><span>{t.label} - {t.help}</span></div>)}
@@ -690,19 +690,19 @@ function Network({ roster }: { roster: Roster }) {
             </div>
           )}
         </Popover>
-        <button className={`net-btn icon ${sideOpen ? "on" : ""}`} onClick={() => setSideOpen(!sideOpen)} title="Inspector (I)"><Icon name="layout-sidebar-right" className="sm" /></button>
+        <button className={`net-btn icon ${sideOpen ? "on" : ""}`} onClick={() => setSideOpen(!sideOpen)} title="Inspector (I)" aria-label="Inspector" aria-pressed={sideOpen}><Icon name="layout-sidebar-right" className="sm" /></button>
       </header>
 
       <div className={`net-body ${sideOpen ? "" : "noside"}`}>
         <nav className="net-rail" aria-label="Map tools">
           {TOOLS.map((t) => (
-            <button key={t.id} className={tool === t.id ? "on" : ""} onClick={() => setTool(t.id)} title={`${t.label} (${t.key}) - ${t.help}`}><Icon name={t.icon} /></button>
+            <button key={t.id} className={tool === t.id ? "on" : ""} onClick={() => setTool(t.id)} title={`${t.label} (${t.key}) - ${t.help}`} aria-label={`${t.label} tool`} aria-pressed={tool === t.id}><Icon name={t.icon} /></button>
           ))}
           <i className="sep" />
-          <button onClick={fit} title="Fit (F)"><Icon name="screen-normal" /></button>
-          <button onClick={() => zoomAt(1.2)} title="Zoom in (+)"><Icon name="zoom-in" /></button>
-          <button onClick={() => zoomAt(1 / 1.2)} title="Zoom out (-)"><Icon name="zoom-out" /></button>
-          <button className={layers.minimap ? "on" : ""} onClick={() => setLayers({ ...layers, minimap: !layers.minimap })} title="Mini-map (M)"><Icon name="map" /></button>
+          <button onClick={fit} title="Fit (F)" aria-label="Fit the map to the screen"><Icon name="screen-normal" /></button>
+          <button onClick={() => zoomAt(1.2)} title="Zoom in (+)" aria-label="Zoom in"><Icon name="zoom-in" /></button>
+          <button onClick={() => zoomAt(1 / 1.2)} title="Zoom out (-)" aria-label="Zoom out"><Icon name="zoom-out" /></button>
+          <button className={layers.minimap ? "on" : ""} onClick={() => setLayers({ ...layers, minimap: !layers.minimap })} title="Mini-map (M)" aria-label="Mini-map" aria-pressed={layers.minimap}><Icon name="map" /></button>
         </nav>
 
         <div className={`an-stage net-stage tool-${tool}`} ref={stage} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onWheel={onWheel}
@@ -783,11 +783,14 @@ function Network({ roster }: { roster: Roster }) {
                 onPointerEnter: (e: React.PointerEvent) => setHover({ id: n.id, x: e.clientX, y: e.clientY }),
                 onPointerMove: (e: React.PointerEvent) => setHover({ id: n.id, x: e.clientX, y: e.clientY }),
                 onPointerLeave: () => setHover(null),
+                tabIndex: 0,
+                role: "button",
+                onKeyDown: (e: React.KeyboardEvent) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); e.stopPropagation(); inspect(n.id); } },
               };
               if (n.kind !== "agent") {
                 const v = n.id === "OUT-VERDICT" ? tally.verdicts : n.id === "OUT-ALERTS" ? tally.flags : n.id === "OUT-ROOM" ? tally.chat : tally.c[n.id] ?? 0;
                 return (
-                  <div key={n.id} {...common} className={`an-node round ${far ? "far" : ""} ${dim ? "dim" : ""} ${isSel ? "sel" : ""} ${pulsing ? "pulse" : ""}`}>
+                  <div key={n.id} {...common} aria-label={`${n.title}${v ? `, ${v}` : ""}`} aria-pressed={isSel} className={`an-node round ${far ? "far" : ""} ${dim ? "dim" : ""} ${isSel ? "sel" : ""} ${pulsing ? "pulse" : ""}`}>
                     <Icon name={n.icon ?? "circle"} />
                     {v > 0 && <span key={v} className="an-count bump">{v}</span>}
                     <span className="an-cap">{n.title}</span>
@@ -797,7 +800,7 @@ function Network({ roster }: { roster: Roster }) {
               const state = st?.state ?? "idle";
               const compact = layers.detail === "compact";
               return (
-                <div key={n.id} {...common} className={`an-node card ${compact ? "compact" : ""} r-${n.role} s-${state} ${off ? "off" : ""} ${far ? "far" : ""} ${dim ? "dim" : ""} ${isSel ? "sel" : ""} ${pulsing ? "pulse" : ""}`}
+                <div key={n.id} {...common} aria-label={`${n.id}, ${n.title}, ${off ? "left out of runs" : state}`} aria-pressed={isSel} className={`an-node card ${compact ? "compact" : ""} r-${n.role} s-${state} ${off ? "off" : ""} ${far ? "far" : ""} ${dim ? "dim" : ""} ${isSel ? "sel" : ""} ${pulsing ? "pulse" : ""}`}
                   onDoubleClick={() => { if (tool === "select" && n.role !== "system") nav(`/agents/chat?c=${encodeURIComponent(dmId(n.id, "YOU"))}`); }}>
                   <div className="an-top">
                     <span className="an-ic"><BotGlyph role={n.role ?? "analyst"} size={n.role === "chief" ? (compact ? 18 : 22) : compact ? 14 : 17} color={color} />
@@ -809,7 +812,7 @@ function Network({ roster }: { roster: Roster }) {
                     <div className="an-id"><b>{n.id}</b><span>{compact && n.role === "analyst" ? n.title.replace(/ Analyst$/, "") : roleName(n.role ?? "analyst")}</span></div>
                     <span className={`an-state s-${off ? "off" : state}`} title={off ? "left out of runs" : state} />
                     <button className={`an-more ${openInfo.includes(n.id) ? "on" : ""}`} onClick={(e) => { e.stopPropagation(); toggleInfo(n.id); }}
-                      title={openInfo.includes(n.id) ? "Hide details" : "Show details"} aria-expanded={openInfo.includes(n.id)}>
+                      title={openInfo.includes(n.id) ? "Hide details" : "Show details"} aria-label={`${openInfo.includes(n.id) ? "Hide" : "Show"} details for ${n.id}`} aria-expanded={openInfo.includes(n.id)}>
                       <Icon name={openInfo.includes(n.id) ? "chevron-up" : "chevron-down"} />
                     </button>
                   </div>
@@ -835,7 +838,7 @@ function Network({ roster }: { roster: Roster }) {
               return (
                 <div key={`d-${id}`} data-drop className="an-drop" style={{ left: n.x, top: n.y + n.h + 8, width: Math.max(n.w, 250), ["--tc" as string]: tc(id) }}>
                   <div className="an-drop-h"><b>{id}</b><span>{a.title}</span>
-                    <button onClick={() => toggleInfo(id)} title="Close"><Icon name="close" className="xs" /></button></div>
+                    <button onClick={() => toggleInfo(id)} title="Close" aria-label={`Close the details for ${id}`}><Icon name="close" className="xs" /></button></div>
                   <div className="an-drop-team">{roster.teams[a.team]?.name} · {roleName(a.role)}</div>
                   <div className={`an-drop-state s-${off ? "off" : st?.state ?? "idle"}`}><i />{state}</div>
                   {st && <div className="an-drop-stats"><span><b>{st.done}</b> done</span><span><b>{st.sent}</b> sent</span><span><b>{st.received}</b> received</span>{st.llm > 0 && <span><b>{st.llm}</b> AI-assisted</span>}</div>}
@@ -867,8 +870,8 @@ function Network({ roster }: { roster: Roster }) {
                         {NOTE_TONES.map((t) => <button key={t.id} role="radio" aria-checked={t.id === tone.id} aria-label={t.label} title={t.label} className={t.id === tone.id ? "on" : ""} style={{ background: t.c }} onClick={() => update({ color: t.id })} />)}
                       </span>
                     ) : <span className="an-note-when">{n.at ? ago(n.at / 1000) : ""}</span>}
-                    {!editing && <button className="an-note-x" onClick={() => setEditNote(n.id)} title="Edit"><Icon name="edit" className="xs" /></button>}
-                    <button className="an-note-x" onClick={remove} title="Delete this note"><Icon name="trash" className="xs" /></button>
+                    {!editing && <button className="an-note-x" onClick={() => setEditNote(n.id)} title="Edit" aria-label="Edit this note"><Icon name="edit" className="xs" /></button>}
+                    <button className="an-note-x" onClick={remove} title="Delete this note" aria-label="Delete this note"><Icon name="trash" className="xs" /></button>
                   </div>
                   {editing ? (
                     <>
@@ -886,7 +889,7 @@ function Network({ roster }: { roster: Roster }) {
 
           {focusId && (
             <div className="net-chip" data-noexport onPointerDown={(e) => e.stopPropagation()}>
-              <span className="net-chip-ic"><Icon name="target" /></span><span className="net-chip-t">Focused on <b>{focusId}</b></span><button onClick={() => setFocusId(null)} title="Leave focus (Esc)"><Icon name="close" className="xs" /></button>
+              <span className="net-chip-ic"><Icon name="target" /></span><span className="net-chip-t">Focused on <b>{focusId}</b></span><button onClick={() => setFocusId(null)} title="Leave focus (Esc)" aria-label="Leave focus"><Icon name="close" className="xs" /></button>
             </div>
           )}
           {box && <div className="an-marquee" style={{ left: box.x0, top: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0 }} />}
@@ -894,14 +897,14 @@ function Network({ roster }: { roster: Roster }) {
             <div className="net-chip sel" data-noexport onPointerDown={(e) => e.stopPropagation()}>
               <span className="net-chip-ic"><Icon name="checklist" /></span>
               <span className="net-chip-t"><b>{multi.size} selected</b> · drag one to move them all</span>
-              {multi.size === 1 && <button onClick={() => inspect([...multi][0])} title="Inspect"><Icon name="info" className="xs" /></button>}
-              <button onClick={() => hideMany([...multi])} title="Hide them (Del)"><Icon name="eye-closed" className="xs" /></button>
-              <button onClick={() => setMulti(new Set())} title="Clear the selection (Esc)"><Icon name="close" className="xs" /></button>
+              {multi.size === 1 && <button onClick={() => inspect([...multi][0])} title="Inspect" aria-label="Inspect the selected node"><Icon name="info" className="xs" /></button>}
+              <button onClick={() => hideMany([...multi])} title="Hide them (Del)" aria-label="Hide the selected nodes"><Icon name="eye-closed" className="xs" /></button>
+              <button onClick={() => setMulti(new Set())} title="Clear the selection (Esc)" aria-label="Clear the selection"><Icon name="close" className="xs" /></button>
             </div>
           )}
           {tool !== "select" && !focusId && multi.size === 0 && (
             <div className="net-chip tool" data-noexport onPointerDown={(e) => e.stopPropagation()}>
-              <span className="net-chip-ic"><Icon name={toolNow.icon} /></span><span className="net-chip-t"><b>{toolNow.label}</b> · {toolNow.help}</span><button onClick={() => setTool("select")} title="Back to Select (V)"><Icon name="close" className="xs" /></button>
+              <span className="net-chip-ic"><Icon name={toolNow.icon} /></span><span className="net-chip-t"><b>{toolNow.label}</b> · {toolNow.help}</span><button onClick={() => setTool("select")} title="Back to Select (V)" aria-label="Back to the Select tool"><Icon name="close" className="xs" /></button>
             </div>
           )}
           {layers.minimap && sw >= 600 && <MiniMap L={L} nodes={nodes.filter((n) => visible.has(n.id))} view={view} stage={stage} onJump={(x, y, smooth) => { const el = stage.current!; glideTo(smooth); setView((v) => ({ ...v, x: el.clientWidth / 2 - x * v.k, y: el.clientHeight / 2 - y * v.k })); }} roster={roster} gliding={gliding} />}
@@ -935,7 +938,7 @@ function Network({ roster }: { roster: Roster }) {
       <footer className="net-bot">
         {!live && replay.length > 0 ? (
           <div className="net-transport">
-            <button className="ibtn" onClick={() => { if (!playing && cursor.current >= replay.length) seek(0); setPlaying(!playing); }} title="Play / pause (Space)"><Icon name={playing ? "debug-pause" : "play"} /></button>
+            <button className="ibtn" onClick={() => { if (!playing && cursor.current >= replay.length) seek(0); setPlaying(!playing); }} title="Play / pause (Space)" aria-label={playing ? "Pause the replay" : "Play the replay"}><Icon name={playing ? "debug-pause" : "play"} /></button>
             <span className="xs faint">Replay #{replayRun}</span>
             <Density replay={replay} span={span} />
             <input type="range" className="sl" min={0} max={span} step={0.1} value={clockShow} onChange={(e) => seek(Number(e.target.value))} aria-label="Replay position" />

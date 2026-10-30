@@ -209,3 +209,18 @@
 .an-marquee { position: absolute; z-index: 9; pointer-events: none; border: 1px solid var(--accent-2); background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 2px; }
 .net-stage.tool-select { cursor: default; }
 .net-chip.sel { color: var(--fg-2); }
+
+/* ---------- the header reads like every other page's; keyboard focus is visible on the map */
+.net-top { height: 56px; padding: 0 12px 0 16px; background: none; border-bottom: 1px solid var(--line-2); gap: 10px; }
+.net-title .net-crumb { font-size: 11px; color: var(--fg-3); }
+.net-title h1 { margin: 0; font-size: 17px; letter-spacing: -.01em; }
+.net-title { display: grid; grid-template-columns: auto auto; column-gap: 10px; align-items: end; margin-right: 10px; line-height: 1.2; }
+.net-title .net-crumb { grid-column: 1 / -1; }
+.net-title .live-dot { font-size: 11.5px; padding-bottom: 2px; }
+.net-rail { background: none; border-inline-end: 1px solid var(--line-2); }
+.net-bot { background: none; border-top: 1px solid var(--line-2); }
+.net-body .an-side { background: none; border-inline-start: 1px solid var(--line-2); }
+.net-rail button:focus-visible, .net-btn:focus-visible, .net-chip button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.an-node:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
+@media (max-width: 900px) { .net-title .net-crumb { display: none; } .net-find { width: 150px; } }
+@media (max-width: 640px) { .net-body { grid-template-columns: 44px minmax(0, 1fr); } .net-body .an-side { position: absolute; inset: 56px 0 38px auto; width: min(340px, 92vw); z-index: 30; background: var(--panel); } .net-find { display: none; } }

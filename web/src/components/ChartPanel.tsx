@@ -11,12 +11,14 @@ import { companyPath } from "../lib/company";
 const RANGES = [["1d", "1D"], ["5d", "5D"], ["1mo", "1M"], ["6mo", "6M"], ["1y", "1Y"], ["5y", "5Y"], ["max", "Max"]] as const;
 const SIMPLE_RANGES = ["1d", "5d", "1mo", "6mo", "1y"];
 
-export function ChartPanel({ ticker, watch, height = 400, extra, compactHead, simple }: {
+export function ChartPanel({ ticker, watch, height = 400, extra, compactHead, hideName, simple }: {
   ticker: string;
   watch?: WatchItem | null;
   height?: number;
   extra?: ReactNode;
   compactHead?: boolean;
+  /** the company is already named just above (a side panel): show the price alone */
+  hideName?: boolean;
   /** a quiet line chart with a few ranges, for narrow side panels */
   simple?: boolean;
 }) {
@@ -62,7 +64,7 @@ export function ChartPanel({ ticker, watch, height = 400, extra, compactHead, si
   return (
     <div className="cpanel">
       <div className="cp-head">
-        <div className="grow" style={{ minWidth: 0 }}>
+        <div className="grow" style={{ minWidth: 0 }} hidden={hideName}>
           <div className="row" style={{ gap: 8 }}>
             <b className="cp-name ellipsis">{d ? shortName(d.meta.name) : ticker}</b>
             <span className="mono faint xs">{ticker}</span>

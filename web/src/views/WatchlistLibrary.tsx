@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { isOpen, useWatchlist, useWatchlistMutations, useWatchlists, WatchItem, WatchList } from "../lib/live";
 import { useScope } from "../lib/scope";
@@ -135,33 +135,61 @@ export function ListEditor({ onClose }: { onClose: () => void }) {
   const [desc, setDesc] = useState("");
   const [color, setColor] = useState(colors[(lib.data?.lists.length ?? 0) % colors.length]);
   const [picks, setPicks] = useState<Entry[]>([]);
+  const [nameErr, setNameErr] = useState<string | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
   const busy = lm.create.isPending;
   const room = (lib.data?.max_tracked ?? 250) - (lib.data?.tracked ?? 0);
-  const save = async () => {
+  const taken = new Set((lib.data?.lists ?? []).map((l) => l.name.trim().toLowerCase()));
+  // checked on submit, never by disabling Create
+  const save = async (e?: FormEvent) => {
+    e?.preventDefault();
+    const n = name.trim();
+    const problem = !n ? "Give the list a name." : taken.has(n.toLowerCase()) ? `A list called “${n}” already exists - pick another name.` : null;
+    setNameErr(problem);
+    if (problem) { nameRef.current?.focus(); return; }
     try {
-      const made = await lm.create.mutateAsync({ name: name.trim(), description: desc.trim(), color, tickers: picks });
+      const made = await lm.create.mutateAsync({ name: n, description: desc.trim(), color, tickers: picks });
       app.toast(`“${made.name}” created${made.count ? ` with ${made.count} compan${made.count === 1 ? "y" : "ies"}` : ""}${made.count < picks.length ? ` · ${picks.length - made.count} could not be added` : ""}`, made.count < picks.length ? "info" : "ok");
       onClose();
       nav(`/watchlist/${encodeURIComponent(made.id)}`);
-    } catch (e) { app.toast(err(e), "error"); }
+    } catch (er) { app.toast(err(er), "error"); }
   };
   return (
     <Drawer title="New watchlist" icon="add" wide onClose={onClose}
-      footer={<><span className="xs faint">{picks.length ? `${picks.length} compan${picks.length === 1 ? "y" : "ies"} will be added` : "You can also add companies later"}</span><span className="spacer" /><button className="btn sec" onClick={onClose}>Cancel</button>
-        <button className="btn" disabled={busy || !name.trim()} onClick={save}>
-          <Icon name={busy ? "loading" : "check"} className={`sm ${busy ? "spin" : ""}`} />Create</button></>}>
-      <div className="col" style={{ gap: 14 }}>
-        <div className="wl-new-meta">
-          <label className="fld"><span>Name</span><input className="inp" autoFocus maxLength={60} value={name} placeholder="e.g. Defence ideas" onChange={(e) => setName(e.target.value)} /></label>
-          <div className="fld"><span>Colour</span>
-            <div className="wl-colors">{colors.map((c) => <button key={c} className={c === color ? "on" : ""} style={{ background: c }} onClick={() => setColor(c)} title={c} aria-label={`Colour ${c}`} />)}</div>
+      footer={<><span className="xs faint">{picks.length ? `${picks.length} compan${picks.length === 1 ? "y" : "ies"} will be added` : "You can add companies now or later"}</span><span className="spacer" /><button className="btn sec" onClick={onClose}>Cancel</button>
+        <button className="btn" type="submit" form="wl-new" disabled={busy}>
+          <Icon name={busy ? "loading" : "check"} className={`sm ${busy ? "spin" : ""}`} />{busy ? "Creating…" : "Create watchlist"}</button></>}>
+      <form id="wl-new" className="wl-new" onSubmit={save} noValidate>
+        <div className="wl-new-row">
+          <div className="fld wl-new-name">
+            <label htmlFor="wl-new-name">Name</label>
+            <input id="wl-new-name" ref={nameRef} className={`inp ${nameErr ? "bad" : ""}`} autoFocus maxLength={60} value={name} placeholder="e.g. Defence ideas" autoComplete="off"
+              aria-invalid={!!nameErr} aria-describedby="wl-new-name-h" onChange={(e) => { setName(e.target.value); if (nameErr) setNameErr(null); }} />
+            <span id="wl-new-name-h" className={nameErr ? "fld-err" : "fld-h"}>{nameErr ?? `${name.length}/60`}</span>
           </div>
+          <fieldset className="fld wl-new-color">
+            <legend>Colour</legend>
+            <div className="wl-swatches">
+              {colors.map((c, i) => (
+                <label key={c} className="wl-swatch" style={{ ["--c" as string]: c }}>
+                  <input type="radio" name="wl-color" value={c} checked={c === color} onChange={() => setColor(c)} aria-label={`Colour ${i + 1} of ${colors.length}`} />
+                  <span aria-hidden="true" />
+                </label>
+              ))}
+            </div>
+          </fieldset>
         </div>
-        <label className="fld"><span>Description</span><textarea className="inp" rows={2} maxLength={400} value={desc} placeholder="What this list is for: a theme, a strategy, a shortlist to research…" onChange={(e) => setDesc(e.target.value)} /></label>
-        <div className="fld"><span>Companies</span>
+        <div className="fld">
+          <label htmlFor="wl-new-desc">Description <span className="faint">(optional)</span></label>
+          <textarea id="wl-new-desc" className="inp" rows={3} maxLength={400} value={desc} aria-describedby="wl-new-desc-h"
+            placeholder="What this list is for: a theme, a strategy, a shortlist to research…" onChange={(e) => setDesc(e.target.value)} />
+          <span id="wl-new-desc-h" className="fld-h">Shown on the list's card. {desc.length}/400</span>
+        </div>
+        <div className="fld">
+          <span className="fld-l">Companies <span className="faint">(optional)</span></span>
           <CompanyImporter picks={picks} setPicks={setPicks} room={room} />
         </div>
-      </div>
+      </form>
     </Drawer>
   );
 }

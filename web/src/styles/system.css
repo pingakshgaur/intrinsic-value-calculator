@@ -242,6 +242,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ibtn.on { background: var(--active); color: var(--fg-1); }
 .inp, .sel { height: 30px; padding: 0 10px; border-radius: 6px; background: var(--bg); border: 1px solid var(--line-2); color: var(--fg-1); outline: none; min-width: 0; }
 .inp::placeholder { color: var(--fg-3); }
+/* a multi-line field grows with its text: never the single-line height */
+textarea.inp { display: block; width: 100%; height: auto; min-height: 76px; padding: 8px 10px; line-height: 1.5; font-family: var(--font); resize: vertical; }
 .inp:focus, .sel:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
 .inp.sm, .sel.sm { height: 26px; font-size: 12px; padding: 0 8px; }
 .inp.bad { border-color: var(--error); }
