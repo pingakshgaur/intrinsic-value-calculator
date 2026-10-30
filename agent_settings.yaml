@@ -23,8 +23,14 @@ run:
   history_years: 5
   # Companies researched in parallel. Keep low on free LLM tiers.
   parallel_companies: 3
-  # Train the four ML learners for the base valuation. Slow; off for cloud runs.
-  base_valuation_ml: false
+  # Train the four ML learners for the base valuation, on the whole learning
+  # pool. A training is reused until the pool changes. The cloud workflow
+  # passes --no-ml.
+  base_valuation_ml: true
+  # Value the companies being researched against every company the app knows
+  # (watchlists, training lists, the valuation report's companies and every
+  # company researched before), from cached accounts - no extra downloads.
+  learn_from_pool: true
   # Where the blackboard database and reports go. The cloud workflow points
   # this at a checkout of the 'intel-reports' branch so history survives.
   state_dir: output/intel

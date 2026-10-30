@@ -422,6 +422,40 @@ def run_models(df, specs, failures, fy_list=None):
     return store
 
 
+def run_models_cached(df, specs, failures, fy_list=None):
+    """run_models(), reusing the last training when nothing it learns from has
+    changed: the same rows, features, labels, learners, year window and split.
+    The learning pool is hundreds of companies, so retraining it on every agent
+    run would cost minutes for identical results. -> MLStore"""
+    import hashlib
+    import pickle
+
+    fy_list = list(fy_list or config.FY_LIST)
+    h = hashlib.sha1()
+    h.update(df.sort_index(axis=1).to_csv(index=False).encode())
+    h.update(repr((sorted(df.columns), [s["key"] for s in specs], fy_list, config.ML_SPLIT,
+                   config.ML_RATIO_BOUNDS, config.ML_MIN_TRAIN_ROWS, sorted(map(str, failures)))).encode())
+    folder = config.CACHE_DIR / "ml_store"
+    path = folder / f"{h.hexdigest()}.pkl"
+    try:
+        with open(path, "rb") as f:
+            store = pickle.load(f)
+        print("[ml] nothing new to learn from since the last training - reusing it")
+        return store
+    except Exception:
+        pass
+    store = run_models(df, specs, failures, fy_list)
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        for old in sorted(folder.glob("*.pkl"), key=lambda p: p.stat().st_mtime)[:-4]:
+            old.unlink(missing_ok=True)   # keep the last few trainings only
+        with open(path, "wb") as f:
+            pickle.dump(store, f)
+    except Exception:
+        log.exception("could not cache the ML training")
+    return store
+
+
 def write_diagnostics(store, df):
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     paths = []

@@ -112,6 +112,9 @@ MODEL_NAMES = [m for m, _ in MODEL_SPECS]
 # 'Rs' rather than the rupee glyph: U+20B9 is missing from several default
 # matplotlib font stacks and renders as a blank box in saved PNGs.
 CURRENCY = "Rs"
+# most company panels on one sector levels chart (the learning pool can put
+# hundreds of companies in a sector)
+MAX_LEVEL_PANELS = 24
 
 COLOURS: dict[str, str] = {
     "Market Price": "#111111",
@@ -541,6 +544,14 @@ def chart_sector_levels(
     skipped = sorted(has_data[~has_data].index)
     if not companies:
         return None
+    # with the learning pool a sector can hold hundreds of companies: draw the
+    # ones with the most benchmarked years, a readable number of panels
+    hidden = 0
+    if len(companies) > MAX_LEVEL_PANELS:
+        depth = sub[sub[COL_MARKET].notna()].groupby(COL_COMPANY).size()
+        keep = sorted(companies, key=lambda c: (-int(depth.get(c, 0)), c))[:MAX_LEVEL_PANELS]
+        hidden = len(companies) - len(keep)
+        companies = sorted(keep)
 
     ncols = min(3, len(companies))
     nrows = math.ceil(len(companies) / ncols)
@@ -572,6 +583,13 @@ def chart_sector_levels(
         f"line is interpretable directly as mispricing - there is no built-in offset to "
         f"discount, and a model sitting above the line is genuinely calling the stock "
         f"overvalued."
+        + (
+            f" {hidden} more companies in this sector are left off this chart to keep it "
+            f"readable (the {MAX_LEVEL_PANELS} with the most benchmarked years are drawn); "
+            f"every one of them is in the metrics."
+            if hidden
+            else ""
+        )
         + (
             f" {len(skipped)} company/companies in this sector produced no data at all "
             f"and are omitted here rather than drawn as empty panels "

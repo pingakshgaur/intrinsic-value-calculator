@@ -105,7 +105,8 @@ jobs:
           TICKERS: ${{ inputs.tickers }}
           USE_LLM: ${{ inputs.use_llm }}
         run: |
-          args=(--agents)
+          # no learning cache in the cloud, so the base valuation skips the ML learners
+          args=(--agents --no-ml)
           [ "$MODE" = "quick" ] && args+=(--quick)
           if [ -n "$TICKERS" ]; then
             clean="$(printf '%s' "$TICKERS" | tr -cd 'A-Za-z0-9,.&_-')"

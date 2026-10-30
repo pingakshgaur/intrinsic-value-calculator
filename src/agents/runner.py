@@ -78,6 +78,24 @@ def make_base(rec, rows, live_price):
     return base, sig
 
 
+def _learning_pool(companies, offline):
+    """Every other company the app knows, from cached accounts only. -> {name: rec}"""
+    if offline or not S.get("run.learn_from_pool", True):
+        return {}
+    import learning
+    import pipeline
+
+    try:
+        pool = learning.companies(exclude=companies, coverage=True)
+    except Exception:
+        log.exception("could not read the learning pool")
+        return {}
+    uni, _ = pipeline.build_universe(pool, cached="only", quiet=True)
+    print(f"[agents] learning from {len(uni)} more companies in the learning pool"
+          + (f" ({len(pool) - len(uni)} more join once their accounts are cached by the learning feed)" if len(pool) > len(uni) else ""))
+    return uni
+
+
 def base_valuation(companies, feeds, offline=False, ml=False):
     """-> ({name: base}, {name: accounts signals}, {name: universe rec})"""
     import capital
@@ -103,10 +121,15 @@ def base_valuation(companies, feeds, offline=False, ml=False):
 
     print(f"[agents] base valuation FY{config.FY_START}-FY{config.FY_END} for {len(companies)} companies")
     universe, failures = pipeline.build_universe(companies)
-    estimation.fill_universe(universe)
-    pe_table = model_pe.build_sector_pe_table(universe) if universe else {}
-    ev_table = model_ev_ebitda.build_sector_table(universe) if universe else {}
-    capital.build_sector_betas(universe)
+    # the companies being researched are valued against the whole learning pool:
+    # peer medians, sector betas, the ML models, the Ensemble's weights and the
+    # HYBRID MODEL's calibration all learn from every company the app knows
+    pool = _learning_pool(companies, offline)
+    full = {**pool, **universe}
+    estimation.fill_universe(full)
+    pe_table = model_pe.build_sector_pe_table(full) if full else {}
+    ev_table = model_ev_ebitda.build_sector_table(full) if full else {}
+    capital.build_sector_betas(full)
 
     ml_modules = pipeline.active_ml_modules() if ml and config.ML_ENABLED else []
     ml_keys = {m.key for m in model_registry.ml_models()}
@@ -116,14 +139,15 @@ def base_valuation(companies, feeds, offline=False, ml=False):
     enabled.discard("hybrid_model")
     enabled.add("ensemble")
     ctx = {
-        "valued": [c for c in companies if c["name"] in universe],
-        "universe": universe, "failures": failures, "peer_universe": universe,
+        "valued": [c for c in companies if c["name"] in universe] + [{"name": n, "sector": r["sector"]} for n, r in pool.items()],
+        "universe": full, "failures": failures, "peer_universe": full,
         "pe_table": pe_table, "ev_table": ev_table, "ml_modules": ml_modules, "enabled": enabled,
     }
     store = None
     if ml_modules:
-        df, fails = ml_common.build_dataset(universe)
-        store = ml_common.run_models(df, [m.SPEC for m in ml_modules], fails)
+        df, fails = ml_common.build_dataset(full)
+        print(f"[agents] ML models learning from {df['company'].nunique() if not df.empty else 0} companies")
+        store = ml_common.run_models_cached(df, [m.SPEC for m in ml_modules], fails)
     rows, _ = pipeline.value_rows(ctx, store, write_hybrid=False)
 
     # lens calibration for each company's latest year, learned from all the
@@ -131,7 +155,7 @@ def base_valuation(companies, feeds, offline=False, ml=False):
     import model_hybrid_model as HMM
 
     calibrate = bool(HM.Params().get("calibration.enabled", True))
-    hist = HMM._history(rows, universe) if calibrate else []
+    hist = HMM._history(rows, full) if calibrate else []
     for name, rec in universe.items():
         latest_fy = max((r["fy"] for r in rows if r["company"] == name and "_comps" in r), default=None)
         if latest_fy is not None and calibrate:
@@ -324,12 +348,12 @@ def run_agents(companies, offline=False, use_llm=True, quick=False, only=None, m
         missing = [c for c in companies if c["name"] not in bases]
         if missing:
             print(f"[agents] {len(missing)} companies have no earlier full run - valuing them now")
-            b2, s2, universe = base_valuation(missing, feeds, offline, bool(ml if ml is not None else S.get("run.base_valuation_ml", False)))
+            b2, s2, universe = base_valuation(missing, feeds, offline, bool(ml if ml is not None else S.get("run.base_valuation_ml", True)))
             bases.update(b2)
             acc_sigs.update(s2)
     else:
         bases, acc_sigs, universe = base_valuation(
-            companies, feeds, offline, bool(ml if ml is not None else S.get("run.base_valuation_ml", False))
+            companies, feeds, offline, bool(ml if ml is not None else S.get("run.base_valuation_ml", True))
         )
 
     shared = {

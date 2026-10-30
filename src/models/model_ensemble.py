@@ -362,12 +362,15 @@ def _blend_multiple(reg_log, peers, company, lo_hi):
         else None
     )
     a = getattr(config, "HYBRID_REG_BLEND", 0.5)
+    # a wild regression (a loss-maker's multiple) can overflow exp(); the result
+    # is clamped to lo_hi below anyway, so capping the exponent changes nothing else
+    exp = lambda v: math.exp(max(-700.0, min(700.0, v)))  # noqa: E731
     if reg_log is not None and sector_log is not None:
-        m, how = math.exp(a * reg_log + (1 - a) * sector_log), "regression + sector median"
+        m, how = exp(a * reg_log + (1 - a) * sector_log), "regression + sector median"
     elif reg_log is not None:
-        m, how = math.exp(reg_log), "regression (sector too thin for a median)"
+        m, how = exp(reg_log), "regression (sector too thin for a median)"
     elif sector_log is not None:
-        m, how = math.exp(sector_log), "sector median (regression had too few points)"
+        m, how = exp(sector_log), "sector median (regression had too few points)"
     else:
         return None, None
     lo, hi = lo_hi

@@ -405,6 +405,29 @@ def load_cached(ticker):
         return None
 
 
+def load_cached_covering(ticker, fy_list=None):
+    """Cached accounts covering every year of fy_list, from whichever year window
+    they were fetched for (the learning feed caches the report's window, an agent
+    run needs its own shorter one), freshest first and of any age: the accounts of
+    completed years barely change. Never downloads. -> data or None"""
+    fys = sorted(fy_list or config.FY_LIST)
+    found = []
+    for p in _cache_dir("train_cache").glob(f"{ticker}_*_*.pkl"):
+        try:
+            lo, hi = (int(x) for x in p.stem.rsplit("_", 2)[-2:])
+        except ValueError:
+            continue
+        if lo <= fys[0] and hi >= fys[-1]:
+            found.append(p)
+    for p in sorted(found, key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            with open(p, "rb") as f:
+                return pickle.load(f)
+        except Exception:
+            continue
+    return None
+
+
 def save_cached(ticker, data):
     try:
         with open(_cache_path(ticker), "wb") as f:

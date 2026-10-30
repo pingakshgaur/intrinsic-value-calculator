@@ -47,13 +47,28 @@ def active_ml_modules():
     return [ML_MODULES[m.key] for m in model_registry.ml_models() if m.key in ML_MODULES]
 
 
-def build_universe(companies, cached=False):
+def build_universe(companies, cached=False, quiet=False):
     """cached=True reuses accounts fetched in the last AUTO_CACHE_DAYS (the
-    auto-trainer's and the learning feed's cache) - used for training-only
-    companies, never for the companies being valued."""
+    auto-trainer's and the learning feed's cache) - used for the learning pool,
+    never for the companies the user asked to value. cached="only" never
+    downloads: it takes whatever cached accounts cover the year window and
+    skips the rest (an agent run learning from the pool must not stall on
+    hundreds of downloads). quiet=True prints nothing per company."""
+    import builtins
+
+    print = builtins.print if not quiet else (lambda *a, **k: None)  # noqa: A001
     universe, failures = {}, {}
     for c in companies:
         name = c["name"]
+        downloaded = False
+        if cached == "only":
+            import auto_train
+
+            t = (c.get("ticker") or "").strip()
+            data = auto_train.load_cached_covering(t) if t else None
+            if data is not None:
+                universe[name] = {"sector": c["sector"], "cap": c.get("cap", ""), "ticker": t, "data": data}
+            continue
         print(f"[fetch] {name} ...", end=" ", flush=True)
         try:
             ticker = ticker_resolver.resolve(name, c.get("ticker"))
@@ -86,10 +101,12 @@ def build_universe(companies, cached=False):
                 if data is None:
                     data = data_hub.fetch_company(ticker, config.FY_LIST)
                     auto_train.save_cached(ticker, data)
+                    downloaded = True
                 else:
                     print("(cached)", end=" ")
             else:
                 data = data_hub.fetch_company(ticker, config.FY_LIST)
+                downloaded = True
         except Exception as e:
             log.exception("fetch crashed for %s (%s)", name, ticker)
             failures[name] = Result.bad(
@@ -125,7 +142,7 @@ def build_universe(companies, cached=False):
             f"OK  [{ticker}]  prices {px}/{n}  benchmarks {bench}/{n}  "
             f"fundamentals {fund}/{n}{tag}"
         )
-        if not config.OFFLINE:
+        if downloaded and not config.OFFLINE:
             time.sleep(config.REQUEST_PAUSE)
     return universe, failures
 
@@ -167,6 +184,24 @@ def run(companies, extra_training=None, auto_train=None):
             "from the live market in step 2.",
         )
     universe, failures = build_universe(companies)
+
+    # ---- the learning pool is valued too, not only trained on ----
+    # Every other company the app knows (watchlists, training lists, everything
+    # the research agents have judged) joins the report: the peer medians, the
+    # sector betas, the Ensemble's weights, the HYBRID MODEL's calibration and
+    # the accuracy figures all learn from every one of them. Pool accounts come
+    # from the cache; a pool company that cannot be fetched is simply left out.
+    if extra_training:
+        mine = {c["name"] for c in companies}
+        pool = [c for c in extra_training if c["name"] not in mine]
+        extra_uni, extra_fail = build_universe(pool, cached=True)
+        for k, v in extra_uni.items():
+            universe.setdefault(k, v)
+        companies = list(companies) + [c for c in pool if c["name"] in extra_uni]
+        print(
+            f"\n[pool] valuing {len(extra_uni)} more companies from the learning pool "
+            f"({len(extra_fail)} could not be fetched and are left out)"
+        )
 
     # ---- sufficiency gate: AFTER fetch, BEFORE estimation ----
     # Order is load-bearing. estimation.fill_universe() below can fabricate a
@@ -219,14 +254,6 @@ def run(companies, extra_training=None, auto_train=None):
         return
 
     train_universe = dict(universe)
-    if extra_training:
-        extra_uni, extra_fail = build_universe(extra_training, cached=True)
-        for k, v in extra_uni.items():
-            train_universe.setdefault(k, v)
-        print(
-            f"\n[ml] training universe extended to {len(train_universe)} "
-            f"companies ({len(extra_fail)} extras failed)"
-        )
 
     # ---- gap filling MUST run before the peer tables are built ----
     estimation.fill_universe(train_universe)

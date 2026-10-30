@@ -43,14 +43,14 @@ function Body({ d }: { d: LearningStatus }) {
   return (
     <>
       <div className="band">
-        <div><div className="k">Companies the models learn from</div><div className="v">{d.companies.toLocaleString("en-IN")}</div><div className="s">across {d.sectors} sectors, plus the {d.valued} you value</div></div>
+        <div><div className="k">Learning pool</div><div className="v">{d.companies.toLocaleString("en-IN")}</div><div className="s">across {d.sectors} sectors, plus the {d.valued} you value</div></div>
         <div><div className="k">Ready to use</div><div className="v">{ready}%</div><div className="s">{d.cache.missing + d.cache.stale ? `${d.cache.missing + d.cache.stale} need a refresh` : "all up to date"}</div></div>
         <div><div className="k">Is more data helping?</div><div className={`v ${verdict.c}`} style={{ fontSize: 17 }}>{verdict.t}</div><div className="s">{verdict.s}</div></div>
       </div>
       <div className="grid c-12">
         <Panel title="Keep it up to date">
           <div className="col" style={{ gap: 12 }}>
-            <Toggle checked={s.use_in_runs} onChange={(v) => set({ use_in_runs: v })} label="Learn from all of these companies in every valuation run" />
+            <Toggle checked={s.use_in_runs} onChange={(v) => set({ use_in_runs: v })} label="Value and learn from all of these companies in every valuation run" />
             <Toggle checked={s.auto_feed} onChange={(v) => set({ auto_feed: v })} label="Refresh their data every evening after the market closes" />
             <Toggle checked={s.auto_retrain} onChange={(v) => set({ auto_retrain: v })} label="Retrain the models after each refresh" />
             {s.auto_feed && (

@@ -1,9 +1,12 @@
 # FILE: src/learning.py
 """
-Learning data: every company the app knows about beyond the ones being
-valued - the training list, the auto-trainer's picks and the watchlist -
-becomes extra training rows for the machine-learning models, and through
-them the HYBRID MODEL's learning lens and its calibration.
+Learning data: every company the app knows about - the training list, the
+auto-trainer's picks, every watchlist and every company the research agents
+have judged - is one learning pool. The valuation report values the whole pool
+alongside its own companies, and every agent run values its companies against
+it, so the peer medians, the sector betas, the machine-learning models, the
+Ensemble's weights, the HYBRID MODEL's calibration and the accuracy figures all
+learn from every company, not only from the few being looked at.
 
 What this adds is companies, not ticks. The models learn from one row per
 company per financial year (that year's accounts -> the next year's price
@@ -55,29 +58,65 @@ def _watchlist():
         return []
 
 
-def companies():
-    """Every learning company, de-duplicated by ticker, minus the companies
-    being valued (they are in the training frame already).
+def researched():
+    """Every real company the research agents have ever judged, with its
+    sector, latest first. Offline test runs (mock tickers without an exchange
+    suffix) are left out. -> [{"name", "sector", "ticker"}]"""
+    import sqlite3
+
+    try:
+        from agents import settings as S
+
+        path = S.state_dir() / "blackboard.sqlite"
+    except Exception:
+        return []
+    if not path.exists():
+        return []
+    try:
+        con = sqlite3.connect(path, timeout=10)
+        try:
+            rows = con.execute(
+                "SELECT company, ticker, json_extract(payload, '$.sector'), MAX(run_id) FROM verdicts "
+                "WHERE company IS NOT NULL AND company != '' GROUP BY company ORDER BY MAX(run_id) DESC").fetchall()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return []
+    return [{"name": c, "ticker": (t or "").strip(), "sector": s or ""} for c, t, s, _ in rows
+            if "." in (t or "")]
+
+
+def companies(exclude=None, coverage=False):
+    """The learning pool, de-duplicated by ticker, minus `exclude` (rows already
+    in the frame - by default the companies the valuation report values).
+    coverage=True also takes in those report companies, for an agent run that
+    values other companies against all of them.
     -> [{"name", "sector", "cap", "ticker", "lists"}]"""
-    valued = _read(config.DEFAULT_INPUT)
-    skip_t = {(r.get("ticker") or "").strip() for r in valued}
-    skip_n = {(r.get("company name") or "").strip() for r in valued}
+    valued = _read(config.DEFAULT_INPUT) if exclude is None else exclude
+    bare = lambda t: (t or "").strip().upper().split(".")[0]  # noqa: E731  HAL.NS and HAL are one company
+    skip_t = {bare(r.get("ticker")) for r in valued} - {""}
+    skip_n = {(r.get("company name") or r.get("name") or "").strip() for r in valued} - {""}
     out = {}
 
     def add(tag, name, sector, cap, ticker):
         name, ticker = (name or "").strip(), (ticker or "").strip()
-        if not ticker or ticker in skip_t or name in skip_n:
+        if not ticker or bare(ticker) in skip_t or name in skip_n:
             return
         e = out.setdefault(ticker, {"name": name or ticker, "sector": (sector or "").strip() or "Unclassified",
                                     "cap": (cap or "").strip(), "ticker": ticker, "lists": []})
+        if e["sector"] == "Unclassified" and (sector or "").strip():
+            e["sector"] = sector.strip()   # a later list may know the sector a watchlist did not
         if tag not in e["lists"]:
             e["lists"].append(tag)
 
-    for tag, path in LISTS:
+    lists = ((("coverage", config.DEFAULT_INPUT),) if coverage else ()) + LISTS
+    for tag, path in lists:
         for r in _read(path):
             add(tag, r.get("company name"), r.get("sector name"), r.get("market cap"), r.get("ticker"))
     for w in _watchlist():
         add("watchlist", w.get("name"), w.get("sector"), w.get("cap"), w.get("ticker"))
+    for r in researched():
+        add("researched", r["name"], r["sector"], "", r["ticker"])
     return list(out.values())
 
 
