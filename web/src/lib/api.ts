@@ -155,6 +155,9 @@ export interface HMResult {
 }
 
 export interface Verdict extends HMResult {
+  /** the research run this verdict is from, and when it was made */
+  run_id?: number | null;
+  researched?: string | null;
   model?: string;
   company: string;
   ticker: string;
@@ -184,6 +187,9 @@ export interface IntelMeta {
   llm_mode: string;
   feed_problems: string[];
   companies: number;
+  /** every company with a verdict, from any run, and the runs they come from */
+  companies_total?: number;
+  runs?: number[];
 }
 
 export interface IntelLatest {

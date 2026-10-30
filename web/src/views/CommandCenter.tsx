@@ -40,7 +40,7 @@ export function CommandCenter() {
       <PageHeader
         crumbs={[{ label: "Analysis" }, { label: "Command Center" }]}
         title="Command Center"
-        sub={hasIntel ? <>Research run #{meta?.run_id} · {meta?.mode} · {isoWhen(meta?.started)} · {meta?.llm_mode}</> : "Valuation and research across your watchlists and the learning pool"}
+        sub={hasIntel ? <>The latest verdict on {verdicts.length} {verdicts.length === 1 ? "company" : "companies"} · last run #{meta?.run_id} · {meta?.mode} · {isoWhen(meta?.started)}</> : "Valuation and research across your watchlists and the learning pool"}
         actions={<ResearchLauncher />}
       />
 
@@ -64,7 +64,7 @@ export function CommandCenter() {
       ) : (
         <>
           <div className="grid c-21">
-            <Panel title="Coverage map" meta="tile size: market cap · colour: upside to HYBRID MODEL value"
+            <Panel title="Research map" meta="tile size: market cap · colour: upside to HYBRID MODEL value"
               tools={<span className="scale">below value<span className="bar" />above value</span>} flush>
               <div style={{ padding: 10 }}><CoverageMap verdicts={verdicts} onPick={open} height={380} /></div>
             </Panel>
@@ -98,13 +98,12 @@ function Band({ verdicts, hm, report }: { verdicts: Verdict[]; hm?: CsvRow; repo
   }, [verdicts]);
   return (
     <div className="band">
-      <div><div className="k"><Icon name="organization" className="xs" />Coverage</div><div className="v">{verdicts.length}</div><div className="s">companies researched</div></div>
-      <div><div className="k"><Icon name="arrow-down" className="xs" />Below value</div><div className="v up">{s.cheap}</div><div className="s">deep value + undervalued</div></div>
-      <div><div className="k"><Icon name="arrow-up" className="xs" />Above value</div><div className="v warn">{s.dear}</div><div className="s">overvalued</div></div>
-      <div><div className="k"><Icon name="graph" className="xs" />Median upside</div><div className={`v ${isNum(s.med) ? (s.med >= 0 ? "up" : "down") : ""}`}>{pct(s.med, 1, true)}</div><div className="s">price → HYBRID MODEL</div></div>
-      <div><div className="k"><Icon name="verified" className="xs" />Avg confidence</div><div className="v">{isNum(s.conf) ? s.conf.toFixed(0) : "—"}</div><div className="s">out of 100</div></div>
-      <div><div className="k"><Icon name="warning" className="xs" />Red flags</div><div className={`v ${s.flags ? "down" : ""}`}>{s.flags}</div><div className="s">validated</div></div>
-      <div><div className="k"><Icon name="target" className="xs" />HYBRID MODEL error</div><div className="v hm">{hm ? pctUnits(hm["MedAPE %"], 1) : "—"}</div><div className="s">median, back-test · {ago(report)}</div></div>
+      <div><div className="k">Researched</div><div className="v">{verdicts.length}</div><div className="s">companies with a verdict</div></div>
+      <div><div className="k">Below value</div><div className="v up">{s.cheap}</div><div className="s">deep value or undervalued</div></div>
+      <div><div className="k">Above value</div><div className="v warn">{s.dear}</div><div className="s">overvalued</div></div>
+      <div><div className="k">Median upside</div><div className={`v ${isNum(s.med) ? (s.med >= 0 ? "up" : "down") : ""}`}>{pct(s.med, 1, true)}</div><div className="s">{isNum(s.conf) ? `average confidence ${s.conf.toFixed(0)}` : "to the HYBRID MODEL value"}</div></div>
+      <div><div className="k">Red flags</div><div className={`v ${s.flags ? "down" : ""}`}>{s.flags}</div><div className="s">validated by the review team</div></div>
+      <div><div className="k">HYBRID MODEL error</div><div className="v hm">{hm ? pctUnits(hm["MedAPE %"], 1) : "—"}</div><div className="s">median, back-test · {ago(report)}</div></div>
     </div>
   );
 }
@@ -115,7 +114,7 @@ function Signals({ verdicts, problems, onPick }: { verdicts: Verdict[]; problems
     ...verdicts.flatMap((v) => (v.changes ?? []).filter((c) => !c.startsWith("first")).map((t) => ({ v, t, icon: t.startsWith("label") ? "tag" : "pulse", cls: "info", kind: "Change" }))),
   ];
   return (
-    <Panel title="Signals" meta={`${items.length} from the latest run`} flush>
+    <Panel title="Signals" meta={`${items.length} from the latest research on each company`} flush>
       <div className="feed" style={{ maxHeight: 400, overflow: "auto" }}>
         {items.length === 0 && <div className="empty" style={{ padding: 32 }}><Icon name="pass" className="up" /><span className="small">No red flags or changes since the last run.</span></div>}
         {items.slice(0, 50).map((x, i) => (

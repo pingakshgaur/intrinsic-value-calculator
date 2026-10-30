@@ -33,10 +33,12 @@ export function Notifications() {
 
   const research = useMemo(() => {
     const v = intel.data?.verdicts ?? [];
-    const run = intel.data?.meta?.run_id ?? "";
-    const at = intel.data?.meta?.started ? Date.parse(intel.data.meta.started) / 1000 : null;
     const rows: Item[] = [];
     for (const x of v) {
+      // each verdict carries the run it is from: an older one keeps its own key and time
+      const run = x.run_id ?? intel.data?.meta?.run_id ?? "";
+      const when = x.researched ?? intel.data?.meta?.started;
+      const at = when ? Date.parse(when) / 1000 : null;
       for (const f of x.red_flags ?? []) rows.push({ key: `${run}|${x.company}|${f}`, kind: "research", icon: "warning", tone: "down", title: shortName(x.company), text: f, t: at, isNew: false, go: companyPath(x.company) });
       for (const c of (x.changes ?? []).filter((c) => !c.startsWith("first")))
         rows.push({ key: `${run}|${x.company}|${c}`, kind: "research", icon: c.startsWith("label") ? "tag" : "history", tone: "info", title: shortName(x.company), text: c, t: at, isNew: false, go: companyPath(x.company) });

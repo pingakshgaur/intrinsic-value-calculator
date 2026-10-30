@@ -5,6 +5,8 @@
  * bundled so the app never depends on the network for its look.
  */
 :root {
+  /* what a table header or a pinned cell sits on: the page, or a drawer / inspector / pop-over */
+  --surface: var(--bg);
   color-scheme: dark;
 
   --bg: #121314;
@@ -161,7 +163,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .main { grid-column: 2; min-width: 0; min-height: 0; overflow: auto; position: relative; }
 
 /* ------------------------------------------------------------- page */
-.page { padding: 18px 24px 40px; display: flex; flex-direction: column; gap: 16px; max-width: 1880px; }
+.page { padding: 18px 24px 40px; display: flex; flex-direction: column; gap: 28px; max-width: 1880px; }
 .page.fill { height: 100%; padding-bottom: 16px; min-height: 0; }
 .ph { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
 .ph .crumbs { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-3); margin-bottom: 4px; }
@@ -176,28 +178,35 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tabs .n { font-size: 10.5px; padding: 0 6px; border-radius: 8px; background: var(--raise-2); color: var(--fg-2); }
 
 /* ------------------------------------------------------------- panel */
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); min-width: 0; display: flex; flex-direction: column; }
-.panel-h { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 14px; border-bottom: 1px solid var(--line); flex: none; }
-.panel-h h3 { font-size: 12.5px; font-weight: 600; }
-.panel-h .meta { color: var(--fg-3); font-size: 11.5px; }
+/* a panel is a flat section on the page grid, as on the workforce overview: a
+   title, a hairline rule, the content - no box, no fill */
+.panel { min-width: 0; display: flex; flex-direction: column; }
+.panel-h { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 0 0 6px; border-bottom: 1px solid var(--line-2); flex: none; }
+.panel-h h3 { font-size: 15px; font-weight: 600; color: var(--fg-1); letter-spacing: -.01em; white-space: nowrap; flex: none; }
+.panel-h .meta { color: var(--fg-3); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panel-h .tools { margin-left: auto; display: flex; align-items: center; gap: 6px; }
-.panel-b { padding: 14px; min-height: 0; }
+.panel-b { padding: 16px 0 0; min-height: 0; }
 .panel-b.flush { padding: 0; }
+/* inside a drawer, an inspector or a pop-over a panel keeps a little air */
+.drawer .panel-b, .insp .panel-b { padding-top: 12px; }
 .panel.bare .panel-h { border-bottom: 0; }
 
 .grid { display: grid; gap: 14px; }
+.page > .grid, .page > section > .grid { gap: 28px 36px; }
 .c2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .c-21 { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); } .c-12 { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
 .c-32 { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
 @media (max-width: 1280px) { .c2, .c3, .c-21, .c-12, .c-32 { grid-template-columns: minmax(0, 1fr); } }
 
 /* ------------------------------------------------------------- metric band */
-.band { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
-.band > div { padding: 12px 16px 13px; border-left: 1px solid var(--line); min-width: 0; }
-.band > div:first-child { border-left: 0; }
-.band .k { font-size: 11px; color: var(--fg-3); font-weight: 600; letter-spacing: .03em; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
-.band .v { font-size: 22px; font-weight: 600; color: var(--fg-1); margin-top: 4px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.15; }
-.band .s { font-size: 11.5px; color: var(--fg-2); margin-top: 2px; }
+/* figures: large numerals between hairlines, as on the workforce overview */
+.band { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); border-top: 1px solid var(--line-2); overflow: hidden; }
+.band > div { padding: 14px 20px 2px; border-left: 1px solid var(--line); min-width: 0; }
+.band > div:first-child { border-left: 0; padding-left: 0; }
+.band .k { font-size: 11px; color: var(--fg-3); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.band .k .codicon { display: none; }
+.band .v { font-size: 28px; font-weight: 600; color: var(--fg-1); margin-top: 6px; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.band .s { font-size: 12px; color: var(--fg-2); margin-top: 4px; }
 @media (max-width: 1280px) { .band { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); } .band > div { border-top: 1px solid var(--line); } }
 
 /* ------------------------------------------------------------- controls */
@@ -258,7 +267,7 @@ kbd { font-family: var(--mono); font-size: 10.5px; padding: 1px 5px; border-radi
 /* ------------------------------------------------------------- data grid */
 .dg-wrap { overflow: auto; min-height: 0; flex: 1; }
 table.dg { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; font-variant-numeric: tabular-nums; }
-table.dg th { position: sticky; top: 0; z-index: 2; background: var(--panel-2); height: 34px; padding: 0 12px; text-align: left; font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--fg-3); border-bottom: 1px solid var(--line); white-space: nowrap; user-select: none; }
+table.dg th { position: sticky; top: 0; z-index: 2; background: var(--surface); height: 34px; padding: 0 12px; text-align: left; font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--fg-3); border-bottom: 1px solid var(--line); white-space: nowrap; user-select: none; }
 table.dg th.sortable { cursor: pointer; } table.dg th.sortable:hover { color: var(--fg-1); }
 table.dg th.r, table.dg td.r { text-align: right; }
 table.dg td { height: 38px; padding: 0 12px; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
@@ -268,10 +277,10 @@ table.dg tbody tr.click { cursor: pointer; }
 table.dg tbody tr:hover td { background: #ffffff05; }
 table.dg tbody tr.sel td { background: #3994bc14; }
 table.dg tbody tr.sel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
-table.dg td.sticky, table.dg th.sticky { position: sticky; left: 0; z-index: 1; background: var(--panel); }
-table.dg th.sticky { z-index: 3; background: var(--panel-2); }
-table.dg tbody tr:hover td.sticky { background: #1e1f20; }
-table.dg tbody tr.sel td.sticky { background: #1b2a32; }
+table.dg td.sticky, table.dg th.sticky { position: sticky; left: 0; z-index: 1; background: var(--surface); }
+table.dg th.sticky { z-index: 3; background: var(--surface); }
+table.dg tbody tr:hover td.sticky { background: color-mix(in srgb, var(--fg) 3%, var(--surface)); }
+table.dg tbody tr.sel td.sticky { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
 table.dg .co { display: flex; flex-direction: column; line-height: 1.25; }
 table.dg .co b { color: var(--fg-1); font-weight: 500; }
 table.dg .co small { color: var(--fg-3); font-family: var(--mono); font-size: 10.5px; }
@@ -471,14 +480,11 @@ table.dg td.edit .inp:focus, table.dg td.edit .sel:focus { border-color: var(--a
 :root[data-theme="light"] .cmdk:hover,
 :root[data-theme="light"] .runchip:hover,
 :root[data-theme="light"] .chip:hover,
-:root[data-theme="light"] .jt:hover { border-color: #b9babf; }
 :root[data-theme="light"] .tool .pip { color: #fff; }
 :root[data-theme="light"] .runchip.busy { color: #0058ab; }
 :root[data-theme="light"] .runchip .bar { background: #0000001a; }
 :root[data-theme="light"] .tag.hm { background: #7b3fb31a; color: #6a2fa0; }
 :root[data-theme="light"] table.dg tbody tr:hover td { background: #00000005; }
-:root[data-theme="light"] table.dg tbody tr:hover td.sticky { background: #f7f7f9; }
-:root[data-theme="light"] table.dg tbody tr.sel td.sticky { background: #e8f1fb; }
 :root[data-theme="light"] .ev:hover { background: #00000005; }
 :root[data-theme="light"] .skel { background: linear-gradient(90deg, #0000000a 25%, #00000012 50%, #0000000a 75%); background-size: 200% 100%; }
 :root[data-theme="light"] .scrim { background: #00000038; }
@@ -718,7 +724,7 @@ table.dg td.edit .inp:focus, table.dg td.edit .sel:focus { border-color: var(--a
 table.dg th.cbcol, table.dg td.cbcol { width: 40px; min-width: 40px; max-width: 40px; padding: 0 0 0 14px; text-align: left; cursor: pointer; }
 table.dg.has-cb th.sticky:not(.cbcol), table.dg.has-cb td.sticky:not(.cbcol) { left: 40px; }
 table.dg tbody tr.checked td { background: color-mix(in srgb, var(--accent) 9%, transparent); }
-table.dg tbody tr.checked td.sticky { background: color-mix(in srgb, var(--accent) 9%, var(--panel)); }
+table.dg tbody tr.checked td.sticky { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
 table.dg tbody tr.checked td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 
 /* ------------------------------------------------------------- wide content scrolls sideways instead of being cut off */
@@ -751,3 +757,7 @@ table.dg td.wrap { white-space: normal; min-width: 220px; line-height: 1.45; pad
 .sx-long > .sx-btn { display: none; }
 .sx-hover > .sx-btn.on { opacity: 1; pointer-events: auto; }
 @media (prefers-reduced-motion: reduce) { .sx-fade, .sx-btn { transition: none; } }
+
+/* boxed surfaces: tables inside them take their colour */
+.insp, .drawer, .xd-table, .modal, .dlg { --surface: var(--panel); }
+.pop, .menu, .tc-menu, .tc-drop { --surface: var(--raise); }

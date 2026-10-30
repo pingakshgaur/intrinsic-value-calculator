@@ -106,9 +106,9 @@
 .form-sec .fh .num { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--raise-2); color: var(--fg-1); font-size: 11px; font-weight: 700; }
 .form-sec .fh b { color: var(--fg-1); font-weight: 600; }
 .jobtype { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-.jt { text-align: left; border: 1px solid var(--line-2); border-radius: 6px; background: var(--bg); padding: 9px 10px; cursor: pointer; color: var(--fg-2); display: flex; flex-direction: column; gap: 2px; }
-.jt:hover { border-color: #4a4c4e; }
-.jt.on { border-color: var(--accent); background: #3994bc12; color: var(--fg-1); }
+.jt { text-align: left; border: 0; border-top: 2px solid var(--line-2); border-radius: 0; background: none; padding: 10px 0 4px; cursor: pointer; color: var(--fg-2); display: flex; flex-direction: column; gap: 3px; transition: border-color .12s ease; }
+.jt:hover { border-top-color: var(--fg-3); }
+.jt.on { border-top-color: var(--accent); color: var(--fg-1); }
 .jt b { color: var(--fg-1); font-weight: 600; display: flex; align-items: center; gap: 7px; font-size: 12.5px; }
 .jt span { font-size: 11.5px; }
 .fieldset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; }
@@ -611,8 +611,6 @@
 .op-y { width: 72px; }
 .op-detail { padding-top: 14px; min-width: 0; }
 .op-jobs { min-width: 0; }
-.op-jobs table.dg th { background: var(--bg); }
-.op-jobs table.dg td.sticky, .op-jobs table.dg th.sticky { background: var(--bg); }
 @media (max-width: 900px) { .op-co { width: 100%; } }
 
 /* Markets: research radar */
@@ -675,3 +673,34 @@
   .pa-step { flex-direction: row; border-top: 0; padding-top: 0; margin-left: auto; }
   .pa-step .btn { width: auto; max-width: 220px; }
 }
+
+/* ------------------------------------------------------------- one surface language
+   Content sits on the page grid between hairline rules, as on the workforce
+   overview and Operations: no filled, bordered cards. (The Studio, the Research
+   Room and the Agent Network are full-height workspaces and keep their panes.) */
+.cpanel:not(:fullscreen) { background: none; border: 0; border-radius: 0; }
+.cpanel:not(:fullscreen) .cp-head { padding: 0 0 8px; }
+.pb-figs { border: 0; border-radius: 0; }
+.pb-figs > div { background: none; }
+.pb-figs > div:first-child { border-left: 0; }
+.pa-box { border: 0; border-top: 1px solid var(--line-2); border-radius: 0; background: none; padding: 12px 0 0; }
+.fbox { border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none; padding: 10px 0 6px; }
+.fbox.dirty { border-top-color: var(--accent); }
+.wl-card { border: 0; border-top: 2px solid var(--wc, var(--line-2)); border-radius: 0; background: none; box-shadow: none; padding: 12px 0 4px; }
+.wl-card:hover { transform: none; box-shadow: none; border-top-color: var(--wc, var(--accent)); }
+.wl-card:hover .wl-card-h b { color: var(--wc, var(--accent)); }
+.wl-card.focused { border-top-width: 3px; }
+.wl-card.new { border: 0; border-top: 2px dashed var(--line-2); }
+.wl-card-f { background: none; border: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 0; gap: 0; }
+.wl-card-f > div { background: none; padding: 7px 8px 7px 0; }
+.wl-card-f > div + div { border-left: 1px solid var(--line); padding-left: 10px; }
+.wl-lib { gap: 28px 32px; }
+.tile { background: none; border: 0; border-top: 1px solid var(--line-2); border-radius: 0; padding: 10px 0 8px; }
+.tile:hover { border-top-color: var(--fg-3); }
+.tile.picked { border-top-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.tile:hover { background: var(--hover); }
+.tile.on, .tile.on.value { border-top: 2px solid var(--accent); box-shadow: none; padding-top: 9px; }
+.tile.value { border-top-color: var(--up); box-shadow: none; }
+.tiles { gap: 20px 28px; padding: 14px 0; }
+/* a toolbar at the top of a flat section lines up with its title */
+.page .panel > .toolbar, .page .panel-b > .toolbar { padding-left: 0; padding-right: 0; }

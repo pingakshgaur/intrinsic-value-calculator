@@ -43,7 +43,7 @@ export function Performance() {
         { id: "board", label: "Leaderboard", icon: "list-ordered" },
         { id: "sectors", label: "Sectors", icon: "symbol-class" },
         { id: "company", label: "Company", icon: "graph-line" },
-        { id: "training", label: "Training data", icon: "mortar-board" },
+        { id: "training", label: "Learning pool", icon: "mortar-board" },
         { id: "files", label: "Files & charts", icon: "files" },
       ]} />
       {q.data?.available && tab !== "training" && tab !== "files" && <ScopeNote shown={cos} total={allCos} />}

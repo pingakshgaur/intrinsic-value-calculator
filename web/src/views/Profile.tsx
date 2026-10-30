@@ -4,7 +4,7 @@ import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, X
 import { useHistory, useIntel } from "../lib/hooks";
 import { AnalystRow, Case, Verdict } from "../lib/api";
 import { useWatchlist, WatchItem, WatchList } from "../lib/live";
-import { isNum, money, pct, shortName, signed, slug, titleCase } from "../lib/format";
+import { isNum, isoWhen, money, pct, shortName, signed, slug, titleCase } from "../lib/format";
 import { AGENT_NAME, HM_COLOR, LEAD_ICON, LEAD_SHORT, scoreColor } from "../lib/labels";
 import { companyPath, findVerdict, listCompanyPath } from "../lib/company";
 import { Diverge, Empty, Icon, LabelBadge, Meter, Panel, Popover, QueryView, Tip } from "../components/ui";
@@ -229,14 +229,15 @@ function CompanyPage({ v, w, list, ticker, nav: n, homeList, researchLoading }: 
   );
 }
 
-/** Everything the research run says about the company: the old Coverage profile. */
+/** Everything the latest research on the company says. */
 function Research({ v }: { v: Verdict }) {
+  const from = v.run_id != null ? `run #${v.run_id}${v.researched ? ` · ${isoWhen(v.researched)}` : ""}` : null;
   return (
     <>
           <Section id="summary" title="Summary">
             <PlainWords v={v} />
             <div className="grid c-32">
-              <Panel title="Research note" meta={v.summary?.by === "llm" ? "Chief agent · every point cited" : "assembled from lead findings"}>
+              <Panel title="Research note" meta={[from, v.summary?.by === "llm" ? "Chief agent · every point cited" : "assembled from lead findings"].filter(Boolean).join(" · ")}>
                 {v.summary?.headline && <div className="prose-h">{v.summary.headline}</div>}
                 <p className="prose">{v.summary?.note || "No note was written for this run."}</p>
                 {v.summary?.key_points?.length > 0 && <ul className="prose" style={{ margin: "10px 0 0", paddingLeft: 18 }}>{v.summary.key_points.map((p, i) => <li key={i}>{p.text}</li>)}</ul>}

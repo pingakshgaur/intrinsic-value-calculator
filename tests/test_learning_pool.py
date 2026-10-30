@@ -155,3 +155,24 @@ def test_agent_runs_learn_from_the_pool(monkeypatch):
     assert seen == {"exclude": run}
     S.data()["run"]["learn_from_pool"] = False
     assert runner._learning_pool(run, offline=False) == {}
+
+
+def test_intel_keeps_every_company_ever_researched(tmp_path, monkeypatch):
+    """Researching one watchlist must not hide the verdicts found on another."""
+    from server import data as D
+
+    monkeypatch.setattr(D, "intel_state", lambda: tmp_path)
+    board = Blackboard(tmp_path / "blackboard.sqlite")
+    board.save_verdict(1, {"company": "Alpha Ltd", "ticker": "ALPHA.NS", "label": "Undervalued"})
+    board.save_verdict(1, {"company": "Beta Ltd", "ticker": "BETA.NS", "label": "Overvalued"})
+    board.save_verdict(2, {"company": "Beta Ltd", "ticker": "BETA.NS", "label": "Fairly valued"})
+    board.close()
+    (tmp_path / "latest").mkdir()
+    (tmp_path / "latest" / "verdicts.json").write_text(json.dumps({
+        "meta": {"run_id": 2, "started": "2026-10-30T18:00:00"},
+        "verdicts": [{"company": "Beta Ltd", "ticker": "BETA.NS", "label": "Fairly valued", "history": []}]}), encoding="utf-8")
+    d = D.intel_latest()
+    got = {v["company"]: v for v in d["verdicts"]}
+    assert set(got) == {"Alpha Ltd", "Beta Ltd"} and d["meta"]["companies_total"] == 2 and d["meta"]["runs"] == [2, 1]
+    assert got["Beta Ltd"]["run_id"] == 2 and got["Beta Ltd"]["label"] == "Fairly valued"    # the latest run's word
+    assert got["Alpha Ltd"]["run_id"] == 1 and got["Alpha Ltd"]["label"] == "Undervalued"

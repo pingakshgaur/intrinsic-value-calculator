@@ -54,7 +54,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       { id: "p-room", group: "Go to", label: "Research Room · agent chat", icon: "comment-discussion", hint: "Alt+7", run: go("/agents/chat") },
       { id: "p-m", group: "Go to", label: "Model Performance", icon: "graph-line", hint: "Alt+9", run: go("/performance") },
       { id: "p-sec", group: "Go to", label: "Model Performance · which model suits each sector", icon: "symbol-class", run: go("/performance?tab=sectors") },
-      { id: "p-le", group: "Go to", label: "Model Performance · training data", icon: "mortar-board", run: go("/performance?tab=training") },
+      { id: "p-le", group: "Go to", label: "Model Performance · learning pool", icon: "mortar-board", run: go("/performance?tab=training") },
       { id: "p-run", group: "Go to", label: "Operations", icon: "server-process", hint: "Alt+8", run: go("/operations") },
       { id: "p-s", group: "Go to", label: "Configuration", icon: "settings", run: go("/configuration") },
       { id: "r-learn", group: "Run", label: "Refresh the learning pool", icon: "cloud-download", run: job("learn") },

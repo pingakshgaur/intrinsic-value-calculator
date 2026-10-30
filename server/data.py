@@ -169,14 +169,47 @@ def intel_state():
 
 
 def intel_latest():
+    """The latest verdict on every company the agents have researched, in any run.
+
+    The latest run's report (latest/verdicts.json) comes first; a company that
+    run did not cover keeps its verdict from the run that last did, so researching
+    one watchlist never hides what was found on another. Each verdict says which
+    run it is from (run_id) and when (researched)."""
     p = intel_state() / "latest" / "verdicts.json"
-    if not p.exists():
-        return {"available": False, "meta": None, "verdicts": []}
-    try:
-        d = json.loads(p.read_text(encoding="utf-8"))
-    except ValueError:
-        return {"available": False, "meta": None, "verdicts": [], "error": "verdicts.json is unreadable"}
-    return clean({"available": True, **d})
+    d, err = {"meta": None, "verdicts": []}, None
+    if p.exists():
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except ValueError:
+            err = "verdicts.json is unreadable"
+    meta = d.get("meta") or {}
+    latest = meta.get("run_id")
+    out = []
+    for v in d.get("verdicts") or []:
+        out.append({**v, "run_id": latest, "researched": meta.get("started")})
+    seen = {v.get("company") for v in out}
+    con = _db()
+    if con is not None:
+        try:
+            rows = con.execute(
+                "SELECT payload, run_id, created FROM verdicts WHERE rowid IN "
+                "(SELECT MAX(rowid) FROM verdicts GROUP BY company) ORDER BY run_id DESC, rowid DESC").fetchall()
+        except sqlite3.Error:
+            rows = []
+        finally:
+            con.close()
+        for payload, run_id, created in rows:
+            try:
+                v = json.loads(payload)
+            except ValueError:
+                continue
+            if v.get("company") and v["company"] not in seen:
+                seen.add(v["company"])
+                out.append({**v, "run_id": run_id, "researched": created})
+    if not out:
+        return {"available": False, "meta": None, "verdicts": [], **({"error": err} if err else {})}
+    meta = {**meta, "companies_total": len(out), "runs": sorted({v["run_id"] for v in out if v.get("run_id") is not None}, reverse=True)}
+    return clean({"available": True, "meta": meta, "verdicts": out})
 
 
 def intel_reports():

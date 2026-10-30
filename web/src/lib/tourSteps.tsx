@@ -51,7 +51,7 @@ export const CHAPTERS: Chapter[] = [
     steps: [
       { route: "/", target: ".page > .band", side: "bottom", title: "The headline numbers",
         body: <>How many companies are researched, how many sit below or above their value, the median upside, red flags and how accurate the HYBRID MODEL has been against the market.</> },
-      { target: "panel:Coverage map", title: "Coverage map",
+      { target: "panel:Research map", title: "Research map",
         body: <>Every researched company as a tile: size is market value, colour is upside to the HYBRID MODEL value. Click a tile to open the company.</> },
       { target: "panel:Signals", title: "Signals",
         body: <>What changed since the last run: new red flags, label changes and moves in value, newest first.</> },
@@ -128,7 +128,7 @@ export const CHAPTERS: Chapter[] = [
     id: "models", title: "Model Performance", icon: "graph-line", color: "#CD861A", blurb: "How well it all works",
     steps: [
       { route: "/performance", target: ".page > .tabs", side: "bottom", title: "Model Performance",
-        body: <>Every model scored against the market for every financial year: the typical miss, the hit rate within ±20%, bias and rank correlation. <b>Sectors</b> shows which model suits each sector and what each model forecasts for it; <b>Training data</b> shows what the AI models learn from and whether more of it helps.</> },
+        body: <>Every model scored against the market for every financial year: the typical miss, the hit rate within ±20%, bias and rank correlation. <b>Sectors</b> shows which model suits each sector and what each model forecasts for it; <b>Learning pool</b> shows every company the models learn from and whether more of it helps.</> },
       { route: "/performance?tab=sectors", target: ".page > .band", side: "bottom", title: "Sectors",
         body: <>The most accurate model in every sector, each model's view of every sector against today's price with a one-year projection, and how each sector splits into companies below, near and above value.</> },
     ],
