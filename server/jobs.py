@@ -86,6 +86,46 @@ def _watchlist_csv(job_id, list_ids):
     return str(path), name
 
 
+def every_watchlist():
+    """Ids of every watchlist with companies on it: what a run works on when
+    no list is named. The report list (data/companies.csv) is never a default."""
+    from server import live
+
+    return [x["id"] for x in live.watchlists()["lists"] if x.get("tickers")]
+
+
+def _targets(opts):
+    """The watchlists a run works on: the ones named, or every watchlist."""
+    ids = opts.get("watchlist") or every_watchlist()
+    if not ids:
+        raise ValueError("no watchlist has companies yet - add some on the Watchlists page")
+    return ids
+
+
+def _rows(path):
+    try:
+        with open(path, encoding="utf-8-sig", newline="") as f:
+            return list(csv.DictReader(f))
+    except OSError:
+        return []
+
+
+def _pool_csv(job_id):
+    """Every company the app knows (the learning pool) as a run input, for a run
+    on named tickers: any known company can be researched by its ticker."""
+    import learning
+
+    rows = learning.companies()
+    WORK.mkdir(parents=True, exist_ok=True)
+    path = WORK / f"pool_{job_id}.csv"
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["company name", "sector name", "market cap", "ticker"])
+        for r in rows:
+            w.writerow([r["name"], r["sector"], r["cap"], r["ticker"]])
+    return str(path)
+
+
 def build_args(kind, opts, job_id="x"):
     """Validated command line for a job kind. Raises ValueError on bad input."""
     opts = opts or {}
@@ -102,10 +142,19 @@ def build_args(kind, opts, job_id="x"):
                   "--min-complete-fy", str(p["min_complete_fy"]), "--min-benchmark-fy", str(p["min_benchmark_fy"])]
         else:
             a += prefs.to_args(p)
-        if opts.get("watchlist") and not opts.get("offline"):
-            sel, opts["watchlist_name"] = _watchlist_csv(job_id, opts["watchlist"])
-        else:
+        # the companies valued: watchlists (every one unless some are named), or
+        # the report list in data/companies.csv when it is asked for by name
+        sel = None
+        if opts.get("offline"):
+            pass
+        elif opts.get("report_list"):
+            if not companies():
+                raise ValueError("the report list (data/companies.csv) is empty - pick a watchlist")
             sel = _selection_csv(job_id, opts.get("exclude"))
+        else:
+            named = bool(opts.get("watchlist"))
+            sel, name = _watchlist_csv(job_id, _targets(opts))
+            opts["watchlist_name"] = name if named else "every watchlist"
         if sel:
             a += ["--input", sel]
         if opts.get("offline"):
@@ -127,7 +176,8 @@ def build_args(kind, opts, job_id="x"):
             if use is None:
                 use = learning_api.settings()["use_in_runs"]
             if use:
-                a += ["--train-universe", learning_api.learning_csv()]
+                valued = _rows(sel) if sel else [{"company name": c["name"], "ticker": c["ticker"]} for c in companies()]
+                a += ["--train-universe", learning_api.learning_csv(exclude=valued)]
     elif kind == "learn":
         if opts.get("offline"):
             raise ValueError("the learning feed downloads real companies; switch off offline test data")
@@ -143,14 +193,20 @@ def build_args(kind, opts, job_id="x"):
             a.append("--no-llm")
         if opts.get("offline"):
             a.append("--offline")
-        if opts.get("watchlist") and not opts.get("offline"):
-            path, name = _watchlist_csv(job_id, opts["watchlist"])
-            a += ["--input", path]
-            opts["watchlist_name"] = name
         t = (opts.get("tickers") or "").replace(" ", "")
+        if t and not TICKERS.match(t):
+            raise ValueError("tickers must be a comma-separated list like HAL,BEL")
+        # the agents research watchlists (every one unless some are named); named
+        # tickers can be any company the app knows. Never the report list by default.
+        if not opts.get("offline"):
+            if t and not opts.get("watchlist"):
+                a += ["--input", _pool_csv(job_id)]
+            else:
+                named = bool(opts.get("watchlist"))
+                path, name = _watchlist_csv(job_id, _targets(opts))
+                a += ["--input", path]
+                opts["watchlist_name"] = name if named else "every watchlist"
         if t:
-            if not TICKERS.match(t):
-                raise ValueError("tickers must be a comma-separated list like HAL,BEL")
             a += ["--tickers", t]
     elif kind == "llm_check":
         a += ["--agents", "--llm-check"]

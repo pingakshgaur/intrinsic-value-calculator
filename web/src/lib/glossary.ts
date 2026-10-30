@@ -108,7 +108,7 @@ export const GLOSSARY: Topic[] = [
       { term: "Live forecast", text: "A company's likely price in 15 minutes, an hour, a day … five years: a median with a band holding 8 in 10 outcomes, recomputed with every price update. Short horizons follow its own volatility and recent moves; long ones are pulled towards the HYBRID MODEL value." },
       { term: "Watchlist library", where: "/watchlist", text: "Named lists of companies, each with a description and colour. A company can be on several lists; up to 100 companies are tracked across all of them." },
       { term: "Focus", text: "Choose a watchlist in the top bar and the Command Center, Model Performance and the research workforce show only its companies. “All companies” brings everything back." },
-      { term: "Tracker", text: "While the market is open, polls watched companies every 30 seconds, stores every minute bar on this computer, re-values covered companies at the live price, and raises your alerts." },
+      { term: "Tracker", text: "While the market is open, polls watched companies every 30 seconds, stores every minute bar on this computer, re-values every valued company at the live price, and raises your alerts." },
       { term: "Ticker", text: "NSE symbol plus .NS (BSE: .BO), for example TCS.NS." },
     ],
   },

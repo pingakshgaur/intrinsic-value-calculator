@@ -155,7 +155,9 @@ def test_poke_during_a_poll_is_not_lost():
 def test_learning_companies_dedupe_and_skip_valued():
     L.add("ZETA.NS", name="Zeta Ltd", sector="Energy")
     rows = {r["ticker"]: r for r in learning.companies()}
-    assert set(rows) == {"BETA.NS", "GAMMA.NS", "ZETA.NS"}      # Alpha is being valued
+    assert set(rows) == {"ALPHA.NS", "BETA.NS", "GAMMA.NS", "ZETA.NS"}   # every company the app knows
+    assert rows["ALPHA.NS"]["lists"] == ["coverage", "training list"]
+    assert "ALPHA.NS" not in {r["ticker"] for r in learning.companies(exclude=[{"ticker": "ALPHA.NS"}])}  # a run's own companies
     assert rows["BETA.NS"]["lists"] == ["training list", "auto-train"]
     assert rows["ZETA.NS"]["lists"] == ["watchlist"] and rows["ZETA.NS"]["sector"] == "Energy"
     path = learning.write_csv()
@@ -163,9 +165,34 @@ def test_learning_companies_dedupe_and_skip_valued():
 
 
 def test_build_args_learning(monkeypatch):
-    monkeypatch.setattr(LA, "learning_csv", lambda: "/tmp/learning.csv")
-    a = J.build_args("valuation", {"learning": True})
+    monkeypatch.setattr(LA, "learning_csv", lambda exclude=None: "/tmp/learning.csv")
+    monkeypatch.setattr(J, "every_watchlist", lambda: [])
+    with pytest.raises(ValueError):                       # nothing to value: never falls back to the report list
+        J.build_args("valuation", {})
+    with pytest.raises(ValueError):
+        J.build_args("agents", {"quick": True})
+    monkeypatch.setattr(J, "every_watchlist", lambda: ["core", "it"])
+    lists = []
+    monkeypatch.setattr(J, "_watchlist_csv", lambda job_id, ids: lists.append(ids) or ("/tmp/wl.csv", ", ".join(ids)))
+    opts = {"learning": True}
+    a = J.build_args("valuation", opts)
     assert a[a.index("--train-universe") + 1] == "/tmp/learning.csv"
+    # no list named: every watchlist, for valuation and research alike
+    assert a[a.index("--input") + 1] == "/tmp/wl.csv" and lists[-1] == ["core", "it"] and opts["watchlist_name"] == "every watchlist"
+    opts = {"quick": True}
+    a = J.build_args("agents", opts)
+    assert a[a.index("--input") + 1] == "/tmp/wl.csv" and opts["watchlist_name"] == "every watchlist"
+    opts = {"watchlist": ["it"]}
+    J.build_args("agents", opts)
+    assert lists[-1] == ["it"] and opts["watchlist_name"] == "it"
+    # named tickers can be any company the app knows
+    monkeypatch.setattr(J, "_pool_csv", lambda job_id: "/tmp/pool.csv")
+    a = J.build_args("agents", {"tickers": "HAL,BEL"})
+    assert a[a.index("--input") + 1] == "/tmp/pool.csv" and a[a.index("--tickers") + 1] == "HAL,BEL"
+    # the report list only when asked for, and not when it is empty
+    monkeypatch.setattr(J, "companies", lambda: [])
+    with pytest.raises(ValueError):
+        J.build_args("valuation", {"report_list": True})
     assert "--train-universe" not in J.build_args("valuation", {"learning": False})
     assert "--train-universe" not in J.build_args("valuation", {"learning": True, "offline": True})
     a = J.build_args("valuation", {"learning": True, "auto_train": {"target": 60}}, "t1")

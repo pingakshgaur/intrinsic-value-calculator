@@ -43,7 +43,7 @@ function Body({ d }: { d: LearningStatus }) {
   return (
     <>
       <div className="band">
-        <div><div className="k">Learning pool</div><div className="v">{d.companies.toLocaleString("en-IN")}</div><div className="s">across {d.sectors} sectors, plus the {d.valued} you value</div></div>
+        <div><div className="k">Learning pool</div><div className="v">{d.companies.toLocaleString("en-IN")}</div><div className="s">across {d.sectors} sectors: watchlists, training lists and everything researched</div></div>
         <div><div className="k">Ready to use</div><div className="v">{ready}%</div><div className="s">{d.cache.missing + d.cache.stale ? `${d.cache.missing + d.cache.stale} need a refresh` : "all up to date"}</div></div>
         <div><div className="k">Is more data helping?</div><div className={`v ${verdict.c}`} style={{ fontSize: 17 }}>{verdict.t}</div><div className="s">{verdict.s}</div></div>
       </div>

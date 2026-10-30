@@ -40,7 +40,7 @@ export function CommandCenter() {
       <PageHeader
         crumbs={[{ label: "Analysis" }, { label: "Command Center" }]}
         title="Command Center"
-        sub={hasIntel ? <>Research run #{meta?.run_id} · {meta?.mode} · {isoWhen(meta?.started)} · {meta?.llm_mode}</> : "Valuation and research across your coverage universe"}
+        sub={hasIntel ? <>Research run #{meta?.run_id} · {meta?.mode} · {isoWhen(meta?.started)} · {meta?.llm_mode}</> : "Valuation and research across your watchlists and the learning pool"}
         actions={<ResearchLauncher />}
       />
 

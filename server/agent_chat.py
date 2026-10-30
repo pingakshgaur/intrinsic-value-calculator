@@ -73,7 +73,7 @@ def _find(q):
 
 
 def _mentioned(text):
-    """A covered company named in free text: an exact ticker first, then a
+    """A researched company named in free text: an exact ticker first, then a
     distinctive word (4+ letters, not filler) inside a company name."""
     words = re.findall(r"[A-Za-z&]{2,}", text)
     vs = _verdicts()
@@ -239,7 +239,7 @@ def _talk(cs, text, jobs, history):
         t, kind, data = _finding(cs, v)
         return t, kind, company, data
     p = profiles.get(cs)
-    return (f"{a['title']} here. {a['duty']} Name a covered company and I'll give you my latest read; "
+    return (f"{a['title']} here. {a['duty']} Name a company we have researched and I'll give you my latest read; "
             f"tell me how to work (e.g. 'focus on debt levels', 'be more cautious') and I'll keep it for the next run."
             + ("" if p["enabled"] else " I'm switched off at the moment - say 'you're back' to bring me in.")), "reply", None, {}
 
@@ -270,7 +270,7 @@ def _command(t, channel, jobs, live_fn):
     if cmd == "/recheck":
         v = _find(" ".join(args))
         if not v:
-            return [("OPS-00", "Name a covered company: /recheck HAL", "system", None, {})]
+            return [("OPS-00", "Name a company the agents have researched: /recheck HAL", "system", None, {})]
         return [("OPS-00", _start_run(jobs, v, "OPS-00"), "system", v["company"], {})]
     if cmd == "/run":
         if not jobs:
@@ -285,7 +285,7 @@ def _command(t, channel, jobs, live_fn):
             job = jobs.start("agents", {"quick": mode == "quick", "no_llm": no_llm, **({"tickers": tickers} if tickers else {})})
         except (RuntimeError, ValueError) as e:
             return [("OPS-00", f"Couldn't start: {e}", "system", None, {})]
-        return [("OPS-00", f"Started a {mode} research run" + (f" on {tickers}" if tickers else "") + (" (rule-based, no LLM calls)" if no_llm else "") + f" (job {job.id}). "
+        return [("OPS-00", f"Started a {mode} research run on " + (tickers if tickers else job.opts.get("watchlist_name") or "every watchlist") + (" (rule-based, no LLM calls)" if no_llm else "") + f" (job {job.id}). "
                  "Watch it live on the Agent Network page.", "system", None, {"job": job.id})]
 
     # commands about one agent
@@ -334,7 +334,7 @@ def _command(t, channel, jobs, live_fn):
         if cmd == "/compare":
             a, b = (_find(args[0]) if args else None), (_find(args[1]) if len(args) > 1 else None)
             if not a or not b:
-                return [("CMD-00", "Name two covered companies: /compare HAL BEL", "verdict", None, {})]
+                return [("CMD-00", "Name two researched companies: /compare HAL BEL", "verdict", None, {})]
             return [("CMD-00", f"{_fmt_verdict(a)}  |  {_fmt_verdict(b)}", "verdict", None, {})]
         if cmd == "/ask":
             cs = (args[0].upper().lstrip("@") if args else "")
@@ -343,7 +343,7 @@ def _command(t, channel, jobs, live_fn):
             v = _find(" ".join(args[1:])) if len(args) > 1 else None
             if not v:
                 agent = comms.ROSTER[cs]
-                return [(cs, f"{agent['title']} here. {agent['duty']} Name a covered company and I'll give you my latest read.", "reply", None, {})]
+                return [(cs, f"{agent['title']} here. {agent['duty']} Name a company we have researched and I'll give you my latest read.", "reply", None, {})]
             t, kind, data = _finding(cs, v)
             return [(cs, t, kind, v["company"], data)]
         v = _find(" ".join(args))

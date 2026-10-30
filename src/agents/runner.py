@@ -86,7 +86,7 @@ def _learning_pool(companies, offline):
     import pipeline
 
     try:
-        pool = learning.companies(exclude=companies, coverage=True)
+        pool = learning.companies(exclude=companies)
     except Exception:
         log.exception("could not read the learning pool")
         return {}

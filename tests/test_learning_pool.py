@@ -63,16 +63,15 @@ def test_pool_takes_in_every_list_and_every_researched_company(tmp_path, monkeyp
     board.close()
 
     got = {r["ticker"]: r for r in learning.companies()}
-    # the report's own companies are in its frame already; offline runs never join
-    assert set(got) == {"BETA.NS", "GAMMA.NS", "DELTA.NS"}
+    # every company the app knows; offline test runs never join
+    assert set(got) == {"ALPHA.NS", "BETA.NS", "GAMMA.NS", "DELTA.NS"} and got["ALPHA.NS"]["lists"] == ["coverage"]
     assert got["DELTA.NS"]["lists"] == ["researched"] and got["DELTA.NS"]["sector"] == "Metals"
     # a watchlist that does not know the sector learns it from the research
     assert got["GAMMA.NS"]["sector"] == "Pharma" and set(got["GAMMA.NS"]["lists"]) == {"watchlist", "researched"}
 
-    # an agent run: the report's companies join, the ones being researched do not
-    run = [{"name": "Beta", "ticker": "BETA", "sector": "IT"}]
-    got = {r["ticker"]: r for r in learning.companies(exclude=run, coverage=True)}
-    assert set(got) == {"ALPHA.NS", "GAMMA.NS", "DELTA.NS"} and got["ALPHA.NS"]["lists"] == ["coverage"]
+    # a run leaves out the companies it values directly (a bare ticker matches too)
+    run = [{"name": "Beta", "ticker": "BETA", "sector": "IT"}, {"company name": "Alpha Ltd", "ticker": "ALPHA.NS"}]
+    assert {r["ticker"] for r in learning.companies(exclude=run)} == {"GAMMA.NS", "DELTA.NS"}
 
 
 def test_cache_only_universe_never_downloads(monkeypatch):
@@ -149,10 +148,10 @@ def test_agent_runs_learn_from_the_pool(monkeypatch):
 
     assert runner._learning_pool([{"name": "X"}], offline=True) == {}   # offline tests stay offline
     seen = {}
-    monkeypatch.setattr(learning, "companies", lambda exclude=None, coverage=False: seen.update(exclude=exclude, coverage=coverage) or [{"name": "P", "sector": "IT", "ticker": "P.NS"}])
+    monkeypatch.setattr(learning, "companies", lambda exclude=None: seen.update(exclude=exclude) or [{"name": "P", "sector": "IT", "ticker": "P.NS"}])
     monkeypatch.setattr(pipeline, "build_universe", lambda rows, cached=False, quiet=False: ({r["name"]: {"sector": r["sector"]} for r in rows} if cached == "only" and quiet else pytest.fail("may download"), {}))
     run = [{"name": "X", "ticker": "X.NS", "sector": "IT"}]
     assert runner._learning_pool(run, offline=False) == {"P": {"sector": "IT"}}
-    assert seen == {"exclude": run, "coverage": True}
+    assert seen == {"exclude": run}
     S.data()["run"]["learn_from_pool"] = False
     assert runner._learning_pool(run, offline=False) == {}

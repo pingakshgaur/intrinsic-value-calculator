@@ -21,9 +21,9 @@ const PRESETS: { id: Preset; label: string; icon: string; hint: string }[] = [
   { id: "high52", label: "Near 52W high", icon: "triangle-up", hint: "Within 3% of the 52-week high" },
   { id: "low52", label: "Near 52W low", icon: "triangle-down", hint: "Within 5% of the 52-week low" },
   { id: "oversold", label: "RSI extremes", icon: "dashboard", hint: "RSI(14) below 30 or above 70" },
-  { id: "value", label: "Below buy-below", icon: "tag", hint: "Covered companies trading under the HYBRID MODEL buy-below price" },
+  { id: "value", label: "Below buy-below", icon: "tag", hint: "Valued companies trading under the HYBRID MODEL buy-below price" },
 ];
-const LISTS = [["", "All lists"], ["coverage", "My coverage"], ["training", "Training list"], ["watchlist", "Watchlist"]] as const;
+const LISTS = [["", "All lists"], ["coverage", "Report list"], ["training", "Training list"], ["watchlist", "Watchlist"]] as const;
 
 function presetRows(rows: ScanRow[], p: Preset): ScanRow[] {
   const by = (f: (r: ScanRow) => number | null | undefined, desc = true) =>
@@ -195,7 +195,7 @@ function Scanner({ selected, onPick }: { selected: string; onPick: (t: string) =
   };
   const columns: Column<ScanRow>[] = [
     { key: "star", header: "", fixed: true, width: 30, render: star },
-    { key: "company", header: "Company", sticky: true, fixed: true, sort: (r) => r.name, render: (r) => <div className="co"><b>{shortName(r.name)}</b><small>{r.ticker}{r.lists.includes("coverage") ? " · covered" : ""}</small></div> },
+    { key: "company", header: "Company", sticky: true, fixed: true, sort: (r) => r.name, render: (r) => <div className="co"><b>{shortName(r.name)}</b><small>{r.ticker}{r.lists.includes("coverage") ? " · report list" : ""}</small></div> },
     { key: "spark", header: "3 months", render: (r) => <Spark values={r.spark} width={84} height={24} /> },
     { key: "last", header: "Last", align: "r", sort: (r) => r.last, render: (r) => <span className="mono">{num(r.last)}</span> },
     { key: "chg", header: "Change", align: "r", sort: (r) => r.chg_pct, exportValue: (r) => pct(r.chg_pct, 2, true), render: (r) => <span className={`mono ${(r.chg_pct ?? 0) >= 0 ? "up" : "down"}`}>{pct(r.chg_pct, 2, true)}</span> },

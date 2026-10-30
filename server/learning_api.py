@@ -181,6 +181,7 @@ def start_scheduler(jobs):
     threading.Thread(target=_scheduler, args=(jobs,), daemon=True, name="learning-scheduler").start()
 
 
-def learning_csv():
-    """Rebuild the learning companies file for a run. -> absolute path"""
-    return str(learning.write_csv())
+def learning_csv(exclude=None):
+    """Rebuild the learning pool file for a run, minus the companies the run
+    values directly (`exclude`: rows with a name and a ticker). -> absolute path"""
+    return str(learning.write_csv(learning.companies(exclude=exclude)))

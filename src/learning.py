@@ -86,13 +86,13 @@ def researched():
             if "." in (t or "")]
 
 
-def companies(exclude=None, coverage=False):
-    """The learning pool, de-duplicated by ticker, minus `exclude` (rows already
-    in the frame - by default the companies the valuation report values).
-    coverage=True also takes in those report companies, for an agent run that
-    values other companies against all of them.
+def companies(exclude=None):
+    """The learning pool - every company the app knows: the report list
+    (data/companies.csv), the training lists, every watchlist and every company
+    the agents have researched - de-duplicated by ticker, minus `exclude` (the
+    rows a run values directly, so they are not in its frame twice).
     -> [{"name", "sector", "cap", "ticker", "lists"}]"""
-    valued = _read(config.DEFAULT_INPUT) if exclude is None else exclude
+    valued = exclude or ()
     bare = lambda t: (t or "").strip().upper().split(".")[0]  # noqa: E731  HAL.NS and HAL are one company
     skip_t = {bare(r.get("ticker")) for r in valued} - {""}
     skip_n = {(r.get("company name") or r.get("name") or "").strip() for r in valued} - {""}
@@ -109,7 +109,7 @@ def companies(exclude=None, coverage=False):
         if tag not in e["lists"]:
             e["lists"].append(tag)
 
-    lists = ((("coverage", config.DEFAULT_INPUT),) if coverage else ()) + LISTS
+    lists = (("coverage", config.DEFAULT_INPUT),) + LISTS
     for tag, path in lists:
         for r in _read(path):
             add(tag, r.get("company name"), r.get("sector name"), r.get("market cap"), r.get("ticker"))

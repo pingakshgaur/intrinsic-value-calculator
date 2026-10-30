@@ -420,7 +420,7 @@ function EmptyWatch({ list, onAdd }: { list: WatchList; onAdd: () => void }) {
   return (
     <Panel>
       <Empty icon="eye" title={`“${list.name}” is empty`} action={<div className="row"><button className="btn" onClick={onAdd}><Icon name="add" className="sm" />Add companies</button><Link className="btn sec" to="/markets">Browse Markets</Link></div>}>
-        Search for companies, take whole sectors, or import a spreadsheet. While the market is open the tracker checks prices every 30 seconds, re-values covered companies at the live price, and alerts you on the levels you set.
+        Search for companies, take whole sectors, or import a spreadsheet. While the market is open the tracker checks prices every 30 seconds, re-values every valued company at the live price, and alerts you on the levels you set.
       </Empty>
     </Panel>
   );

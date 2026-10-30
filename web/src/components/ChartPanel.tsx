@@ -66,7 +66,7 @@ export function ChartPanel({ ticker, watch, height = 400, extra, compactHead, si
           <div className="row" style={{ gap: 8 }}>
             <b className="cp-name ellipsis">{d ? shortName(d.meta.name) : ticker}</b>
             <span className="mono faint xs">{ticker}</span>
-            {d?.meta.lists.includes("coverage") && <span className="tag hm">covered</span>}
+            {d?.meta.lists.includes("coverage") && <span className="tag hm" title="On the report list (data/companies.csv)">report list</span>}
           </div>
           {!compactHead && d?.meta.sector && <div className="xs faint">{d.meta.sector}{d.meta.cap ? ` · ${d.meta.cap} cap` : ""}</div>}
         </div>

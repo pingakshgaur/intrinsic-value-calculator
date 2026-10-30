@@ -600,16 +600,20 @@
 @media (max-width: 900px) { .wl-find { width: 100%; } .wl-hint { display: none; } }
 
 /* Operations: one row to start a job, then the job and the recent jobs, full width */
-.nj .jobtype { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.nj-row { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; margin-top: 14px; }
-.nj-row .fld { margin: 0; }
-.nj-co { width: 300px; }
-.nj-fixed { display: flex; align-items: center; height: 30px; color: var(--fg-2); }
-.nj-y { width: 72px; }
 .nj-go { height: 34px; padding: 0 16px; }
 .nj-adv { width: 380px; }
-.nj-msgs { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
-@media (max-width: 900px) { .nj .jobtype { grid-template-columns: repeat(2, minmax(0, 1fr)); } .nj-co { width: 100%; } }
+.nj-msgs { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+/* Operations: the form sits on the page grid like the workforce overview, no box */
+.op-form { display: flex; align-items: flex-end; gap: 16px 20px; flex-wrap: wrap; padding-top: 16px; }
+.op-form .fld { margin: 0; }
+.op-co { width: 320px; }
+.op-fixed { display: flex; align-items: center; height: 30px; color: var(--fg-2); font-size: 12.5px; }
+.op-y { width: 72px; }
+.op-detail { padding-top: 14px; min-width: 0; }
+.op-jobs { min-width: 0; }
+.op-jobs table.dg th { background: var(--bg); }
+.op-jobs table.dg td.sticky, .op-jobs table.dg th.sticky { background: var(--bg); }
+@media (max-width: 900px) { .op-co { width: 100%; } }
 
 /* Markets: research radar */
 .rd-cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }

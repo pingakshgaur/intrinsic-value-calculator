@@ -353,7 +353,7 @@
 .wo-h h2 { margin: 0; font-size: 15px; font-weight: 600; color: var(--fg-1); letter-spacing: -.01em; }
 .wo-h .faint { font-size: 12px; }
 .wo-tabs { display: flex; gap: 20px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
-.wo-tabs button { display: inline-flex; align-items: baseline; gap: 6px; height: 36px; padding: 0; border: 0; background: none; color: var(--fg-3); font-size: 12.5px; cursor: pointer; white-space: nowrap; box-shadow: inset 0 -1px 0 transparent; transition: color .12s ease, box-shadow .12s ease; }
+.wo-tabs button { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0; border: 0; background: none; color: var(--fg-3); font-size: 12.5px; cursor: pointer; white-space: nowrap; box-shadow: inset 0 -1px 0 transparent; transition: color .12s ease, box-shadow .12s ease; }
 .wo-tabs button span { font: 11px var(--mono); color: var(--fg-3); }
 .wo-tabs button:hover { color: var(--fg-1); }
 .wo-tabs button.on { color: var(--fg-1); box-shadow: inset 0 -2px 0 var(--accent); }

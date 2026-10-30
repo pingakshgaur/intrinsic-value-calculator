@@ -67,7 +67,7 @@ export const CHAPTERS: Chapter[] = [
       { route: "/markets", target: ".radar", side: "bottom", title: "Research radar",
         body: <>What deserves a look right now, refreshed with every price update: companies that have just dropped under their HYBRID MODEL buy-below price, the biggest gaps to value, what the live forecast leans towards for today, and today's unusual moves. Click one to chart it below.</> },
       { target: ".mkt", title: "Charts and the scanner",
-        body: <>Candles or lines from one day to the full history, with the HYBRID MODEL value and buy-below drawn on the chart. The scanner finds gainers, losers, volume spikes, 52-week extremes, RSI extremes, and covered companies trading below their buy-below price.</>,
+        body: <>Candles or lines from one day to the full history, with the HYBRID MODEL value and buy-below drawn on the chart. The scanner finds gainers, losers, volume spikes, 52-week extremes, RSI extremes, and valued companies trading below their buy-below price.</>,
         try: <>Every chart has an <b>Export</b> menu: PNG, PDF or Word.</> },
       { route: "/watchlist", target: ".wl-lib", title: "Your watchlist library",
         body: <>Named lists, each with a description and colour: a theme, a sector, a strategy, a shortlist. Cards show today's movers and who is in the buy zone. A company can sit on several lists.</> },
@@ -105,12 +105,12 @@ export const CHAPTERS: Chapter[] = [
   {
     id: "agents", title: "The research workforce", icon: "organization", color: "#EF8773", blurb: "23 AI agents in six teams",
     steps: [
-      { route: "/agents", target: ".page > .band", side: "bottom", title: "The workforce",
-        body: <>Twenty-three specialist agents in six teams read news, filings, prices, ownership and more, then argue a verdict for each company. This band shows the current run: progress, who is working, messages, calls saved by sharing data.</> },
-      { target: "panel:Teams", title: "Teams and agents",
+      { route: "/agents", target: ".page > .wo-figs", side: "bottom", title: "The workforce",
+        body: <>Twenty-three specialist agents in six teams read news, filings, prices, ownership and more, then argue a verdict for each company. These figures show the latest run — companies researched, verdicts, red flags — counted on the watchlist picked in the top bar.</> },
+      { target: ".wo-teams", title: "Teams and agents",
         body: <>News, equity research, industry &amp; geopolitics, market activity &amp; ownership, and review, led by a chief. Click any agent for its profile and its settings: stance, weight, AI use and standing instructions.</> },
       { target: ".ph .acts", side: "bottom", title: "Starting research",
-        body: <><b>Research</b> starts a run on every covered company or on any watchlist you pick — a <b>quick sweep</b> (news and markets) or <b>full research</b> (every agent). <b>Auto-start</b> sets whether the workforce begins by itself when the app opens.</> },
+        body: <><b>Research</b> starts a run on every watchlist or on the one you pick — a <b>quick sweep</b> (news and markets) or <b>full research</b> (every agent). <b>Auto-start</b> sets whether the workforce begins by itself when the app opens.</> },
       { route: "/agents/network", target: ".net-body", title: "Agent Network",
         body: <>The agents as a live map. Pulses travel along the lines as they hand work to each other; replay any past run at any speed.</> },
       { target: ".net-rail", side: "right", title: "Map tools",
@@ -136,8 +136,8 @@ export const CHAPTERS: Chapter[] = [
   {
     id: "ops", title: "Operations & settings", icon: "server-process", color: "#C586C0", blurb: "Runs, keys and preferences",
     steps: [
-      { route: "/operations", target: ".panel.nj", side: "bottom", title: "Operations",
-        body: <>Start any job from one row: the valuation report, research, a training-data refresh or a data check — on every covered company or on a watchlist. The job detail below shows its stages and full log as it runs; recent jobs sit under it.</> },
+      { route: "/operations", target: ".op-new", side: "bottom", title: "Operations",
+        body: <>Start any job from one row: the valuation report, research, a learning-pool refresh or a data check — on every watchlist or on one of them. The job detail below shows its stages and full log as it runs; recent jobs sit under it.</> },
       { route: "/configuration", target: ".cfg-nav", side: "right", title: "Configuration",
         body: <>Run settings, data sources (Yahoo, Screener.in, NSE, BSE and key-based providers, in the order you trust them), AI providers, the research agents, notifications, macro inputs and the raw settings file.</> },
       { route: "/configuration?section=ai", target: ".cfg .col", side: "left", title: "AI providers",
