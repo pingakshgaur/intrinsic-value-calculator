@@ -24,6 +24,7 @@ import { Watchlist } from "./views/WatchlistLibrary";
 import { AgentChat } from "./views/AgentChat";
 import { AgentNetwork } from "./views/AgentNetwork";
 import { AgentsOverview } from "./views/AgentsOverview";
+import { installScrollEdges } from "./lib/scrollEdges";
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 15_000, refetchOnWindowFocus: true } } });
 
@@ -73,6 +74,8 @@ const router = createBrowserRouter([
     ],
   },
 ]);
+
+installScrollEdges();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
