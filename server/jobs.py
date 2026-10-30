@@ -52,17 +52,27 @@ def _selection_csv(job_id, exclude):
     return str(path)
 
 
-def _watchlist_csv(job_id, list_id):
-    """Write a watchlist's companies as a run input; -> (path, list name). Every
-    company on the list is researched, covered by the valuation report or not."""
+def _watchlist_csv(job_id, list_ids):
+    """Write the companies of one or more watchlists as a run input; -> (path, list
+    names). Every company on the lists is researched, covered by the valuation
+    report or not; a company on several of them is researched once."""
     from server import live
 
-    try:
-        name, rows = live.list_companies(list_id)
-    except KeyError:
-        raise ValueError(f"no watchlist {list_id}")
+    ids = [str(i) for i in (list_ids if isinstance(list_ids, (list, tuple)) else [list_ids]) if i]
+    names, rows, seen = [], [], set()
+    for list_id in ids:
+        try:
+            name, got = live.list_companies(list_id)
+        except KeyError:
+            raise ValueError(f"no watchlist {list_id}")
+        names.append(name)
+        for r in got:
+            if r["ticker"] not in seen:
+                seen.add(r["ticker"])
+                rows.append(r)
+    name = ", ".join(names)
     if not rows:
-        raise ValueError(f"the watchlist '{name}' has no companies yet")
+        raise ValueError(f"the watchlist '{name}' has no companies yet" if len(names) == 1 else "the chosen watchlists have no companies yet")
     known = {c["ticker"]: c for c in companies() if c.get("ticker")}
     WORK.mkdir(parents=True, exist_ok=True)
     path = WORK / f"watchlist_{job_id}.csv"
@@ -93,7 +103,7 @@ def build_args(kind, opts, job_id="x"):
         else:
             a += prefs.to_args(p)
         if opts.get("watchlist") and not opts.get("offline"):
-            sel, opts["watchlist_name"] = _watchlist_csv(job_id, str(opts["watchlist"]))
+            sel, opts["watchlist_name"] = _watchlist_csv(job_id, opts["watchlist"])
         else:
             sel = _selection_csv(job_id, opts.get("exclude"))
         if sel:
@@ -134,7 +144,7 @@ def build_args(kind, opts, job_id="x"):
         if opts.get("offline"):
             a.append("--offline")
         if opts.get("watchlist") and not opts.get("offline"):
-            path, name = _watchlist_csv(job_id, str(opts["watchlist"]))
+            path, name = _watchlist_csv(job_id, opts["watchlist"])
             a += ["--input", path]
             opts["watchlist_name"] = name
         t = (opts.get("tickers") or "").replace(" ", "")

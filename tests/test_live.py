@@ -257,14 +257,24 @@ def test_autostart_settings_and_start(monkeypatch, isolated):
             return object() if self.busy else None
         def start(self, kind, opts):
             self.started.append((kind, opts))
-            return type("J", (), {"id": "j1"})()
+            return type("J", (), {"id": "j1", "opts": opts})()
 
     busy = Jobs(True)
     assert A.start_now(busy) == (None, "another job is running") and not busy.started
     free = Jobs(False)
+    lists = [{"id": "core", "tickers": ["HAL.NS"]}, {"id": "it", "tickers": ["TCS.NS"]}, {"id": "empty", "tickers": []}]
+    monkeypatch.setattr(A.live, "watchlists", lambda: {"lists": lists})
     job, why = A.start_now(free)
-    assert why == "started" and free.started == [("agents", {"quick": False, "no_llm": False, "auto": "startup"})]
+    # only ever the watchlists' companies: every list with companies when none are picked
+    assert why == "started" and free.started == [("agents", {"quick": False, "no_llm": False, "auto": "startup", "watchlist": ["core", "it"]})]
     assert posted and "full run" in posted[0]
+    assert A.save({"watchlists": ["it", "gone", "it"]})["watchlists"] == ["it"]
+    with pytest.raises(ValueError):
+        A.save({"watchlists": "it"})
+    A.start_now(free)
+    assert free.started[-1][1]["watchlist"] == ["it"]
+    lists[:] = [{"id": "it", "tickers": []}]
+    assert A.start_now(Jobs(False)) == (None, "skipped: no companies on the chosen watchlists")
 
 
 def test_watchlist_libraries(monkeypatch):

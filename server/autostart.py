@@ -7,6 +7,10 @@ A few seconds after `python run.py --web` comes up, a research run is started
 `skip_recent` to skip it when a run finished within that many minutes. By default it runs rule-based, so
 a restart never spends the free LLM quotas; switch `llm` on to let it use
 them. Settings live in data/live/autostart.json and on the Agent Network page.
+
+It only ever researches the companies on the watchlists: the ones picked in
+`watchlists`, or every watchlist when none are picked. With no companies on any
+of them there is nothing to research and the run is skipped.
 """
 
 import datetime as dt
@@ -14,12 +18,12 @@ import logging
 import threading
 import time
 
-from server import agents_api
+from server import agents_api, live
 from server.live import LIVE, _read_json, _write_json
 
 log = logging.getLogger("web.autostart")
 SETTINGS = LIVE / "autostart.json"
-DEFAULTS = {"enabled": True, "mode": "quick", "llm": False, "skip_recent": 0}
+DEFAULTS = {"enabled": True, "mode": "quick", "llm": False, "skip_recent": 0, "watchlists": []}
 state = {"last": None, "reason": None}
 
 
@@ -42,6 +46,12 @@ def save(patch):
             s["skip_recent"] = max(0, min(1440, int(patch["skip_recent"])))
         except (TypeError, ValueError):
             raise ValueError("skip_recent must be a number of minutes")
+    if "watchlists" in patch:
+        ids = patch["watchlists"] or []
+        if not isinstance(ids, list):
+            raise ValueError("watchlists must be a list of watchlist ids")
+        known = {x["id"] for x in live.watchlists()["lists"]}
+        s["watchlists"] = [str(i) for i in dict.fromkeys(ids) if str(i) in known]
     _write_json(SETTINGS, s)
     return s
 
@@ -56,13 +66,26 @@ def _minutes_since_last_run():
         return None
 
 
+def target_lists(s=None):
+    """Ids of the watchlists an automatic run researches: the picked ones that still
+    exist and have companies, or every watchlist with companies when none are picked."""
+    s = s or settings()
+    lists = [x for x in live.watchlists()["lists"] if x.get("tickers")]
+    picked = set(s["watchlists"])
+    return [x["id"] for x in lists if not picked or x["id"] in picked]
+
+
 def start_now(jobs, why="startup"):
     """Start the configured run unless something else is running. -> (job or None, reason)"""
     s = settings()
     if jobs.active():
         return None, "another job is running"
-    job = jobs.start("agents", {"quick": s["mode"] == "quick", "no_llm": not s["llm"], "auto": why})
-    agents_api.post_system(f"Research workforce started on {why}: {s['mode']} run"
+    ids = target_lists(s)
+    if not ids:
+        return None, "skipped: no companies on the chosen watchlists"
+    job = jobs.start("agents", {"quick": s["mode"] == "quick", "no_llm": not s["llm"], "auto": why, "watchlist": ids})
+    agents_api.post_system(f"Research workforce started on {why}: {s['mode']} run on "
+                           + (job.opts.get("watchlist_name") or "the watchlists")
                            + ("" if s["llm"] else ", rule-based (no LLM calls)") + f" - job {job.id}.")
     return job, "started"
 
