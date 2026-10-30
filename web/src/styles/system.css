@@ -157,6 +157,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .runchip { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line-2); background: var(--bg); cursor: pointer; color: var(--fg-2); font-size: 12px; font-weight: 500; }
 .runchip:hover { border-color: #46484a; color: var(--fg-1); }
 .runchip.busy { border-color: #3994bc66; color: #a8d8ee; background: #3994bc14; }
+.runchip .rc-t { display: inline-flex; align-items: center; gap: 8px; }
 .runchip .bar { width: 46px; height: 4px; border-radius: 2px; background: #ffffff14; overflow: hidden; }
 .runchip .bar span { display: block; height: 100%; background: var(--accent); }
 
@@ -207,7 +208,20 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .band .k .codicon { display: none; }
 .band .v { font-size: 28px; font-weight: 600; color: var(--fg-1); margin-top: 6px; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .band .s { font-size: 12px; color: var(--fg-2); margin-top: 4px; }
-@media (max-width: 1280px) { .band { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); } .band > div { border-top: 1px solid var(--line); } }
+@media (max-width: 1280px) {
+  .band { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .band > div { border-top: 1px solid var(--line); padding-bottom: 12px; }
+  .band > div:nth-child(-n+3) { border-top: 0; }
+  .band > div:nth-child(3n+1) { border-left: 0; padding-left: 0; }
+}
+@media (max-width: 640px) {
+  .band { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .band > div { border-left: 1px solid var(--line); padding-left: 16px; }
+  .band > div:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .band > div:nth-child(2n+1) { border-left: 0; padding-left: 0; }
+  .band .v { font-size: 24px; }
+  .band .k { white-space: normal; letter-spacing: .03em; }
+}
 
 /* ------------------------------------------------------------- controls */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 6px; border: 1px solid transparent; background: var(--primary); color: #fff; font-weight: 500; cursor: pointer; white-space: nowrap; font-size: 12.5px; }
@@ -761,3 +775,18 @@ table.dg td.wrap { white-space: normal; min-width: 220px; line-height: 1.45; pad
 /* boxed surfaces: tables inside them take their colour */
 .insp, .drawer, .xd-table, .modal, .dlg { --surface: var(--panel); }
 .pop, .menu, .tc-menu, .tc-drop { --surface: var(--raise); }
+
+/* the top bar on a narrow screen: the tape gives way, search and runs keep their icons */
+@media (max-width: 760px) {
+  .tape { display: none; }
+  .top-tools { margin-left: auto; }
+  .cmdk { width: auto; }
+  .cmdk span, .cmdk kbd, .runchip .rc-t { display: none; }
+  .scope-btn { max-width: 120px; }
+}
+@media (max-width: 480px) {
+  .topbar { gap: 6px; padding-right: 8px; }
+  .top-tools { gap: 2px; }
+  .scope-btn .ellipsis, .scope-btn .n { display: none; }
+}
+@media (max-width: 480px) { .page { padding-left: 16px; padding-right: 16px; } }

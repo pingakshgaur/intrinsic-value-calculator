@@ -27,7 +27,7 @@ export const CHAPTERS: Chapter[] = [
     id: "frame", title: "Find your way", icon: "compass", color: "#57A3F8", blurb: "The frame around every page",
     steps: [
       { route: "/", target: ".sidebar", side: "right", title: "The sidebar",
-        body: <>Every page lives here, in three groups: <b>Analysis</b> (markets, watchlists, the Studio), the <b>Research workforce</b> (the AI agents) and <b>Operations</b>, which runs jobs, scores the models and holds the settings.</>,
+        body: <>Every page lives here, in three groups: <b>Analysis</b> (the dashboard, markets, watchlists, the Studio), the <b>Research workforce</b> (the AI agents) and <b>Operations</b>, which runs jobs, scores the models and holds the settings.</>,
         try: <>Press <K>Alt</K> + <K>1</K>…<K>9</K> to jump between pages, or <K>Ctrl</K> + <K>\</K> to fold the sidebar.</> },
       { target: ".sb-foot", side: "right", title: "System status",
         body: <>A live health check: is the local server up, how many AI providers have working keys, when the valuation report and the last research were made, and whether the market tracker is running. Click it for the details.</> },
@@ -47,7 +47,16 @@ export const CHAPTERS: Chapter[] = [
     ],
   },
   {
-    id: "command", title: "Command Center", icon: "pulse", color: "#AD80D7", blurb: "Everything at a glance",
+    id: "dashboard", title: "Dashboard", icon: "dashboard", color: "#4EC9B0", blurb: "Everything worth watching, on one page",
+    steps: [
+      { route: "/dashboard", target: ".dash-grid", side: "top", title: "Your dashboard",
+        body: <>The market, your watchlists, the buy zone, alerts, the agents' best ideas and red flags, running jobs and how accurate the models are — each widget links to the page with the detail.</> },
+      { target: ".ph .acts", side: "bottom", title: "Make it yours",
+        body: <><b>Customise</b> shows, hides and reorders the widgets; this browser remembers the layout. Pick a watchlist in the top bar and every widget narrows to its companies.</> },
+    ],
+  },
+  {
+    id: "command", title: "Command Center", icon: "pulse", color: "#AD80D7", blurb: "Research verdicts at a glance",
     steps: [
       { route: "/", target: ".page > .band", side: "bottom", title: "The headline numbers",
         body: <>How many companies are researched, how many sit below or above their value, the median upside, red flags and how accurate the HYBRID MODEL has been against the market.</> },

@@ -13,6 +13,7 @@ import "./styles/network.css";
 import { Shell } from "./components/Shell";
 import { Empty, Panel } from "./components/ui";
 import { CommandCenter } from "./views/CommandCenter";
+import { Dashboard } from "./views/Dashboard";
 import { CompanyByName, CompanyInList } from "./views/Profile";
 import { Studio } from "./views/Studio";
 import { Performance } from "./views/Performance";
@@ -44,6 +45,7 @@ const router = createBrowserRouter([
     errorElement: NotFound,
     children: [
       { index: true, element: <CommandCenter /> },
+      { path: "dashboard", element: <Dashboard /> },
       { path: "markets", element: <Markets /> },
       { path: "watchlist", element: <Watchlist /> },
       { path: "watchlist/:id", element: <WatchlistDetail /> },

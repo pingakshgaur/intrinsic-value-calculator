@@ -16,6 +16,7 @@ import { AppContext, Toast } from "./workbenchContext";
 
 const NAV = [
   { group: "Analysis", items: [
+    { to: "/dashboard", icon: "dashboard", label: "Dashboard" },
     { to: "/", icon: "pulse", label: "Command Center", end: true },
     { to: "/markets", icon: "graph", label: "Markets", badge: "LIVE" },
     { to: "/watchlist", icon: "eye", label: "Watchlists" },
@@ -181,12 +182,12 @@ export function Shell() {
           <div className="top-tools">
             <ThemeToggle />
             <ScopePicker />
-            <button className="cmdk" onClick={() => setPalette(true)}><Icon name="search" className="sm" /><span>Search companies, actions…</span><kbd>Ctrl K</kbd></button>
+            <button className="cmdk" onClick={() => setPalette(true)} aria-label="Search companies, actions"><Icon name="search" className="sm" /><span>Search companies, actions…</span><kbd>Ctrl K</kbd></button>
             <Notifications />
             <button className="tool" title="Glossary (?)" onClick={() => setGlossary(true)}><Icon name="question" /></button>
             <button className={`runchip ${active ? "busy" : ""}`} onClick={() => setRunDrawer(active?.id ?? lastJob?.id ?? null)} title="Runs">
               <span className={`dot ${active ? "busy" : lastJob?.status === "failed" ? "bad" : lastJob ? "ok" : ""}`} />
-              {active ? <>{jobTitle(active.kind, active.opts)}<span className="bar"><span className="indet" /></span></> : lastJob ? `Last run ${ago(lastJob.finished ?? lastJob.started)}` : "No runs"}
+              <span className="rc-t">{active ? <>{jobTitle(active.kind, active.opts)}<span className="bar"><span className="indet" /></span></> : lastJob ? `Last run ${ago(lastJob.finished ?? lastJob.started)}` : "No runs"}</span>
             </button>
           </div>
         </header>
