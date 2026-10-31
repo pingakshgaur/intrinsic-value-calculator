@@ -97,6 +97,17 @@ export const LENS_COLOR: Record<string, string> = {
 
 export const HM = "HYBRID MODEL";
 export const HM_COLOR = "var(--hm)"; // theme-aware: #AD80D7 dark, #7B3FB3 light
+export const ENSEMBLE_COLOR = "#C586C0";
+
+// the other models never borrow the HYBRID MODEL's or the Ensemble's hue
+const MODEL_SERIES = SERIES.filter((c) => c !== "#AD80D7" && c !== ENSEMBLE_COLOR);
+/** One colour per valuation model, the same on every chart; `models` is the report's model order. */
+export const modelColor = (m: string, models: string[]) => {
+  if (m === HM) return HM_COLOR;
+  if (m === "Ensemble") return ENSEMBLE_COLOR;
+  const rest = models.filter((x) => x !== HM && x !== "Ensemble");
+  return MODEL_SERIES[Math.max(0, rest.indexOf(m)) % MODEL_SERIES.length];
+};
 
 export const scoreColor =(s: number | null | undefined) =>
   s == null ? "var(--fg-muted)" : s > 0.1 ? "var(--c-green)" : s < -0.1 ? "var(--c-red)" : "var(--fg-muted)";

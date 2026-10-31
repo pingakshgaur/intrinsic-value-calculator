@@ -1,4 +1,4 @@
-import { Fragment, ReactNode, useMemo, useState } from "react";
+import { Fragment, ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useIntel, useMetrics, useStatus, useValuation } from "../lib/hooks";
 import { CsvRow, Verdict } from "../lib/api";
@@ -165,8 +165,9 @@ function Distribution({ verdicts, onPick }: { verdicts: Verdict[]; onPick: (c: s
 }
 
 /** The models ranked by error. With `detail`, a row opens to that model's breakdown (Model Performance); without, the panel links there. */
-export function Leaderboard({ rows, updated, detail }: { rows: CsvRow[]; updated: number | null; detail?: (model: string) => ReactNode }) {
-  const [open, setOpen] = useState<string | null>(null);
+export function Leaderboard({ rows, updated, detail, open: initial }: { rows: CsvRow[]; updated: number | null; detail?: (model: string) => ReactNode; open?: string | null }) {
+  const [open, setOpen] = useState<string | null>(initial ?? null);
+  useEffect(() => { if (initial) setOpen(initial); }, [initial]);
   const data = rows.filter((r) => isNum(r["MedAPE %"])).sort((a, b) => (a["MedAPE %"] as number) - (b["MedAPE %"] as number));
   if (!data.length) return null;
   const maxE = Math.max(...data.map((r) => r["MedAPE %"] as number));

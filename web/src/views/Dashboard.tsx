@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { Cell, Pie, PieChart, Tooltip } from "recharts";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useIntel, useJobs, useMetrics, useStatus } from "../lib/hooks";
@@ -8,6 +9,7 @@ import { useAgentRuns } from "../lib/agents";
 import { useScope } from "../lib/scope";
 import { ago, duration, isNum, money, num, pct, pctUnits, shortName } from "../lib/format";
 import { companyPath } from "../lib/company";
+import { HM, HM_COLOR, modelColor } from "../lib/labels";
 import { Icon, LabelBadge, PageHeader, Popover } from "../components/ui";
 import { Spark } from "../components/Spark";
 import { ScopeNote } from "../components/ScopePicker";
@@ -25,6 +27,7 @@ import { jobTitle } from "../components/Shell";
 type WidgetId = "pulse" | "buyzone" | "movers" | "alerts" | "research" | "activity" | "markets" | "lists" | "models";
 const WIDGETS: { id: WidgetId; title: string; desc: string; span: 4 | 6 | 12 }[] = [
   { id: "pulse", title: "At a glance", desc: "The headline numbers", span: 12 },
+  { id: "models", title: "Model health", desc: "Accuracy and the learning pool · click a slice for its page", span: 12 },
   { id: "buyzone", title: "Buy zone", desc: "At or near the HYBRID MODEL buy-below", span: 6 },
   { id: "movers", title: "Movers today", desc: "Biggest moves on your watchlists", span: 6 },
   { id: "alerts", title: "Alerts", desc: "Levels, buy-below and big moves", span: 4 },
@@ -32,18 +35,24 @@ const WIDGETS: { id: WidgetId; title: string; desc: string; span: 4 | 6 | 12 }[]
   { id: "activity", title: "Activity", desc: "Jobs, runs and schedules", span: 4 },
   { id: "markets", title: "Markets", desc: "Indices and sectors", span: 6 },
   { id: "lists", title: "Watchlists", desc: "How each list is doing today", span: 6 },
-  { id: "models", title: "Model health", desc: "Accuracy and the learning pool", span: 12 },
 ];
-const KEY = "intval.dashboard.v1";
+const KEY = "intval.dashboard.v2";
+// v1 kept model health last; a layout saved then has it lifted under the headline band once
+const OLD_KEY = "intval.dashboard.v1";
 interface Layout { order: WidgetId[]; hidden: WidgetId[] }
 const DEFAULT: Layout = { order: WIDGETS.map((w) => w.id), hidden: [] };
 
 function readLayout(): Layout {
   try {
-    const v = JSON.parse(localStorage.getItem(KEY) || "null") as Layout | null;
+    const saved = localStorage.getItem(KEY);
+    const v = JSON.parse(saved || localStorage.getItem(OLD_KEY) || "null") as Layout | null;
     if (!v || !Array.isArray(v.order)) return DEFAULT;
     const known = new Set(WIDGETS.map((w) => w.id));
     const order = v.order.filter((id) => known.has(id));
+    if (!saved && order.includes("models")) {
+      order.splice(order.indexOf("models"), 1);
+      order.splice(order.indexOf("pulse") + 1, 0, "models");
+    }
     // widgets added in a later version join at the end
     for (const w of WIDGETS) if (!order.includes(w.id)) order.push(w.id);
     return { order, hidden: (v.hidden ?? []).filter((id) => known.has(id)) };
@@ -122,7 +131,7 @@ export function Dashboard() {
                 autostart={autostart.data?.settings} feed={learning.data?.settings} />,
               markets: <Markets indices={ctx.indices} sectors={ctx.sectors} error={indices.isError} />,
               lists: <Lists lists={ctx.lists} items={ctx.allItems} />,
-              models: <Models metrics={metrics.data?.overall ?? []} learning={learning.data} />,
+              models: <Models metrics={metrics.data?.overall ?? []} wins={metrics.data?.win_rate ?? []} learning={learning.data} />,
             }[id];
             const link = LINKS[id];
             return (
@@ -419,22 +428,97 @@ function Lists({ lists, items }: { lists: Ctx["lists"]; items: WatchItem[] }) {
   );
 }
 
-function Models({ metrics, learning }: { metrics: Record<string, unknown>[]; learning?: import("../lib/live").LearningStatus }) {
+const board = (model?: string) => `/performance?tab=board${model ? `&model=${encodeURIComponent(model)}` : ""}`;
+const TRAINING = "/performance?tab=training";
+
+function Models({ metrics, wins, learning }: { metrics: Record<string, unknown>[]; wins: Record<string, unknown>[]; learning?: import("../lib/live").LearningStatus }) {
   const ranked = metrics.filter((r) => isNum(r["MedAPE %"])).sort((a, b) => (a["MedAPE %"] as number) - (b["MedAPE %"] as number));
-  const hm = metrics.find((r) => r.Model === "HYBRID MODEL");
+  const hm = metrics.find((r) => r.Model === HM);
   const best = ranked[0];
   const trend = (learning?.history ?? []).map((h) => h.hm_medape).filter(isNum) as number[];
+  const models = metrics.map((r) => String(r.Model));
+
+  // which model came closest to the price: the five that won most, the HYBRID MODEL, the rest folded into "Other"
+  const won = wins.filter((r) => isNum(r.Wins) && (r.Wins as number) > 0).sort((a, b) => (b.Wins as number) - (a.Wins as number));
+  const keep = won.filter((r, i) => i < 5 || r.Model === HM);
+  const rest = won.filter((r) => !keep.includes(r)).reduce((a, r) => a + (r.Wins as number), 0);
+  const winSlices: Slice[] = [
+    ...keep.map((r) => ({ name: String(r.Model), value: r.Wins as number, color: modelColor(String(r.Model), models), to: board(String(r.Model)) })),
+    ...(rest ? [{ name: "Other models", value: rest, color: "var(--fg-3)", to: board() }] : []),
+  ];
+  const top = won[0];
+
+  const hit = hm && isNum(hm["Hit +/-20%"]) ? (hm["Hit +/-20%"] as number) : null;
+  const hitSlices: Slice[] = hit == null ? [] : [
+    { name: "Within ±20%", value: hit, color: HM_COLOR, to: board(HM) },
+    { name: "Off by more", value: 100 - hit, color: "var(--fg-3)", to: board(HM) },
+  ];
+
   const c = learning?.cache;
-  const ready = c ? Math.round((100 * c.fresh) / Math.max(1, c.fresh + c.stale + c.missing)) : null;
+  const total = c ? c.fresh + c.stale + c.missing : 0;
+  const poolSlices: Slice[] = !c ? [] : [
+    { name: "Fresh accounts", value: c.fresh, color: "var(--up)", to: TRAINING },
+    { name: "Stale", value: c.stale, color: "var(--c-yellow)", to: TRAINING },
+    { name: "Missing", value: c.missing, color: "var(--down)", to: TRAINING },
+  ];
+
   return (
-    <div className="band dash-band">
-      <div><div className="k">HYBRID MODEL error</div><div className="v hm">{hm ? pctUnits(hm["MedAPE %"], 1) : "–"}</div><div className="s">median miss vs the 1-May price</div></div>
-      <div><div className="k">Within ±20%</div><div className="v">{hm ? pctUnits(hm["Hit +/-20%"], 0) : "–"}</div><div className="s">of HYBRID MODEL values</div></div>
-      <div><div className="k">Most accurate</div><div className="v dash-v-sm">{best ? String(best.Model) : "–"}</div><div className="s">{best ? `${pctUnits(best["MedAPE %"], 1)} median error` : "run a valuation report"}</div></div>
-      <div><div className="k">Accuracy over time</div><div className="v">{trend.length > 1 ? <Spark values={trend.map((v) => -v)} width={110} height={30} /> : "–"}</div>
-        <div className="s">{trend.length > 1 ? (trend[trend.length - 1] < trend[0] ? "getting more accurate" : "not improving yet") : "needs two reports"}</div></div>
-      <div><div className="k">Learning pool</div><div className="v">{learning ? learning.companies.toLocaleString("en-IN") : "–"}</div><div className="s">{ready != null ? `${ready}% with fresh accounts` : "loading…"}</div></div>
+    <div className="dash-health">
+      <Donut title="Closest to the price" slices={winSlices} unit="wins" empty="Run a valuation report"
+        center={top ? pctUnits(top["Win rate %"], 0) : "–"} centerSub={top ? String(top.Model) : ""} />
+      <Donut title="HYBRID MODEL within ±20%" slices={hitSlices} unit="%" empty="Run a valuation report"
+        center={hit != null ? pctUnits(hit, 0) : "–"} centerSub="of its values" />
+      <Donut title="Learning pool" slices={poolSlices} unit="companies" empty={learning ? "No companies yet" : "Loading…"}
+        center={learning ? learning.companies.toLocaleString("en-IN") : "–"} centerSub={total ? `${Math.round((100 * c!.fresh) / total)}% fresh` : "companies"} />
+      <ul className="dash-hstats">
+        <li><Link to={board(HM)}><span className="k">HYBRID MODEL error</span><b className="hm">{hm ? pctUnits(hm["MedAPE %"], 1) : "–"}</b><small>median miss vs the 1-May price</small></Link></li>
+        <li><Link to={board(best ? String(best.Model) : undefined)}><span className="k">Most accurate</span><b className="ellipsis">{best ? String(best.Model) : "–"}</b><small>{best ? `${pctUnits(best["MedAPE %"], 1)} median error` : "run a valuation report"}</small></Link></li>
+        <li><Link to={TRAINING}><span className="k">Accuracy over time</span>{trend.length > 1 ? <Spark values={trend.map((v) => -v)} width={110} height={26} /> : <b>–</b>}
+          <small>{trend.length > 1 ? (trend[trend.length - 1] < trend[0] ? "getting more accurate" : "not improving yet") : "needs two reports"}</small></Link></li>
+      </ul>
     </div>
+  );
+}
+
+interface Slice { name: string; value: number; color: string; to: string }
+
+/** A donut whose slices and legend rows open the page behind them; the legend is the keyboard route and names every colour. */
+function Donut({ title, slices, unit, center, centerSub, empty }: { title: string; slices: Slice[]; unit: string; center: ReactNode; centerSub: string; empty: string }) {
+  const nav = useNavigate();
+  const sum = slices.reduce((a, s) => a + s.value, 0);
+  const fmt = (v: number) => (unit === "%" ? pctUnits(v, 0) : `${v.toLocaleString("en-IN")} ${unit}`);
+  const share = (v: number) => (unit === "%" || !sum ? "" : pct(v / sum, 0));
+  return (
+    <figure className="dash-pie">
+      <figcaption className="k">{title}</figcaption>
+      {!sum ? <div className="dash-pie-none">{empty}</div> : (
+        <div className="dash-pie-b">
+          <div className="dash-pie-c">
+            <PieChart width={132} height={132}>
+              <Pie data={slices} dataKey="value" nameKey="name" innerRadius={44} outerRadius={64} startAngle={90} endAngle={-270}
+                stroke="var(--bg)" strokeWidth={2} isAnimationActive={false} onClick={(d: { payload?: Slice }) => d.payload && nav(d.payload.to)}>
+                {slices.map((s) => <Cell key={s.name} fill={s.color} />)}
+              </Pie>
+              {/* pinned just above the donut, on top of everything, so it never covers the ring or the centre figure */}
+              <Tooltip wrapperStyle={{ zIndex: 3 }} allowEscapeViewBox={{ x: true, y: true }} position={{ x: 0, y: -40 }} content={({ active, payload }) => {
+                const s = active ? (payload?.[0]?.payload as Slice | undefined) : undefined;
+                return s ? <div className="tip dash-pie-tip"><div className="tr"><span className="row" style={{ gap: 6 }}><span className="sw" style={{ background: s.color }} />{s.name}</span>
+                  <span className="mono strong">{fmt(s.value)}{share(s.value) && <span className="faint"> · {share(s.value)}</span>}</span></div></div> : null;
+              }} />
+            </PieChart>
+            <div className="dash-pie-mid" aria-hidden><b>{center}</b><small className="ellipsis">{centerSub}</small></div>
+          </div>
+          <ul className="dash-pie-l">
+            {slices.map((s) => (
+              <li key={s.name}>
+                <Link to={s.to}><span className="dash-sw" style={{ background: s.color }} aria-hidden /><span className="ellipsis">{s.name}</span>
+                  <span className="mono">{unit === "%" ? pctUnits(s.value, 0) : s.value.toLocaleString("en-IN")}</span></Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </figure>
   );
 }
 

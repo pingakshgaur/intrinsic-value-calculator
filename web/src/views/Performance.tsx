@@ -8,7 +8,7 @@ import { bestBySector, NEAR_BAND, SectorForecast, sectorForecasts, winsBySector 
 import { useScope } from "../lib/scope";
 import { ScopeNote } from "../components/ScopePicker";
 import { ago, bytes, isNum, money, pct, pctUnits, shortName, slug, titleCase } from "../lib/format";
-import { HM_COLOR, LENSES, LENS_COLOR, LENS_NAME, SERIES } from "../lib/labels";
+import { HM_COLOR, LENSES, LENS_COLOR, LENS_NAME, modelColor as color } from "../lib/labels";
 import { Empty, Icon, PageHeader, Panel, QueryView, Tabs, Tip } from "../components/ui";
 import { RunButton } from "../components/RunButton";
 import { TrainingData } from "../components/TrainingData";
@@ -20,7 +20,6 @@ import { companyPath } from "../lib/company";
 type Tab = "board" | "sectors" | "company" | "training" | "files";
 // addresses of the tabs this page used to have
 const OLD_TAB: Record<string, Tab> = { explore: "company", hybrid: "company", ensemble: "company", charts: "files", excluded: "files", learning: "training" };
-const color = (m: string, models: string[]) => (m === "HYBRID MODEL" ? HM_COLOR : m === "Ensemble" ? "#C586C0" : SERIES[Math.max(0, models.indexOf(m)) % SERIES.length]);
 
 export function Performance() {
   const [params, setParams] = useSearchParams();
@@ -75,6 +74,8 @@ function useBoardMetrics(scoped: Valuation | null) {
 
 function Board({ scoped }: { scoped: Valuation | null }) {
   const { q, m } = useBoardMetrics(scoped);
+  // ?model= opens that model's breakdown (the dashboard links here)
+  const [params] = useSearchParams();
   return (
     <QueryView q={q}>
       {() => {
@@ -85,7 +86,7 @@ function Board({ scoped }: { scoped: Valuation | null }) {
         const wins = m.win_rate.map((r) => ({ model: String(r.Model), win: r["Win rate %"] }));
         return (
           <>
-            <Leaderboard rows={m.overall} updated={m.updated} detail={(model) => <ModelDetail model={model} m={m} />} />
+            <Leaderboard rows={m.overall} updated={m.updated} open={params.get("model")} detail={(model) => <ModelDetail model={model} m={m} />} />
             <div className="grid c-21">
               <Panel title="Median error by financial year" meta="lower is better">
                 <ResponsiveContainer width="100%" height={280}>
