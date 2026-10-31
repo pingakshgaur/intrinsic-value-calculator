@@ -224,7 +224,9 @@ knows what changed since the last one.
 
 **Auto-start.** `python run.py --web` starts the workforce a few seconds after
 the server comes up: a quick sweep, rule-based, so restarting the app never
-spends LLM quota. It is skipped only when another job is already running.
+spends LLM quota. It researches only the companies on your watchlists (the ones
+picked in the Auto-start menu, or every watchlist when none are picked), and is
+skipped when another job is already running or the lists have no companies.
 The **Auto-start** button on the Research workforce Overview turns this off, switches
 to a full run, lets it use the AI models, and sets a "skip if a run finished in
 the last N minutes" window. The settings are saved in
@@ -232,13 +234,25 @@ the last N minutes" window. The settings are saved in
 `POST /api/agents/autostart/run`.
 
 **Research on a watchlist.** The **Research** button (Overview, Agent
-Network, Command Center, Coverage, or a watchlist's own page) starts a quick
-sweep or full research on every covered company or on any watchlist. A
-watchlist run researches every company on the list, valued before or not:
+Network, Command Center, Operations, or a watchlist's own page) starts a quick
+sweep or full research on every watchlist or on one of them. With no list
+named, a run takes every watchlist; a company on more than one is researched
+once. A watchlist run researches every company on the list, valued before or not:
 the server writes the list's companies (name, sector, size, ticker) to
 `output/web_runs/watchlist_<job>.csv` and runs `--agents --input` on it. The
-job API takes it as `{"kind": "agents", "options": {"watchlist": "<list id>",
-"quick": true}}`; a valuation report can be scoped to a watchlist the same way.
+job API takes it as `{"kind": "agents", "options": {"watchlist": ["<list id>", …],
+"quick": true}}`; a valuation report can be scoped to watchlists the same way, or
+to the report list (`data/companies.csv`) with `"report_list": true` when it has
+companies.
+
+**Valued against the learning pool.** Each run values its companies against
+the whole learning pool (every watchlist, both training lists, the report's
+companies and every company researched before) from cached accounts, with the
+ML learners on; a training is reused until the data it learns from changes.
+Companies the agents research join the pool for every later run. The cloud
+workflow passes `--no-ml`. Verdicts are kept per company across runs:
+`/api/intel/latest` returns the latest verdict on every company ever
+researched, with its run and date.
 
 The web app also opens **Ollama** when it starts, if Ollama is installed and
 *Open Ollama whenever INTVAL starts* is on (the default; saved in

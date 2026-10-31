@@ -30,7 +30,7 @@ INTVAL aims to give one honest, explained value per company and to show its work
 - Giving buy or sell advice, or managing a portfolio.
 - Placing trades or connecting to a broker.
 - Real-time trading-grade data (prices from the free source can be delayed).
-- Valuing every company in India: it focuses on a chosen list (about 43 covered companies today) plus a larger learning set for the machine-learning models.
+- Valuing every company in India: it focuses on the companies on your watchlists and the report list (42 today), and learns from a larger pool (553 companies in 23 sectors at the time of writing).
 - Serving many users: it is a single-user app that listens on your computer only.
 
 ## How it all fits together
@@ -47,7 +47,7 @@ The valuation engine turns a company's accounts into an estimate of its worth pe
 
 ### Step 1 — Gather the data
 
-- **Company list.** The core list of companies (name, sector, size, stock symbol) is `data/companies.csv`; any watchlist can also be valued or researched on its own, and every watchlist company joins the learning data.
+- **Company list.** Runs work on the watchlists: every watchlist when none is named, or the ones picked. The report list (`data/companies.csv`: name, sector, size, stock symbol) can still be valued when it has companies. Every company the app knows joins the **learning pool** (see *Learning pool* below).
 - **Finding the symbol.** If a symbol is missing, INTVAL looks it up: first a hand-checked list, then a saved cache, then a search.
 - **Downloading.** For each company it downloads the income statement, balance sheet, cash-flow statement, daily prices and a risk measure (beta). It uses several providers, in an order the user sets in Configuration → Data sources:
   - **Yahoo Finance** goes first.
@@ -201,10 +201,17 @@ The web app is where all of INTVAL is used. It opens in the browser at `http://1
 
 ### Analysis
 
-**Command Center** — the home page and quickest overview.
+**Dashboard** — the first page (`Alt+1`): everything worth watching on one page.
 
-- A band of headline figures (companies covered, median upside, labels, confidence).
-- **Coverage map:** a tile per company, sized by market value and coloured by upside to the HYBRID MODEL value.
+- **At a glance:** market status, NIFTY 50, the watchlists' breadth, companies in the buy zone, alerts today, and how many companies have research (with their red flags).
+- **Model health,** right under it, as three clickable donuts: how often each model came closest to the price, the HYBRID MODEL's share of values within ±20%, and the learning pool's companies with fresh, stale or missing accounts. A slice, or its legend row, opens the page behind it (a model's breakdown, or the Learning pool tab). Beside them: the HYBRID MODEL's median error, the most accurate model and accuracy over time.
+- **Buy zone, movers today, alerts, research** (largest gaps to value, red flags), **activity** (jobs, runs, auto-start, the evening refresh), **markets** (indices and sectors) and **watchlists** (each list's day).
+- **Customise** shows, hides and reorders the widgets (kept in this browser); the watchlist picked in the top bar narrows every widget.
+
+**Command Center** — the research at a glance.
+
+- A band of headline figures (companies researched, median upside, labels, confidence).
+- **Research map:** a tile per company ever researched, with its latest verdict from whichever run it came from, sized by market value and coloured by upside to the HYBRID MODEL value.
 - **Signals:** what needs attention, such as red flags, label changes and data problems.
 - **Upside vs confidence** chart, the **label mix** with the extremes, and a **model leaderboard** of accuracy.
 
@@ -251,7 +258,7 @@ The web app is where all of INTVAL is used. It opens in the browser at `http://1
 
 ### Research workforce
 
-**Overview** — the team at a glance: the current or last run (companies done, who is working, messages, calls saved, AI calls), a card per team listing every agent with live status (and markers for agents that are switched off or tuned), this run's verdicts and red flags, and recent runs (click one to replay it). Clicking an agent opens its profile; the gear opens its **settings**. **Research** starts a run on every covered company or on any chosen watchlist (quick sweep or full research); **Auto-start** sets whether the team starts by itself when the app opens.
+**Overview** — the team at a glance: the current or last run (companies done, who is working, messages, calls saved, AI calls), a card per team listing every agent with live status (and markers for agents that are switched off or tuned), this run's verdicts and red flags, and recent runs (click one to replay it). Clicking an agent opens its profile; the gear opens its **settings**. Its figures count the watchlist picked in the top bar. **Research** starts a run on every watchlist or on the ones chosen (quick sweep or full research); **Auto-start** sets whether the team starts by itself when the app opens, researching only the watchlists' companies.
 
 **Agent Network** — the team as a live, full-screen map.
 
@@ -279,12 +286,13 @@ The web app is where all of INTVAL is used. It opens in the browser at `http://1
   - a *sector valuation forecast by each model*: each method's median value against today's price, or its one-year projection;
   - *sector segregation and prediction*: per sector, how many companies sit below, near or above value, the top pick, and a chart of each sector's upside and one-year projection. Click a sector to list its companies.
 - **Company:** every method by year for one company, plus HYBRID MODEL and Ensemble detail.
-- **Training data:** how the machine-learning models grow, in plain words (see *Learning data* below).
-- **Files & charts:** downloads, companies left out, the chart gallery, opening in a viewer with previous / next, thumbnails and zoom.
+- **Learning pool:** how the machine-learning models grow, in plain words (see *Learning pool* below).
+- **Files & charts:** downloads grouped by what they are for (the report, accuracy, model detail, data quality), companies left out, and a searchable chart gallery filtered by kind, opening in a viewer with previous / next, thumbnails and zoom.
 
 **Operations** — start and watch jobs, top to bottom:
 
-- **New job:** what to run (a valuation report, research, a training-data refresh, or a data check), then one row: which companies (every covered one or a watchlist), the research depth or the years, the one option that applies, **Advanced** (auto-train, rule-based research, offline test data) and **Start**.
+- **Figures:** the watchlists, the learning pool, the running job and the last job.
+- **New job:** what to run (a valuation report, research, a learning-pool refresh, or a data check), then one row: which companies (every watchlist or one of them; valuation also offers the report list when it has companies), the research depth or the years, the one option that applies, **Advanced** (auto-train, rule-based research, offline test data) and **Start**.
 - **Job detail**, full width: the live job's stages and log.
 - **Recent jobs**, full width, under it. Only one job runs at a time.
 
@@ -346,17 +354,17 @@ While the web app is open, a background **tracker** follows the watchlist and ra
 - **Holidays:** exchange holidays are not known; a price that stops moving for 20 minutes is marked as stale.
 - **Limit:** the tracker only runs while the web app is running. For tracking with the computer off, the cloud schedule runs quick sweeps at fixed times.
 
-## Learning data
+## Learning pool
 
-The machine-learning models get better mainly by seeing more companies, so INTVAL keeps a separate **learning set** of companies it learns from but does not value.
+The machine-learning models get better mainly by seeing more companies, so INTVAL learns from one **learning pool**: every company it knows. The same pool feeds the valuation report and the research agents, so the HYBRID MODEL's calibration, the peer medians, the sector betas, the Ensemble's weights and the accuracy figures all come from it.
 
 - **What a lesson is:** one company in one financial year — that year's accounts, and how its price moved over the next year. A live price on its own teaches nothing, so tracker prices are not used for training.
-- **The learning set:** every company INTVAL knows beyond the valued list: a training list, the auto-trainer's picks and the watchlists (about 380 companies). With Screener.in filling the older years, each company adds more lessons than the 2–3 that Yahoo's four years of accounts allowed.
-- **Fetching:** *Model Performance → Training data → Refresh now* (or Operations → Refresh training data) downloads and caches their accounts; a cached company is reused for 7 days.
-- **Train on all learning companies:** when on, every valuation run includes the learning set in training.
+- **The learning pool:** every watchlist, both training lists, the auto-trainer's picks, the report list and every company the agents have researched (553 companies in 23 sectors at the time of writing). Research runs value their companies against it from cached accounts, with the ML models on, and each company researched joins it. With Screener.in filling the older years, each company adds more lessons than the 2–3 that Yahoo's four years of accounts allowed.
+- **Fetching:** *Model Performance → Learning pool → Refresh now* (or Operations → Refresh the learning pool) downloads and caches their accounts; a cached company is reused for 7 days.
+- **Value and learn from all of these companies:** when on, every valuation run values the whole pool and trains on it.
 - **Daily feed:** when on, the app fetches new and stale companies after 16:15 each weekday when nothing else is running, and can retrain afterwards.
 - **Auto-train:** a run mode that keeps adding training companies, batch by batch, until the model's confidence stops improving or a limit is reached, with live controls to pause, skip a sector, retrain, change the target or finish.
-- **Did it help?** After every valuation run, the Training data tab records the number of companies learned from and the HYBRID MODEL's typical error, and says in plain words whether accuracy is improving, holding steady or slipping.
+- **Did it help?** After every valuation run, the Learning pool tab records the number of companies learned from and the HYBRID MODEL's typical error, and says in plain words whether accuracy is improving, holding steady or slipping.
 
 ## Settings, files and storage
 
@@ -364,7 +372,7 @@ Everything INTVAL knows lives in plain files inside the project folder; nothing 
 
 | What | Where | Notes |
 | --- | --- | --- |
-| Company list | `data/companies.csv` | The core coverage list; watchlists add to what is researched and learned from |
+| Report list | `data/companies.csv` | Companies the valuation report can value besides the watchlists; watchlists are what runs work on by default |
 | Hand-entered figures | `data/fundamentals_override.csv` | Always wins over downloaded data |
 | Valuation assumptions | `src/config.py` | Years, prices, discount rates, model switches |
 | HYBRID MODEL and agent settings | `agent_settings.yaml` | Every constant, with comments; edited in the Studio and Configuration |
@@ -376,7 +384,7 @@ Everything INTVAL knows lives in plain files inside the project folder; nothing 
 | Agent settings | `agent_profiles.json` (beside the blackboard) | Per-agent tuning and instructions |
 | Live data | `data/live/` | Watchlists, alerts, minute prices, learning history, auto-start settings, data-source choices, the cached NSE sector lists, the update history |
 | Backups | `backups/` | A copy of your data made before every update; the last five are kept |
-| Browser-only preferences | The browser's storage | Map layouts, saved views, notes, panel choices, Studio scenarios |
+| Browser-only preferences | The browser's storage | The dashboard layout, map layouts, saved views, notes, panel choices, Studio scenarios |
 
 A mistyped or deleted setting never crashes a run: the built-in default is used and the run log notes it.
 
@@ -394,7 +402,7 @@ The installed app opens the web app from its shortcut. There is no macOS install
 **Updating it.** Each release also comes as an **updater** (`INTVAL-Update-<version>-windows-x64.exe`, `INTVAL-Update-<version>-linux-x86_64`). It upgrades an existing installation in place and never loses data:
 
 1. It finds INTVAL wherever it was installed, for one user or for everyone. Where INTVAL is not installed, it refuses and points to the Setup.
-2. It backs up everything the user owns to `backups/`: company lists, watchlists, the research agents' memory and history, training data, settings and keys.
+2. It backs up everything the user owns to `backups/`: company lists, watchlists, the research agents' memory and history, the learning pool's state, settings and keys. Reports in `output/` and what the browser remembers (the dashboard layout, theme) are left as they are.
 3. It replaces only the program.
 4. It adds the new version's training companies and settings sections without changing anything the user set.
 
@@ -410,7 +418,7 @@ The full Setup run over an existing copy installs into the same folder and does 
 | Run full research | `python run.py --agents` |
 | Run a quick sweep | `python run.py --agents --quick` |
 | Check AI keys | `python run.py --agents --llm-check` |
-| Refresh the learning set | `python run.py --learn` |
+| Refresh the learning pool | `python run.py --learn` |
 
 In the web app, everything above is a button on the Operations page. Each job runs as its own separate process, so a crash or a closed tab cannot take the app down, and only one job runs at a time.
 
@@ -477,7 +485,7 @@ Plain-language meanings of every term used in this document and in the app, in a
 | Altman Z'' | A score that estimates how close a company is to financial distress. |
 | Anchor price | The average share price inside a financial year, used as an input to some methods. |
 | Auto-start | The workforce starting a research run by itself when the web app opens. |
-| Auto-train | A mode that keeps adding companies to the learning set until the model stops improving. |
+| Auto-train | A mode that keeps adding companies to the learning pool until the model stops improving. |
 | Bear case / bull case | The strongest honest argument against / for the company, written by the review team. |
 | Benchmark price | The closing price on the trading day nearest 1 May, one month after the financial year ends. Used only to score accuracy. |
 | Beneish M | A score that flags signs of earnings manipulation. |
@@ -491,7 +499,6 @@ Plain-language meanings of every term used in this document and in the app, in a
 | Channel | A chat room in the Research Room, one per team plus #command and #ops. |
 | Confidence score | 0–100: the estimated chance the price lands within ±20% of the value. |
 | Cost of equity / cost of money | The yearly return an investor should demand for owning the share, given its risks. |
-| Coverage | The list of companies INTVAL researches and values (about 43 today). |
 | DCF (discounted cash flow) | Valuing a business by adding up its future cash, with later cash counting for less. |
 | EBIT / EBITDA | Operating profit before interest and tax / before interest, tax, depreciation and amortisation. |
 | Ensemble | A statistical blend of all the methods, weighted by their past accuracy. |
@@ -507,7 +514,7 @@ Plain-language meanings of every term used in this document and in the app, in a
 | Info-bit | A small moving dot on the Agent Network showing a piece of work passing between agents. |
 | Label | Deep value, Undervalued, Fairly valued, Overvalued, Avoid – red flags, or Insufficient evidence: a description of price versus value. |
 | Layers | The Agent Network menu that shows or hides parts of the map. |
-| Learning set | Companies used only to train the machine-learning models, not valued. |
+| Learning pool | Every company INTVAL learns from: the watchlists, the training lists, the report list and every company researched (553 today). |
 | Lens | One of six ways of valuing a company inside the HYBRID MODEL (cash flow, earnings power, asset, market, conservative, learning). |
 | Machine learning (ML) | Models that learn patterns from many past examples: XGBoost, Random Forest, LightGBM and a neural network. |
 | Margin of safety | The cushion subtracted from the value to get the buy-below price. |

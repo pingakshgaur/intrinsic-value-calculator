@@ -23,8 +23,13 @@ It ships with a command-line interface, a browser app (`python run.py --web`), a
 > - **A research radar on Markets:** who has just dropped under its buy-below price, the biggest gaps to value, today's forecast lean and today's unusual moves.
 > - **Research any watchlist** in one click from the Research workforce, the Agent Network, the Command Center or the list itself. Every company on the list is researched, valued before or not.
 > - **A plain-English summary** at the top of every company's analysis.
-> - **A simpler workbench.** One row to start each kind of run on Operations, with the job and the recent jobs below it; Model Performance sits under Operations; no repeated buttons. Learning is now Model Performance → Training data, and a model in the leaderboard opens to its breakdown. Charts in Files & charts open in a viewer with previous / next, thumbnails and zoom.
-> - **An updater** (`INTVAL-Update-<version>-…`) that upgrades an existing install in place. It backs up your data first and keeps it all: companies, watchlists, research history, the agents' memory, training data, settings and keys.
+> - **A simpler workbench.** One row to start each kind of run on Operations, with the job and the recent jobs below it; Model Performance sits under Operations; no repeated buttons. Learning is now Model Performance → **Learning pool**, and a model in the leaderboard opens to its breakdown. Charts in Files & charts open in a viewer with previous / next, thumbnails and zoom.
+> - **An updater** (`INTVAL-Update-<version>-…`) that upgrades an existing install in place. It backs up your data first and keeps it all: companies, watchlists, research history, the agents' memory, the learning pool, settings and keys.
+> - **A dashboard** (`/dashboard`, the first page, `Alt+1`): the market, model health, the buy zone, today's movers, alerts, research, activity, indices and sectors, and every watchlist's day, on one page. Model health sits right under the headline numbers as three donuts (which model came closest to the price, the HYBRID MODEL's share within ±20%, and the learning pool's fresh / stale / missing accounts); click a slice to open the page behind it. **Customise** shows, hides and reorders widgets, and a watchlist picked in the top bar narrows them all. See [docs/WEB.md](docs/WEB.md#dashboard).
+> - **One learning pool.** The HYBRID MODEL's calibration, the peer medians, the sector betas, the Ensemble's weights and the accuracy figures now learn from every company the app knows: every watchlist, both training lists, the report's companies and every company the agents have researched. Research runs value their companies against the pool, with the machine-learning models on.
+> - **Research is never lost between runs.** The Command Center, watchlists, Markets and company pages show the latest verdict on every company ever researched, with the run and date it came from, so researching one watchlist no longer hides what was found on another.
+> - **Jobs follow your watchlists.** With no list named, research and valuation run on every watchlist; the report list (`data/companies.csv`) is offered to valuation only when it has companies. Auto-start researches only the watchlists' companies.
+> - **One look on every page,** flat sections and figure bands instead of boxes, in both themes, with keyboard access, screen-reader labels and reduced-motion support across the Research Room, Agent Network, Files & charts and the watchlists.
 
 ---
 
@@ -154,11 +159,11 @@ This runs against the built-in synthetic dataset, with no network access needed.
 Each build also makes the **updater**: `INTVAL-Update-<version>-windows-x64.exe` and `INTVAL-Update-<version>-linux-x86_64`. Run it on a computer that already has INTVAL to upgrade in place:
 
 1. It finds the existing installation wherever it is, per-user or all-users (on Windows from the uninstall entry; on Linux from `~/.config/intval/install.json` or the default folders). It refuses to run where INTVAL is not installed.
-2. It backs up everything you own to `backups/<date>-<old>-to-<new>/` inside the install folder: `data/` (company lists, watchlists, training-data state), `output/intel/` (the research agents' memory and history), `agent_settings.yaml`, `.env` and `llm_providers.json`. The last five backups are kept.
+2. It backs up everything you own to `backups/<date>-<old>-to-<new>/` inside the install folder: `data/` (company lists, watchlists, alerts, the learning pool's state, run preferences), `output/intel/` (the research agents' memory and history), `agent_settings.yaml`, `.env` and `llm_providers.json`. The last five backups are kept.
 3. It replaces only the program (`INTVAL.exe`, `_internal/`, `web/dist/`, docs and factory defaults).
 4. It runs `INTVAL --migrate` ([`src/migrate.py`](src/migrate.py)). This adds the training companies the new version ships that your lists do not have, and any new settings sections, without changing a value you set. It is safe to run twice.
 
-Shortcuts and the uninstaller stay as they are. An all-users install on Windows asks for administrator rights. The full Setup also works over an existing install: it now defaults to the folder INTVAL is already in, points you to the updater, and runs the same migration.
+Your reports and job history in `output/` are never touched, and what the browser remembers (the dashboard layout, theme, filters) stays too, because the app keeps the same address, `http://127.0.0.1:8765`. Shortcuts and the uninstaller stay as they are. An all-users install on Windows asks for administrator rights. The full Setup also works over an existing install: it now defaults to the folder INTVAL is already in, points you to the updater, and runs the same migration.
 
 The installed app is one program (`INTVAL.exe` / `INTVAL`) that opens the workbench in your browser. Its data, settings and reports live in the install folder, which the Windows installer makes writable even under Program Files. macOS installers have to be built on a Mac and are not set up.
 
@@ -484,13 +489,14 @@ Tkinter desktop GUI, and every one of that GUI's features is in it:
 
 | Page | What it does |
 |---|---|
-| **Command Center** | Headline numbers, a coverage map of every researched company, signals, upside vs confidence, the model leaderboard, and one **Research** button |
+| **Dashboard** | The first page: headline numbers, **model health** as clickable donuts, the buy zone, movers, alerts, research, activity, markets and watchlists. Widgets can be hidden and reordered, and follow the watchlist picked in the top bar |
+| **Command Center** | Headline numbers, a research map of every researched company (the latest verdict from every run), signals, upside vs confidence, the model leaderboard, and one **Research** button |
 | **Markets** | A research radar (buy zone, gaps to value, today's forecast lean, unusual moves), a market scanner and charts |
 | **Watchlists** | Named lists tracked live, with search, alerts and notes. Add companies by search, a whole index (NIFTY 50, NIFTY 500, Large cap…), whole sectors, a spreadsheet or another list; research a list in one click. Every company opens to its **full analysis**: live chart, live forecast (15 minutes to 5 years), alerts, then a plain-English summary, the valuation, every model's forecast (with Show all / Remove all), drivers and risk, the agents' evidence, bull vs bear, history |
 | **HYBRID MODEL Studio** | Change any constant and see values, ranges, lenses and the bridge respond live, then commit |
 | **Research workforce** | The 23 agents: Overview (teams, run output, past runs, **Research** on any watchlist, auto-start), the live Agent Network (with your own links and notes) and the Research Room chat |
-| **Model Performance** | Leaderboard · **Sectors** (best model per sector, sector forecast by model, sector segregation and prediction) · Company (every model, HYBRID MODEL and Ensemble detail) · **Training data** (what the AI models learn from, in plain words) · Files & charts |
-| **Operations** | One row to start any job: a valuation report, research (quick or full), a training-data refresh or a data check, on every covered company or a watchlist. The job is followed live below, with the recent jobs under it |
+| **Model Performance** | Leaderboard · **Sectors** (best model per sector, sector forecast by model, sector segregation and prediction) · Company (every model, HYBRID MODEL and Ensemble detail) · **Learning pool** (every company the models learn from, in plain words) · Files & charts |
+| **Operations** | Figures for the watchlists, the learning pool, the running job and the last job, then one row to start any job: a valuation report, research (quick or full), a learning-pool refresh or a data check, on every watchlist or one of them. The job is followed live below, with the recent jobs under it |
 | **Configuration** | Run settings, **data sources**, AI providers (including local Ollama models), research agents, notifications, macro inputs, the raw settings file |
 
 [docs/WEB.md](docs/WEB.md) has the details.

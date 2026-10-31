@@ -3,7 +3,7 @@
 The project's headline intrinsic value. The code is in
 [`src/hybrid_formula.py`](../src/hybrid_formula.py), the constants are in
 `agent_settings.yaml → hybrid_model`, and you can try every constant live in
-the web app's **Hybrid Lab**.
+the web app's **HYBRID MODEL Studio**.
 
 ## Where it runs
 
@@ -74,14 +74,26 @@ accuracy tables and in `output/Hybrid_Model_Detail.csv`.
     - The label comes from price ÷ value. It is a description, not a
       recommendation.
 
-## Back-test (43 companies, FY2021–FY2025, 211 scored company-years)
+## Back-test (latest report: 42 companies in 9 sectors, FY2000–FY2026, 798 scored company-years)
 
-| Model | Median absolute error | Within ±20% | Median bias |
-|---|---:|---:|---:|
-| HYBRID MODEL, before calibration | 49.5% | 21.8% | −20% |
-| **HYBRID MODEL, with calibration** | **33.4%** | **33.2%** | **−8%** |
-| Ensemble | 31.1% | 33.2% | −9% |
-| LightGBM | 24.1% | 41.7% | +16% |
+Each value is scored against the closing price nearest 1 May after the
+financial year ends. Calibration, peer medians and the learners now draw on the
+whole learning pool (553 companies in 23 sectors), not only the report's own
+companies. From `output/metrics_overall.csv`, best first:
+
+| Model | Median absolute error | Within ±20% | Rank correlation | Scored |
+|---|---:|---:|---:|---:|
+| XGBoost | 17.9% | 53.7% | 0.98 | 792 |
+| LightGBM | 18.0% | 55.7% | 0.99 | 792 |
+| Random Forest | 18.3% | 53.5% | 0.99 | 792 |
+| Ensemble | 20.4% | 49.4% | 0.94 | 798 |
+| MLP Neural Network | 22.1% | 46.2% | 0.98 | 792 |
+| **HYBRID MODEL** | **23.8%** | **43.2%** | **0.90** | 798 |
+| P/E Relative | 47.2% | 23.4% | 0.74 | 792 |
+| EV/EBITDA | 47.6% | 20.9% | 0.74 | 793 |
+| Residual Income | 67.7% | 13.0% | 0.59 | 798 |
+| Graham Number | 69.3% | 11.5% | 0.59 | 792 |
+| DCF | 105.0% | 10.4% | 0.46 | 747 |
 
 The learners score lower, but their early folds use future years (the
 `hybrid` ML split), so their errors look smaller than they would in real
@@ -91,12 +103,12 @@ detail file and on the research pages.
 
 ## Tuning
 
-Open **Hybrid Lab**, pick a company or **All companies**, and move any
+Open **HYBRID MODEL Studio**, pick a company or the portfolio, and move any
 constant:
 - The value, range, lenses and build-up update live.
-- **What moves this value** ranks the constants by their effect.
-- **All companies** shows every company's value and label under your changes.
+- The inspector's **sensitivity** ranks the constants by their effect.
+- **Portfolio** mode shows every company's value and label under your changes.
 
-Nothing is written until **Save as model defaults**, which writes
-`agent_settings.yaml` and keeps its comments. After saving, run the
+Nothing is written until **Commit**, which writes `agent_settings.yaml`
+and keeps its comments. After saving, run the
 valuation report or the research again to refresh the stored values.
